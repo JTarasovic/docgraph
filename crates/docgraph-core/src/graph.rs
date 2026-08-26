@@ -41,7 +41,7 @@ pub struct SectionNode {
     pub content_hash: [u8; 32],
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum GraphNode {
     Document(usize),
     Entity(String),

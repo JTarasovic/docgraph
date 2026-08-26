@@ -5,6 +5,7 @@ mod corpus;
 mod graph;
 mod repository;
 mod state;
+mod validation;
 
 pub use config::{
     AgentInstructionsConfig, ArgumentMode, ConfigDiagnostic, ConfigLoadError, DiagnosticSeverity,
@@ -20,6 +21,7 @@ pub use graph::{
 };
 pub use repository::{DiscoveryError, Repository};
 pub use state::{DerivedState, DerivedStateError, DerivedStatePaths, IndexStatus};
+pub use validation::{ValidationDiagnostic, ValidationLocation, ValidationReport, Validator};
 
 /// Repository schema implemented by this pre-release workspace.
 pub const SCHEMA_VERSION: u32 = 1;
