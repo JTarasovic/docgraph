@@ -1,0 +1,6 @@
+[advisories]
+# Cozo 0.7.6 uses swapvec's LZ4 codec only for temporary blocks that swapvec
+# compressed itself, with a freshly allocated output buffer. Docgraph accepts no
+# external swap data, so neither vulnerable input path is reachable.
+ignore = ["RUSTSEC-2026-0041"]
+informational_warnings = ["unmaintained"]

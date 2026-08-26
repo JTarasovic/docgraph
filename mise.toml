@@ -21,3 +21,15 @@ run = "cargo nextest run --workspace --all-features --no-tests pass"
 [tasks.check]
 description = "Run the default local checks"
 depends = ["fmt", "lint", "test"]
+
+[tasks.audit]
+description = "Audit dependency advisories"
+run = "cargo audit"
+
+[tasks.deny]
+description = "Check dependency policy"
+run = "cargo deny check"
+
+[tasks.machete]
+description = "Check for unused dependencies"
+run = "cargo machete"
