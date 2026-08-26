@@ -11,5 +11,8 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+blake3.workspace = true
+docgraph-markdown.workspace = true
+ignore.workspace = true
 serde.workspace = true
 toml_edit.workspace = true

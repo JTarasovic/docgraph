@@ -11,6 +11,17 @@ pub struct SourceSpan {
 
 impl SourceSpan {
     pub(crate) fn new(source: &str, bytes: Range<usize>) -> Self {
+        Self::from_offsets(source, bytes)
+    }
+
+    /// Builds a span from valid UTF-8 byte boundaries in `source`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the range is reversed, outside `source`, or splits a character.
+    pub fn from_offsets(source: &str, bytes: Range<usize>) -> Self {
+        assert!(bytes.start <= bytes.end && bytes.end <= source.len());
+        assert!(source.is_char_boundary(bytes.start) && source.is_char_boundary(bytes.end));
         let (start_line, start_column) = line_column(source, bytes.start);
         let (end_line, end_column) = line_column(source, bytes.end);
         Self {
