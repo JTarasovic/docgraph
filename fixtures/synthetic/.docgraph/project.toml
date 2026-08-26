@@ -7,7 +7,7 @@ name = "Synthetic ontology conformance"
 root = "docs"
 
 [agent_instructions]
-targets = []
+targets = ["AGENTS.md", "CLAUDE.md"]
 
 [query.grommit_targets]
 description = "Targets grommitted by a florp."
