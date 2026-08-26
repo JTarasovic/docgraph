@@ -283,10 +283,11 @@ impl<'a> QueryEngine<'a> {
             .map(|argument| souffle_type(argument.value_type))
             .collect();
         declarations.push(declaration(RESULT_RELATION, &result_types));
+        let database = sqlite_database_uri(database);
         for (name, _) in BUILTINS {
             declarations.push(format!(
                 ".input {name}(IO=sqlite, dbname={})",
-                quote(&database.to_string_lossy())
+                quote(&database)
             ));
         }
         let arguments = query
@@ -564,6 +565,16 @@ fn run_souffle(program: &Path, output: &Path) -> Result<(), QueryError> {
             return Err(QueryError::Timeout);
         }
         thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn sqlite_database_uri(path: &Path) -> String {
+    if cfg!(windows) {
+        // Souffle treats a drive-letter path as relative because it only recognises
+        // slash-prefixed paths. Its SQLite connector accepts file URIs on Windows.
+        format!("file:///{}", path.to_string_lossy().replace('\\', "/"))
+    } else {
+        path.to_string_lossy().into_owned()
     }
 }
 
@@ -996,5 +1007,15 @@ mod tests {
                 .to_string()
                 .contains("native executable")
         );
+    }
+    #[test]
+    fn sqlite_input_uses_a_windows_file_uri() {
+        let path = Path::new(r"C:\tmp\docgraph\facts.sqlite");
+        let location = sqlite_database_uri(path);
+        if cfg!(windows) {
+            assert_eq!(location, "file:///C:/tmp/docgraph/facts.sqlite");
+        } else {
+            assert_eq!(location, path.to_string_lossy());
+        }
     }
 }
