@@ -114,6 +114,18 @@ fn configured_logic_runtime_executes_a_typed_query() {
     let query: Value = serde_json::from_slice(&query.stdout).unwrap();
     assert_eq!(query["query"], "grommit_targets");
     assert_eq!(query["rows"][0]["target"], "github:issue:owner/repo:123");
+
+    let scalars = fixture.run(&["--json", "query", "scalar_values"]);
+    assert!(
+        scalars.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&scalars.stdout),
+        String::from_utf8_lossy(&scalars.stderr)
+    );
+    let scalars: Value = serde_json::from_slice(&scalars.stdout).unwrap();
+    assert_eq!(scalars["rows"][0]["integer"], 42);
+    assert_eq!(scalars["rows"][0]["boolean"], true);
+    assert_eq!(scalars["rows"][0]["text"], "left\tright");
 }
 
 #[test]

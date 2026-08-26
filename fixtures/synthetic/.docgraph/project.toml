@@ -16,3 +16,12 @@ arguments = [
   { name = "florp", mode = "input", type = "entity" },
   { name = "target", mode = "output", type = "string" },
 ]
+
+[query.scalar_values]
+description = "Exercises typed result transport."
+predicate = "scalar_values"
+arguments = [
+  { name = "integer", mode = "output", type = "integer" },
+  { name = "boolean", mode = "output", type = "boolean" },
+  { name = "text", mode = "output", type = "string" },
+]

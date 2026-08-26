@@ -247,11 +247,7 @@ impl<'a> QueryEngine<'a> {
             error,
         })?;
         run_souffle(&scratch.program, &scratch.output)?;
-        self.decode_output(
-            name,
-            &scratch.output.join(format!("{RESULT_RELATION}.csv")),
-            &outputs,
-        )
+        self.decode_output(name, &scratch.database, &outputs)
     }
 
     fn program(
@@ -305,10 +301,11 @@ impl<'a> QueryEngine<'a> {
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "{}\n{}\n{RESULT_RELATION}({output_names}) :- {}({arguments}).\n.output {RESULT_RELATION}\n",
+            "{}\n{}\n{RESULT_RELATION}({output_names}) :- {}({arguments}).\n.output {RESULT_RELATION}(IO=sqlite, dbname={})\n",
             declarations.join("\n"),
             self.logic.source,
-            query.predicate
+            query.predicate,
+            quote(&database)
         )
     }
 
@@ -346,23 +343,29 @@ impl<'a> QueryEngine<'a> {
         path: &Path,
         outputs: &[&QueryArgumentConfig],
     ) -> Result<QueryResult, QueryError> {
-        let text = fs::read_to_string(path).map_err(|error| QueryError::Io {
-            path: path.to_owned(),
-            error,
-        })?;
+        let connection =
+            Connection::open(path).map_err(|error| QueryError::Execution(error.to_string()))?;
+        let mut statement = connection
+            .prepare(&format!("SELECT * FROM {RESULT_RELATION}"))
+            .map_err(|error| QueryError::Execution(error.to_string()))?;
+        if statement.column_count() != outputs.len() {
+            return Err(QueryError::OutputArity {
+                expected: outputs.len(),
+                found: statement.column_count(),
+            });
+        }
         let mut rows = Vec::new();
-        for line in text.lines().filter(|line| !line.is_empty()) {
-            let values: Vec<_> = line.split('\t').collect();
-            if values.len() != outputs.len() {
-                return Err(QueryError::OutputArity {
-                    expected: outputs.len(),
-                    found: values.len(),
-                });
-            }
+        let mut sqlite_rows = statement
+            .query([])
+            .map_err(|error| QueryError::Execution(error.to_string()))?;
+        while let Some(sqlite_row) = sqlite_rows
+            .next()
+            .map_err(|error| QueryError::Execution(error.to_string()))?
+        {
             let mut row = BTreeMap::new();
-            for (value, argument) in values.into_iter().zip(outputs) {
+            for (index, argument) in outputs.iter().enumerate() {
                 let value = self
-                    .output_value(value, argument.value_type)
+                    .output_value(sqlite_row, index, argument.value_type)
                     .ok_or_else(|| QueryError::OutputType {
                         argument: argument.name.clone(),
                         expected: argument.value_type,
@@ -392,27 +395,36 @@ impl<'a> QueryEngine<'a> {
             _ => true,
         }
     }
-    fn output_value(&self, value: &str, value_type: QueryValueType) -> Option<QueryValue> {
+    fn output_value(
+        &self,
+        row: &rusqlite::Row<'_>,
+        index: usize,
+        value_type: QueryValueType,
+    ) -> Option<QueryValue> {
         match value_type {
-            QueryValueType::String => Some(QueryValue::String(value.to_owned())),
-            QueryValueType::Integer => value.parse().ok().map(QueryValue::Integer),
-            QueryValueType::Float => value.parse().ok().map(QueryValue::Float),
-            QueryValueType::Boolean => match value {
-                "0" => Some(QueryValue::Boolean(false)),
-                "1" => Some(QueryValue::Boolean(true)),
+            QueryValueType::String => row.get(index).ok().map(QueryValue::String),
+            QueryValueType::Integer => row.get(index).ok().map(QueryValue::Integer),
+            QueryValueType::Float => row.get(index).ok().map(QueryValue::Float),
+            QueryValueType::Boolean => match row.get::<_, i64>(index).ok()? {
+                0 => Some(QueryValue::Boolean(false)),
+                1 => Some(QueryValue::Boolean(true)),
                 _ => None,
             },
-            QueryValueType::Datetime => {
-                datetime_is_valid(value).then(|| QueryValue::Datetime(value.to_owned()))
-            }
-            QueryValueType::Entity => self
-                .graph
-                .entities
-                .iter()
-                .any(|entity| entity.id == value)
-                .then(|| QueryValue::Entity(value.to_owned())),
+            QueryValueType::Datetime => row
+                .get::<_, String>(index)
+                .ok()
+                .filter(|value| datetime_is_valid(value))
+                .map(QueryValue::Datetime),
+            QueryValueType::Entity => row.get::<_, String>(index).ok().and_then(|value| {
+                self.graph
+                    .entities
+                    .iter()
+                    .any(|entity| entity.id == value)
+                    .then_some(QueryValue::Entity(value))
+            }),
             QueryValueType::Section => {
-                section_exists(self.graph, value).then(|| QueryValue::Section(value.to_owned()))
+                let value = row.get::<_, String>(index).ok()?;
+                section_exists(self.graph, &value).then_some(QueryValue::Section(value))
             }
         }
     }
