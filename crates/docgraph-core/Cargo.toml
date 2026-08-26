@@ -1,0 +1,11 @@
+[package]
+name = "docgraph-core"
+description = "Core domain model and repository services for docgraph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"

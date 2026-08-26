@@ -1,0 +1,797 @@
+# Draft Design: Git-Native Document Graph and Workflow Engine
+
+**Status:** Draft
+
+**Scope convention:** This document describes the cohesive target architecture.
+The v0 delivery scope in Section 15.1 is the release contract. Material identified
+as post-v0 is directional: it should fit the architecture, but is not required for
+v0 conformance.
+
+## 1. Purpose
+
+Build a generic, repository-local engine for structured document state, relationships, retrieval, validation, and safe mutation by humans and software agents.
+
+Markdown/frontmatter committed to Git are canonical. Search indexes, graph state, FTS, vectors, and inferred state are disposable derived data.
+
+The system exists to prevent humans and agents from having to reconstruct project semantics with repository-wide grep/search and then inconsistently hand-edit related files.
+
+## 2. Core Principles
+
+### 2.1 Repository content is canonical
+
+The repository remains readable, reviewable, mergeable, and usable without the derived database.
+
+The database may be deleted and rebuilt at any time.
+
+### 2.2 Mechanism belongs to the tool; policy belongs to the repository
+
+The executable understands generic primitives:
+
+- entities
+- entity types
+- relations
+- properties
+- states
+- transitions
+- workflows
+- inference logic
+- documents
+- sections
+- references
+
+It must not hard-code concepts such as ADR, task, requirement, control, or incident.
+
+### 2.3 Semantic mutations go through the tool
+
+Humans and agents may edit prose directly.
+
+Managed semantic changes should use tool operations:
+
+- state transitions
+- relationships
+- stable IDs
+- managed properties
+- entity creation/deletion
+- moves and renames
+- structural changes affecting references
+
+The tool calculates impact, validates prospective state, and applies the complete patch as a recoverable validated transaction.
+
+### 2.4 Arbitrary relationships are first-class
+
+Relationships normalize to:
+
+```text
+(source, predicate, target, properties)
+```
+
+Examples:
+
+```text
+task:184   blocked_by    adr:42
+task:184   implements    architecture#s-7K3M9Q2W
+adr:42     supersedes    adr:19
+claim:17   supported_by  evidence:81
+```
+
+Relation types are data, not Rust enums.
+
+### 2.5 Prefer derived state
+
+Store lifecycle state only when necessary.
+
+Derive concepts such as blocked, ready, actionable, covered, effective, and stale from graph relationships and repository logic.
+
+### 2.6 Semantic impact is queryable
+
+Agents should not need to grep the repository to answer supported questions such as:
+
+- What blocks this task?
+- Why is this entity not actionable?
+- What depends on this decision?
+- What references this section?
+- What changes if this transition occurs?
+- Which requirements lack implementation or verification?
+
+### 2.7 Semantic authority is explicit
+
+Managed frontmatter, configured state, and explicit semantic relations are
+authoritative. Facts derived deterministically from those inputs by repository logic
+are authoritative derived state. Ordinary Markdown links are informational, while
+full-text and vector matches are discovery results only.
+
+Informational links and search results must not affect semantic validity, workflow
+state, or authoritative derived facts. Repositories may promote broken internal-link
+diagnostics from warnings to errors without granting those links semantic authority.
+Future extraction may propose semantic relations for review but must not promote
+them silently.
+
+Complete impact means complete with respect to the authoritative managed graph and
+configured logic. Meaning expressed only in prose remains outside that guarantee.
+
+## 3. Repository Model
+
+A repository defines its ontology and policy:
+
+```text
+.docgraph/
+  project.toml
+  entities.toml
+  relations.toml
+  workflows.toml
+  commands.toml
+  logic.cozo
+```
+
+The exact file layout may evolve.
+
+`commands.toml` is part of the post-v0 direction; v0 uses the generic CLI and named
+queries.
+
+### 3.1 Entity types
+
+```toml
+[entity.adr]
+description = "An architectural decision record."
+
+[entity.task]
+description = "A unit of executable work."
+
+[entity.task.property.priority]
+type = "string"
+required = true
+values = ["low", "normal", "high"]
+```
+
+Entity and relation properties use a small repository-defined schema. v0 supports
+TOML-native scalar types, homogeneous arrays, required or optional values, and
+enumerated values. Adding a property definition must not require a derived-database
+schema migration.
+
+Entity property values live under a configurable, reserved `[properties]` table in
+document frontmatter. Keys in that table must be declared for the entity type;
+unrelated top-level frontmatter remains outside docgraph's managed schema.
+
+### 3.2 Relationships
+
+```toml
+[relation.blocked_by]
+source = ["task"]
+target = ["task", "adr"]
+inverse = "blocks"
+acyclic = true
+
+[relation.implements]
+source = ["task", "component"]
+target = ["requirement", "section"]
+inverse = "implemented_by"
+
+[relation.implements.property.scope]
+type = "string"
+```
+
+Inverse relations should normally be derived.
+
+`acyclic = true` opts a relation type into cycle validation; omitted means cycles
+are allowed. Transitive closure and its downstream effects are derived by
+repository logic rather than configured as relation behavior.
+
+An explicit managed relation is unique by `(source, predicate, target)`; its
+properties belong to that edge. Repeating the same triple is invalid.
+
+### 3.3 Workflows
+
+```toml
+[workflow.adr]
+initial = "proposed"
+
+[workflow.adr.states.proposed]
+transitions = ["accepted", "rejected"]
+
+[workflow.adr.states.accepted]
+transitions = ["superseded"]
+```
+
+The engine exposes generic operations such as:
+
+```text
+transition(entity, target_state)
+```
+
+### 3.4 Logic
+
+Simple structure and workflow constraints belong in config.
+
+`logic.cozo` contains repo-specific inference and the predicates used by named
+queries. It does not define validation policy, transition guards, or canonical
+mutation side effects.
+
+More expressive inference should use CozoScript/Datalog rather than a bespoke
+logic language.
+
+Repository logic is an inline-rule module, not an unrestricted CozoScript entry
+program. It may define named inline rules with `:=` but may not define the `?`
+entry query, invoke fixed rules with `<~` or `<-`, specify query options, perform
+mutations, or invoke system operations. Docgraph supplies the entry query and a
+query timeout, executes it through Cozo's read-only API, and builds Cozo without
+the optional `requests` feature. Selected fixed-rule capabilities may be exposed
+later through explicit docgraph operations rather than directly from repository
+logic.
+
+The repository schema version covers the supported logic syntax and built-in
+predicate signatures. That versioned subset is the public contract; the embedded
+Cozo version, APIs, storage format, and unsupported CozoScript features are
+implementation details.
+
+v0 logic is a positive allowlist: inline rules, calls to public built-ins or rules in
+the same module, scalar literals and comparisons, conjunction, positive recursion,
+and safe stratified negation. Public built-in names are reserved, and repository
+logic cannot address implementation-private stored relations.
+
+## 4. Canonical Documents
+
+Markdown remains ordinary Markdown.
+
+Structured project state lives in frontmatter. TOML is the leading candidate because Rust supports reliable parsing and format-preserving edits.
+
+```toml
++++
+id = "adr:42"
+type = "adr"
+state = "proposed"
+
+[[relations]]
+type = "supersedes"
+target = "adr:19"
++++
+```
+
+Repositories may map existing metadata conventions onto the normalized model, but the tool should provide a preferred convention.
+
+Managed facts are changed through docgraph operations. Each entity document also has
+a fenced generated read model containing direct incoming relations, configured
+inverses, and informational backlinks. Generated frontmatter is deterministic,
+disposable, and never an authoritative graph input.
+
+## 5. Stable Identity
+
+Identity is independent of filenames, titles, and heading text.
+
+A file may exist at:
+
+```text
+docs/design/retry.md
+```
+
+while its graph identity is:
+
+```text
+spec:retry
+```
+
+Moving the file must not change identity.
+
+### 5.1 Sections
+
+Every heading event emitted by `pulldown-cmark` in an indexed document has a stable
+opaque ID written immediately before it. This includes headings inside lists and
+block quotes; text resembling a heading inside code or raw HTML is not a heading.
+
+```markdown
+<a id="s-7K3M9Q2W"></a>
+## Retry Semantics
+```
+
+Section IDs should be:
+
+- tool-generated
+- short
+- opaque
+- repo-local
+- collision checked
+- stable across heading renames
+
+The anchor is written as explicit HTML so ordinary fragment links resolve in
+web-rendered Markdown. It appears immediately before the heading it identifies.
+
+Read-only indexing never edits canonical files. `docgraph normalize` adds IDs to
+all headings that do not yet have them as a recoverable semantic mutation, and
+validation reports missing IDs. Repositories run normalization when first adopting
+docgraph and after adding headings manually. For nested headings, normalization
+preserves the surrounding container markers and indentation.
+
+Heading renames and section moves preserve the adjacent anchor. When a section is
+split, the existing ID remains with its heading and each new heading receives a new
+ID. Merging or deleting a section retires an ID; durable inbound references must be
+removed or retargeted in the same safe mutation.
+
+A short Crockford Base32 random token is a likely implementation.
+
+## 6. Cross-Document and External References
+
+The indexer processes semantic relationships, ordinary Markdown links, and recognized repository-host shorthand.
+
+### 6.1 Semantic relationships
+
+```toml
+[[relations]]
+type = "implements"
+target = "../architecture.md#s-7K3M9Q2W"
+```
+
+### 6.2 Ordinary Markdown links
+
+```markdown
+See [retry semantics](../architecture.md#s-7K3M9Q2W).
+```
+
+Semantic relationships preserve their declared predicate. Ordinary Markdown links
+become informational `links_to` edges used for backlinks and retrieval, not as input
+to authoritative repository logic.
+
+If a Markdown link occurs within a section, that section is the source node.
+
+### 6.3 Repository-host shorthand
+
+Agents and humans commonly use GitHub, GitLab, and similar shorthand even where the Markdown renderer itself would not autolink it.
+
+The engine may recognize provider-specific forms such as:
+
+```text
+#123
+owner/repo#123
+!47
+group/project!47
+foo/bar@a5c3785
+```
+
+These pass through a provider-specific normalization layer before entering the graph.
+
+Example:
+
+```text
+#123
+  ↓
+github:issue:owner/repo:123
+```
+
+or:
+
+```text
+!47
+  ↓
+gitlab:merge_request:group/project:47
+```
+
+Provider adapters are syntax adapters only. GitHub, GitLab, or other provider concepts must not leak into the generic graph or workflow model.
+
+External references may exist as graph nodes without fetching remote metadata.
+
+### 6.4 Deterministic resolution
+
+Reference resolution must be deterministic:
+
+1. current-document section
+2. relative repository path
+3. canonical entity or entity-section reference
+4. recognized provider-specific shorthand
+5. external URI
+6. unresolved reference
+
+Provider context may be inferred from Git remotes, but repositories must be able to configure it explicitly for mirrors, multiple remotes, and self-hosted services.
+
+Ambiguous references must not be guessed.
+
+For example, a naked hexadecimal token should only be treated as a commit reference when sufficiently qualified or when the local Git repository confirms that it resolves.
+
+The indexer must never silently fuzzy-match broken references.
+
+## 7. Internal Model
+
+Conceptually:
+
+```rust
+Entity {
+    id,
+    entity_type,
+    source,
+    properties,
+}
+
+Section {
+    id,
+    document_id,
+    parent,
+    heading,
+    source_span,
+    content_hash,
+}
+
+Relation {
+    source,
+    predicate,
+    target,
+    properties,
+    origin,
+    source_span,
+}
+```
+
+Relation origin distinguishes explicit frontmatter relations, informational Markdown
+links, and inferred relations. Structured query output preserves this origin so a
+caller can distinguish authoritative graph facts from informational edges.
+
+The repository-logic `relation` interface exposes only explicit managed relations
+and deterministic configured derivatives such as inverses. Informational edges
+remain available through generic retrieval rather than logic predicates.
+
+Source spans should be preserved for diagnostics and precise mutation.
+
+## 8. Indexing
+
+```text
+repository files
+    ↓
+frontmatter parser
+    ↓
+Markdown parser
+    ↓
+reference resolver
+    ↓
+normalized graph
+    ↓
+validation + inference
+    ↓
+derived database
+```
+
+The index contains:
+
+- entities
+- sections
+- relations
+- workflow state
+- inferred facts
+- source locations
+- FTS
+- vector index
+- index metadata
+
+Incremental indexing should use Git blob IDs where available and BLAKE3 otherwise.
+
+Unchanged files are not reparsed. Changed chunks are the only chunks re-embedded.
+
+The index records enough metadata to detect staleness after checkout, merge, parser changes, schema changes, or embedding changes.
+
+### 8.1 Worktrees, Checkouts, and Merges
+
+Each Git worktree has its own derived database, mutation lock, recovery journal, and
+repository fingerprint. A checkout or merge that changes canonical inputs makes the
+previous fingerprint stale; the next operation refreshes the index or refuses to use
+it.
+
+Git remains responsible for text merging. Docgraph validates the complete resulting
+worktree, including uncommitted changes. Two branches may each be valid while their
+combination is not, so CI must run `docgraph validate` against the merged result.
+Semantic conflicts that Git cannot see, such as a newly formed forbidden cycle, are
+reported as ordinary validation diagnostics. v0 does not install a custom merge
+driver or attempt semantic three-way merging.
+
+## 9. Search and Retrieval
+
+The target architecture supports structured graph retrieval (`get`, `neighbors`,
+`incoming`, `outgoing`, `traverse`, `path`, and `context`), full-text search, and
+vector search. Repositories may expose named explanation queries for important
+derived predicates. v0 includes structured retrieval, FTS, and named queries; vector
+retrieval is post-v0 direction.
+
+Post-v0 embedding generation should use a provider abstraction rather than bundle a
+large model into the binary.
+
+## 10. Repo-Aware CLI
+
+The engine exposes generic primitives through the v0 CLI. Dynamically generated,
+repository-specific commands are post-v0 direction.
+
+Generic operations remain available:
+
+```bash
+docgraph transition adr:42 accepted
+docgraph relate task:184 implements architecture#s-7K3M9Q2W
+docgraph query task_blockers --arg task=task:184
+```
+
+A named query declares an ordered, typed list of input and output arguments that
+maps directly to its repository-logic predicate. Docgraph validates the predicate
+arity, binds inputs by name, type-checks results, and exposes declared output columns
+through a stable structured JSON envelope.
+
+Post-v0, repositories may define higher-level commands:
+
+```toml
+[commands."adr.accept"]
+operation = "transition"
+entity_type = "adr"
+target_state = "accepted"
+
+[commands."task.blockers"]
+entity_type = "task"
+query = "task_blockers"
+```
+
+Producing:
+
+```bash
+docgraph adr accept adr:42
+docgraph task blockers task:184
+docgraph task ready
+```
+
+Project-aware `--help` should expose repository-defined commands and descriptions.
+
+Humans and agents should normally use named operations rather than write Datalog directly.
+
+## 11. Agent Integration
+
+Agent guidance is part of the product interface.
+
+### 11.1 Progressive-disclosure skill package
+
+```text
+skills/docgraph/
+  SKILL.md
+  config-authorship.md
+  commands.md
+  querying.md
+  mutations.md
+  workflows.md
+  relationships.md
+  document-authoring.md
+  troubleshooting.md
+  repository-maintenance.md
+```
+
+`SKILL.md` contains only:
+
+- what docgraph manages
+- non-negotiable behavioral rules
+- how to inspect the current repository model
+- pointers to the relevant sibling guide
+
+Task guides should explain recommended procedures, not merely list command syntax.
+
+For mutations, the preferred flow is:
+
+```text
+inspect
+→ dry-run
+→ mutate
+→ validate
+```
+
+### 11.2 Generated repository instructions
+
+v0 generates and maintains small tested blocks in configured instruction targets,
+defaulting to `AGENTS.md` and `CLAUDE.md`.
+
+The instructions should tell agents:
+
+- this repository uses docgraph
+- managed semantic state must not be hand-edited
+- semantic impact should not be inferred with grep
+- where the docgraph skill lives
+- how to inspect the repository model
+- to validate after relevant edits
+
+The owned region is delimited by exact versioned markers:
+
+```markdown
+<!-- docgraph:agent-instructions:v1:begin -->
+...
+<!-- docgraph:agent-instructions:end -->
+```
+
+`docgraph instructions sync` creates or updates only that region and supports
+`--dry-run`; `docgraph instructions check` detects missing, stale, or malformed
+blocks without writing. Content outside a valid marker pair is preserved byte-for-byte.
+Malformed or ambiguous markers cause refusal rather than guessed repair. Manual edits
+inside the managed block are replaced only by an explicit `sync`, which uses the same
+concurrent-change protection as other safe mutations.
+
+### 11.3 Tool skill vs repository appendix
+
+The portable skill explains how docgraph works.
+
+A tiny generated repository appendix describes available entity types, important workflows, and common named commands.
+
+Detailed ontology remains dynamically queryable through `describe_project`, `describe_type`, and `describe_relation`.
+
+### 11.4 Tested documentation
+
+Skill examples and generated instructions should be tested against fixture repositories wherever practical.
+
+The skill/config/CLI contract should be versioned so stale checked-in guidance can be detected and refreshed.
+
+## 12. Safe Mutation
+
+Semantic mutation behaves as a recoverable validated transaction:
+
+```text
+load state and record the canonical-input fingerprint and affected-file hashes
+    ↓
+validate request
+    ↓
+calculate complete patch
+    ↓
+validate prospective repository
+    ↓
+acquire per-worktree mutation lock
+    ↓
+verify affected-file hashes are unchanged
+    ↓
+compare the current canonical-input fingerprint
+    ↓
+if other canonical inputs changed, reload, reapply, and revalidate (bounded retry)
+    ↓
+record recovery journal
+    ↓
+replace affected files through temporary files
+    ↓
+refresh index
+```
+
+If prospective validation fails, canonical files remain unchanged.
+
+The lock serializes docgraph mutations within a worktree. Hash verification prevents
+the tool from overwriting affected files changed since inspection. The repository
+fingerprint covers only canonical graph inputs, so changes elsewhere in the worktree
+do not delay a mutation. If another canonical input changes, docgraph reloads the
+complete graph, reapplies the patch, and validates the new candidate. It continues
+when that candidate remains valid and otherwise aborts without writing. Retries are
+bounded so continuous edits cannot starve the operation indefinitely.
+
+The recovery journal records the original and intended state of every affected file
+and the canonical-input fingerprint. Recovery classifies each affected file as
+original, intended, or unknown. It may automatically roll forward only when no file
+is unknown and the intended result validates against the current complete graph. If
+a file matches neither journaled state, recovery stops without overwriting it and
+reports the files requiring manual resolution. An interrupted mutation is handled
+before another mutation or query proceeds. The journal and lock are per-worktree
+derived state and are not committed.
+
+The derived database is updated only after the canonical files are replaced. It
+records a repository fingerprint, and a query must refresh or reject an index whose
+fingerprint does not match the current canonical graph inputs. A failure while
+refreshing the index does not roll back canonical files; the disposable index is
+rebuilt on the next use.
+
+Substantial mutations should support dry-run impact analysis.
+
+## 13. Direct File Editing
+
+The tool does not prohibit direct editing.
+
+Instead:
+
+- prose remains freely editable
+- managed frontmatter changes use docgraph operations
+- generated frontmatter is refreshed by `docgraph frontmatter sync`
+- invalid repository state is rejected by validation
+- referenced structural edits should eventually have safe tool operations
+
+Direct managed-field edits are unsupported. Validation enforces resulting invariants,
+not editor provenance.
+
+## 14. Development and Repository Engineering
+
+Initial stack:
+
+- Rust stable
+- `rustfmt`
+- `clippy`
+- `cargo test`
+- `cargo nextest`
+- `cargo deny`
+- `cargo audit`
+- `cargo machete`
+- `cargo llvm-cov` where useful
+
+Likely crate boundaries:
+
+```text
+crates/
+  docgraph-core/
+  docgraph-markdown/
+  docgraph-cozo/
+  docgraph-cli/
+
+fixtures/
+docs/
+```
+
+CI should at minimum enforce:
+
+```text
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+tests
+fixture/conformance tests
+```
+
+Golden tests should verify exact Markdown patches, structured command output, graph
+facts, and diagnostics. Tests inject a deterministic ID generator so expected patches
+remain stable; production uses collision-checked opaque random IDs.
+
+Given the selected IDs, mutation and formatting must be deterministic and idempotent.
+
+## 15. Technology Direction
+
+Initial implementation:
+
+- Rust
+- single compiled binary
+- `clap`
+- `pulldown-cmark`
+- TOML / `toml_edit`
+- `serde`
+- Git-aware traversal plus `ignore`
+- BLAKE3
+- Cozo
+- Cozo SQLite persistence
+- Cozo FTS
+- Cozo HNSW
+- external embedding-provider abstraction
+
+Cozo remains behind an internal adapter. Repository configuration and logic must
+not depend on its storage schema or Rust API.
+
+Avoid initially unless justified:
+
+- async runtime
+- daemon
+- filesystem watcher
+- web server
+- plugin ABI
+- WASM extensions
+- separate search/vector databases
+- ORM
+- hard-coded domain workflows
+
+### 15.1 v0 Delivery Scope
+
+v0 must prove the complete managed-semantic loop:
+
+- repository configuration and typed ontology
+- Markdown/frontmatter parsing and stable-ID normalization for every heading
+- entity, section, relation, and source-span indexing
+- deterministic local references and ordinary Markdown links
+- repository validation
+- graph retrieval, traversal, FTS, restricted repository logic, and named queries
+- dry-run and recoverable transition and relation mutations
+- deterministic generated frontmatter with sync/check commands
+- structured introspection, including JSON output
+- the portable docgraph skill and task guides
+- idempotent generated `AGENTS.md` and `CLAUDE.md` managed blocks
+- a generated repository appendix describing the configured model and common operations
+- ADR, historical-research, and synthetic conformance fixtures
+
+Agent guidance is part of the v0 product interface. An agent must be able to discover
+that docgraph manages repository semantics, load the correct guidance, inspect the
+repository model, and perform the validated mutation flow without reconstructing the
+workflow from prose.
+
+Vector retrieval, embedding providers, repository-host shorthand adapters, generated
+nested CLI commands, automated section split/merge operations, and semantic diff
+tooling are deferred until after the core loop is proven. v0 exposes generic CLI
+operations and named-query invocation instead.
+
+## 16. Primary Acceptance Principle
+
+For any semantic mutation represented by the repository model:
+
+**An agent must be able to determine the complete document-graph impact through the tool without grepping the repository.**
+
+This guarantee applies to authoritative managed semantics and deterministic facts
+derived from them. It does not claim to recover undeclared meaning from prose.
+
+The repository defines policy and vocabulary. The Rust executable provides generic mechanism.

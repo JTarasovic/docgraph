@@ -1,0 +1,839 @@
+# Draft v0 Repository Configuration and Reference Grammar
+
+**Status:** Draft
+
+**Scope convention:** Unmarked requirements in this document define the v0 contract.
+Sections identified as post-v0 are directional extensions retained to show how the
+configuration remains cohesive; they are not v0 conformance requirements. Section
+27 is the authoritative v0 delivery boundary.
+
+## 1. Goals
+
+The v0 configuration must be declarative, repo-local, human/agent-readable, deterministic, easy to validate, expressive enough for arbitrary workflows, and independent of Rust implementation details.
+
+Configuration defines vocabulary and policy. The engine defines storage, indexing, mutation, and reference semantics.
+
+## 2. Repository Layout
+
+```text
+.docgraph/
+  project.toml
+  entities.toml
+  relations.toml
+  workflows.toml
+  logic.cozo
+```
+
+Only `project.toml` is mandatory.
+
+`commands.toml` and provider-adapter configuration described later are reserved
+post-v0 extensions. A v0 implementation reports them as unsupported rather than
+silently ignoring them.
+
+## 3. Project Configuration
+
+```toml
+schema_version = 1
+
+[project]
+name = "example-project"
+
+[documents]
+include = ["docs/**/*.md"]
+exclude = ["docs/generated/**"]
+```
+
+`schema_version` versions the complete repository-facing contract, including the
+configuration and reference grammar, managed document conventions, supported
+CozoScript subset, and built-in predicate signatures. It does not version or expose
+the embedded Cozo API or storage format.
+
+Optional frontmatter mapping:
+
+```toml
+[frontmatter]
+id = "id"
+entity_type = "type"
+state = "state"
+relations = "relations"
+properties = "properties"
+```
+
+Canonical defaults should make this unnecessary in most repos.
+
+## 4. Entity Types
+
+```toml
+[entity.task]
+description = "A unit of executable work."
+workflow = "task"
+
+[entity.task.property.title]
+type = "string"
+required = true
+
+[entity.task.property.priority]
+type = "string"
+values = ["low", "normal", "high"]
+
+[entity.adr]
+description = "An architectural decision."
+workflow = "adr"
+```
+
+Entity type IDs are arbitrary repository-defined strings, not compiled enums.
+
+Property declarations support these v0 types:
+
+```text
+string
+integer
+float
+boolean
+datetime
+array
+```
+
+Array properties declare one scalar item type:
+
+```toml
+[entity.task.property.labels]
+type = "array"
+items = "string"
+```
+
+Properties are optional unless `required = true`. `values` optionally restricts a
+scalar property to an enumerated set whose values match the declared type. Nested
+tables, conditional schemas, numeric ranges, and pattern constraints are outside v0.
+
+Declared entity properties are normalized, indexed, validated, and available to
+generic queries and mutations. Post-v0 generated commands may use the same schema.
+Canonical document values live in a reserved table:
+
+```toml
++++
+id = "task:184"
+type = "task"
+
+[properties]
+title = "Implement retry handling"
+priority = "high"
++++
+```
+
+Every key inside the configured properties table must be declared for the entity
+type; unknown keys are validation errors. Other non-reserved top-level frontmatter is
+preserved but is not treated as a managed entity property.
+
+## 5. Entity Identity
+
+Canonical entity references use:
+
+```text
+<type>:<id>
+```
+
+Examples:
+
+```text
+task:184
+adr:42
+requirement:R17
+incident:2026-08-14-api-failure
+```
+
+The complete string is the canonical identity.
+
+## 6. Documents
+
+A Markdown document may represent an entity:
+
+```toml
++++
+id = "adr:42"
+type = "adr"
+state = "proposed"
++++
+```
+
+Path is physical location; entity ID is semantic identity.
+
+## 7. Section Identity
+
+Every `pulldown-cmark` heading event in an indexed document has an opaque stable ID,
+including headings nested in lists or block quotes. Heading-like text inside code or
+raw HTML is not included.
+
+```markdown
+<a id="s-7K3M9Q2W"></a>
+## Retry semantics
+```
+
+The anchor appears immediately before its heading so ordinary fragment links
+resolve in web-rendered Markdown.
+
+Indexing is read-only. `docgraph normalize` materializes IDs for every heading that
+does not yet have one using the recoverable mutation flow, and validation reports
+missing IDs. Repositories run normalization when first adopting docgraph and after
+adding headings manually. Anchor insertion preserves any surrounding block-quote
+markers, list structure, and indentation.
+
+Renaming a heading or moving a section preserves its adjacent anchor. Splitting a
+section leaves the existing ID with its heading and assigns new IDs to new headings.
+Merging or deleting a section retires an ID, so durable inbound references must be
+removed or retargeted in the same mutation.
+
+Stable IDs use:
+
+```text
+s-<token>
+```
+
+where `<token>` is a short collision-checked random Crockford Base32 identifier.
+Tests may inject a deterministic generator so golden patches are reproducible.
+
+Canonical section references:
+
+```text
+spec:retry#s-7K3M9Q2W
+```
+
+## 8. Relation Definitions
+
+```toml
+[relation.blocked_by]
+description = "The target prevents the source from becoming actionable."
+source = ["task"]
+target = ["task", "adr"]
+inverse = "blocks"
+acyclic = true
+
+[relation.implements]
+description = "The source implements the target."
+source = ["task", "component"]
+target = ["requirement", "section"]
+inverse = "implemented_by"
+```
+
+Omitted source/target constraints mean unrestricted. `acyclic = true` requires the
+directed graph for that relation type to remain acyclic. It defaults to `false`;
+cycles are valid unless the relation explicitly prohibits them. Transitive
+relations are derived by repository logic rather than enabled by a relation flag.
+
+## 9. Relation Properties
+
+Relation properties use the same schema:
+
+```toml
+[relation.supported_by.property.confidence]
+type = "float"
+required = true
+```
+
+```toml
+[[relations]]
+type = "supported_by"
+target = "evidence:81"
+confidence = 0.8
+```
+
+Normalized:
+
+```text
+source      = claim:17
+predicate   = supported_by
+target      = evidence:81
+properties  = { confidence = 0.8 }
+```
+
+An explicit managed relation is unique by `(source, predicate, target)`. Its
+properties belong to that edge, and repeating the same triple is invalid. Relation
+properties not declared by the relation type are invalid. Adding or changing a
+property declaration must not require a derived-database schema migration.
+
+## 10. Relations in Documents
+
+```toml
+[[relations]]
+type = "blocked_by"
+target = "adr:42"
+
+[[relations]]
+type = "implements"
+target = "spec:retry#s-7K3M9Q2W"
+```
+
+Source defaults to the enclosing entity.
+
+## 11. Ordinary Markdown Links
+
+```markdown
+See [retry semantics](../specs/retry.md#s-7K3M9Q2W).
+```
+
+The indexer records this as an informational `links_to` edge from the containing
+section to the resolved target. It is available to backlink and retrieval operations,
+not through the authoritative `relation` predicate used by repository logic.
+
+Ordinary links do not acquire workflow semantics.
+
+Broken repository-local paths and anchors are warnings by default. Repositories may
+promote them to validation errors:
+
+```toml
+[validation]
+broken_internal_links = "error"
+```
+
+External URL availability is not checked by offline validation.
+
+## 11.1 Semantic Authority
+
+Managed frontmatter, configured state, and explicit semantic relations are
+authoritative. Facts deterministically derived from them by `logic.cozo` are
+authoritative derived state. Ordinary Markdown links are informational, and FTS or
+vector matches are discovery results only.
+
+Informational links and search results must not affect semantic validity, workflows,
+or authoritative derived facts. Link-integrity severity is independent of semantic
+authority. Structured output includes origin information. Complete impact analysis
+is complete with respect to the authoritative managed graph and configured logic,
+not meaning expressed only in prose.
+
+Generated frontmatter is a materialized read model and is never indexed as an
+authoritative input.
+
+## 12. Reference Grammar
+
+References normalize into canonical graph targets before indexing.
+
+### 12.1 Current-document section
+
+```text
+#s-7K3M9Q2W
+```
+
+### 12.2 Relative document
+
+```text
+../specs/retry.md
+```
+
+### 12.3 Relative document section
+
+```text
+../specs/retry.md#s-7K3M9Q2W
+```
+
+### 12.4 Canonical entity
+
+```text
+adr:42
+```
+
+### 12.5 Canonical entity section
+
+```text
+spec:retry#s-7K3M9Q2W
+```
+
+### 12.6 External URI
+
+```text
+https://example.com/spec
+```
+
+### 12.7 Repository-host shorthand (post-v0)
+
+Provider adapters may recognize shorthand commonly produced by humans and agents.
+
+GitHub-like examples:
+
+```text
+#123
+owner/repo#123
+GH-123
+owner/repo@a5c3785
+```
+
+GitLab-like examples:
+
+```text
+#123
+!47
+group/project#123
+group/project!47
+```
+
+Recognized shorthand normalizes into opaque canonical external identities:
+
+```text
+github:issue:owner/repo:123
+github:commit:owner/repo:a5c3785
+gitlab:issue:group/project:123
+gitlab:merge_request:group/project:47
+```
+
+These are graph identities, not workflow types.
+
+Remote metadata is not required.
+
+## 13. Provider Configuration (post-v0)
+
+Provider context may normally be inferred from Git remotes.
+
+Explicit GitHub example:
+
+```toml
+[references.git]
+provider = "github"
+repository = "owner/repo"
+remote = "origin"
+```
+
+Self-hosted GitLab:
+
+```toml
+[references.git]
+provider = "gitlab"
+host = "git.example.com"
+repository = "platform/service"
+remote = "origin"
+```
+
+Configuration must support multiple remotes, mirrors, forks, self-hosted services, and no network access.
+
+Provider recognition must not require network access.
+
+Provider adapters are built-in reference-normalization mechanisms, not repository workflow plugins.
+
+## 14. Reference Resolution
+
+Resolution is deterministic:
+
+1. `#...` matching a stable section ID resolves within the current document.
+2. `./...` or `../...` resolves relative to the source file.
+3. Canonical repository entity IDs resolve by identity.
+4. Canonical entity plus `#section` resolves entity then section.
+5. Configured provider syntax normalizes recognized external shorthand.
+6. Absolute URI remains external.
+7. Otherwise unresolved.
+
+Context-sensitive shorthand must not override an unambiguous canonical repository reference.
+
+No fuzzy repair occurs automatically.
+
+### 14.1 Commit references
+
+Qualified commit forms may be recognized directly:
+
+```text
+owner/repo@a5c3785
+```
+
+Naked hexadecimal strings are ambiguous. A naked candidate may be recognized as a commit only when the local Git repository confirms that it resolves according to configured policy.
+
+### 14.2 Offline behavior
+
+Reference parsing, normalization, indexing, and validation must function without network access.
+
+Future provider integrations may enrich external nodes, but enrichment is outside the reference grammar and must not be required for core operation.
+
+## 15. Workflows
+
+```toml
+[workflow.adr]
+initial = "proposed"
+
+[workflow.adr.states.proposed]
+description = "Awaiting human decision."
+transitions = ["accepted", "rejected"]
+
+[workflow.adr.states.accepted]
+description = "Approved and authoritative."
+transitions = ["superseded"]
+```
+
+Entity binding:
+
+```toml
+[entity.adr]
+workflow = "adr"
+```
+
+The engine validates transitions against the configured state edges. A transition
+changes the entity's explicit state; downstream effects are recomputed derived
+facts and query results, not additional canonical mutations.
+
+## 16. Declared vs Derived State
+
+Workflow state is explicit. Derived state is computed through repository logic and normally not written to frontmatter.
+
+## 17. Logic
+
+`logic.cozo` contains repo-specific inference and predicates used by named queries.
+It does not define validation policy, transition guards, or canonical mutation
+side effects.
+
+The file is an inline-rule module rather than a complete CozoScript program. v0
+accepts only:
+
+- named inline rules defined with `:=`, including multiple clauses
+- calls to versioned docgraph built-ins and predicates defined in the same module
+- variables, scalar literals, unification, and basic scalar comparisons
+- conjunction, positive recursion, and safe stratified negation
+
+Everything else is rejected during configuration validation. Aggregation and the
+broader Cozo function library are not part of v0. Docgraph supplies the entry query
+and timeout and executes the combined program through Cozo's read-only API. The
+embedded Cozo build omits the optional `requests` feature.
+
+Only this documented subset and the versioned built-in predicates are part of the
+repository contract. The embedded Cozo version and unsupported CozoScript features
+are implementation details.
+
+The engine should expose versioned built-ins including:
+
+```text
+entity
+entity_type
+entity_state
+relation
+relation_property
+section
+document
+```
+
+These built-in names are reserved and may be called but not defined by repository
+logic. Repository rules cannot access underlying stored relations or other
+implementation-private predicates.
+
+`relation` and `relation_property` expose only explicit managed relations and
+deterministic derivatives configured by the repository, such as inverses. v0 does
+not expose informational Markdown links to repository logic.
+
+## 18. Named Queries
+
+```toml
+[query.task_blockers]
+description = "Explain unresolved blockers for a task."
+predicate = "task_blockers"
+arguments = [
+  { name = "task",    mode = "input",  type = "entity" },
+  { name = "blocker", mode = "output", type = "entity" },
+  { name = "reason",  mode = "output", type = "string" },
+]
+```
+
+The ordered `arguments` array is the query ABI and maps directly to predicate
+positions. Argument names must be unique; `mode` is `input` or `output`. v0 supports
+the property scalar types plus `entity` and `section`. The predicate arity must equal
+the number of declared arguments. Inputs are bound by name and type-checked before
+execution; every returned output is type-checked against its declaration.
+
+Named queries are preferred over ad hoc Datalog for common operations. The generic
+invocation is:
+
+```bash
+docgraph query task_blockers --arg task=task:184
+```
+
+`--json` returns a stable envelope whose columns appear in declared output order:
+
+```json
+{
+  "query": "task_blockers",
+  "columns": [
+    { "name": "blocker", "type": "entity" },
+    { "name": "reason", "type": "string" }
+  ],
+  "rows": [
+    { "blocker": "task:17", "reason": "awaiting adr:42" }
+  ]
+}
+```
+
+## 19. Dynamic Commands (post-v0)
+
+Transition:
+
+```toml
+[command."adr.accept"]
+description = "Accept a proposed ADR."
+operation = "transition"
+entity_type = "adr"
+target_state = "accepted"
+```
+
+Generated:
+
+```bash
+docgraph adr accept adr:42
+```
+
+Named query:
+
+```toml
+[command."task.blockers"]
+description = "Explain task blockers."
+operation = "query"
+query = "task_blockers"
+entity_type = "task"
+```
+
+Generated:
+
+```bash
+docgraph task blockers task:184
+```
+
+Relation:
+
+```toml
+[command."task.implements"]
+description = "Record that a task implements a target."
+operation = "add_relation"
+entity_type = "task"
+relation = "implements"
+```
+
+Generated:
+
+```bash
+docgraph task implements task:184 spec:retry#s-7K3M9Q2W
+```
+
+## 20. Generic CLI Escape Hatches
+
+```bash
+docgraph describe
+docgraph get <entity>
+docgraph search <query>
+docgraph transition <entity> <state>
+docgraph relate <source> <relation> <target>
+docgraph unrelate <source> <relation> <target>
+docgraph neighbors <entity>
+docgraph path <source> <target>
+docgraph normalize
+docgraph validate
+docgraph query <name> --arg <name>=<value> [--arg ...] [--json]
+docgraph instructions sync [--dry-run]
+docgraph instructions check
+docgraph frontmatter sync [--dry-run]
+docgraph frontmatter check
+```
+
+## 21. Introspection
+
+Required in v0:
+
+```text
+describe_project
+describe_type
+describe_relation
+describe_workflow
+```
+
+Post-v0 dynamic-command introspection adds `describe_command`.
+
+Structured JSON output must also be available.
+
+## 22. Mutations
+
+All semantic mutation operations support prospective validation.
+
+Mutations use a per-worktree lock and optimistic file-hash checks. The tool prepares
+and validates the complete candidate state before writing and refuses to overwrite
+an affected file changed since inspection. Immediately before writing it compares a
+fingerprint of canonical graph inputs. Non-canonical worktree changes are ignored. If
+another canonical input changed, the tool reloads the complete graph, reapplies the
+patch, and revalidates with a bounded retry; it continues only if the new candidate
+is valid.
+
+Before replacing files through temporary files, the tool records a recovery journal
+containing the canonical-input fingerprint and the original and intended state of
+each affected file. Recovery may automatically roll forward only when every affected
+file still matches one of those states and the intended result validates against the
+current complete graph. If a file matches neither state, recovery must not overwrite
+it and must report that manual resolution is required. Interrupted mutations are
+handled before later operations proceed.
+
+The derived index is refreshed after canonical files are replaced. Queries must not
+silently use an index whose recorded repository fingerprint differs from the current
+canonical graph inputs; they refresh it or report that it is stale. Unrelated dirty
+files are allowed, and docgraph does not create Git commits.
+
+Each Git worktree has a separate derived index, mutation lock, recovery journal, and
+repository fingerprint. Git performs text merges; docgraph validates the complete
+resulting worktree, including uncommitted changes. Checkout and merge invalidate a
+nonmatching index fingerprint. CI must run `docgraph validate` on merged results
+because independently valid branches may combine into an invalid graph. v0 provides
+neither a custom merge driver nor semantic three-way merging.
+
+Semantic mutations refresh generated frontmatter in every affected entity document
+within the same recoverable transaction.
+
+Preferred agent flow:
+
+```text
+inspect
+→ dry-run
+→ mutate
+→ validate
+```
+
+## 23. Managed Frontmatter
+
+Managed fields include at minimum:
+
+```text
+id
+type
+state
+relations
+properties
+```
+
+The tool owns format-preserving mutation of managed fields.
+
+Entity properties declared by the repository schema are also managed fields.
+
+Each entity document has one generated block:
+
+```toml
+# docgraph:generated:v1:begin
+[docgraph_generated]
+
+[[docgraph_generated.incoming]]
+source = "task:184"
+predicate = "implements"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:184"
+
+[[docgraph_generated.backlinks]]
+source = "adr:42#s-7K3M9Q2W"
+# docgraph:generated:end
+```
+
+The fixed v0 projection contains direct incoming managed relations, configured direct
+inverses, and resolved informational Markdown backlinks. Entries have deterministic
+ordering and preserve origin. The block is ignored as graph input.
+
+`docgraph frontmatter sync` inserts or replaces generated blocks and supports
+`--dry-run`. `frontmatter check` is read-only. Missing, malformed, or stale blocks
+fail validation. Content outside the block is preserved byte-for-byte.
+
+## 24. Config Validation
+
+v0 detects unknown entity types, duplicate definitions, missing workflow targets,
+invalid inverse relations, bad query bindings, missing referenced queries/relations,
+impossible endpoint constraints, invalid or missing required property values,
+undeclared entity or relation properties, duplicate explicit relation triples, and
+unsupported schema versions. It also detects missing, malformed, or stale generated
+frontmatter. Post-v0 command configuration additionally validates command operations
+and their referenced queries and relations.
+
+Diagnostics should include config file and source span.
+
+## 25. Agent Skill Structure
+
+```text
+skills/docgraph/
+  SKILL.md
+  config-authorship.md
+  commands.md
+  querying.md
+  mutations.md
+  workflows.md
+  relationships.md
+  document-authoring.md
+  troubleshooting.md
+  repository-maintenance.md
+```
+
+The root skill remains small and routes agents to task-specific guides.
+
+## 26. Generated Agent Instructions
+
+Instruction targets are repository-relative and configurable; the v0 defaults are:
+
+```toml
+[agent_instructions]
+targets = ["AGENTS.md", "CLAUDE.md"]
+```
+
+Each target contains at most one managed block with exact marker lines:
+
+```markdown
+<!-- docgraph:agent-instructions:v1:begin -->
+Generated instructions appear here.
+<!-- docgraph:agent-instructions:end -->
+```
+
+`docgraph instructions sync` creates a missing target or inserts a missing block,
+and replaces only the content between one valid marker pair. Everything outside the
+block is preserved byte-for-byte. Repeating `sync` with unchanged inputs produces no
+diff. `--dry-run` reports the prospective patch without writing.
+
+`docgraph instructions check` is read-only and exits unsuccessfully when a configured
+target or block is missing, its generated content is stale, or its markers are
+malformed. Duplicate, nested, reversed, or unpaired markers cause both commands to
+refuse modification and report the conflict. Manual edits inside a valid block are
+reported by `check` and replaced by an explicit `sync`. `sync` uses the safe mutation
+protocol and refuses to overwrite a concurrently changed target.
+
+The block tells agents that prose is freely editable, all managed frontmatter changes
+use docgraph operations, generated frontmatter must be synchronized, dependency
+reconstruction must not rely on grep, and relevant changes must be validated.
+
+## 27. v0 Delivery Scope
+
+v0 includes:
+
+- configuration and typed entity/relation properties
+- Markdown/frontmatter parsing and stable-ID normalization for every heading
+- entity, section, relation, and source-span indexing
+- deterministic local references and ordinary Markdown links
+- validation, graph retrieval, traversal, FTS, restricted logic, and named queries
+- dry-run and recoverable transition and relation mutations
+- deterministic generated frontmatter with sync/check commands
+- generic CLI operations and structured introspection
+- the portable skill and task guides
+- idempotent generated `AGENTS.md` and `CLAUDE.md` managed blocks
+- a generated repository-model appendix
+- ADR, historical-research, and synthetic conformance fixtures
+
+Agent instructions are a required product interface in v0, not release packaging.
+They must direct agents to inspect the model, use docgraph for managed semantics, run
+dry-runs for substantial mutations, and validate the result.
+
+Deferred until after v0:
+
+- vector retrieval and embedding providers
+- repository-host shorthand adapters
+- generated nested CLI commands from `commands.toml`
+- automated section split/merge operations
+- semantic diff tooling
+
+The generic CLI and named-query invocation remain available in v0.
+
+## 28. v0 Constraints
+
+- one canonical entity ID syntax
+- one canonical stable section ID syntax
+- one preferred frontmatter representation
+- arbitrary relation/entity type strings
+- typed managed entity and relation properties
+- declarative workflows
+- CozoScript inference
+- inline, read-only repository logic with docgraph-controlled entry queries
+- no executable repository plugins
+- no repo-specific Rust code
+- no automatic fuzzy reference repair
+- no silent promotion of informational links or search matches into authoritative semantics
+
+## 29. v0 Success Criterion
+
+A new repository can define a novel ontology, workflow, and inference logic using only configuration, the supported CozoScript subset, and Markdown/frontmatter, and obtain normalization, indexing, graph traversal, FTS, validation, inference, impact analysis, safe transition/relation mutation, structured introspection, and generated agent guidance without recompiling docgraph.

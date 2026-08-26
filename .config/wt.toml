@@ -1,0 +1,11 @@
+# Install the pinned toolchain and development tools in each new worktree.
+pre-start = "mise install"
+
+# Keep commit-time checks quick and independent.
+[pre-commit]
+format = "mise run fmt"
+lint = "mise run lint"
+
+# Run the complete test suite before merging.
+[pre-merge]
+test = "mise run test"

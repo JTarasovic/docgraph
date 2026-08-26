@@ -1,0 +1,15 @@
+[package]
+name = "docgraph-cli"
+description = "Command-line interface for docgraph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "docgraph"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
