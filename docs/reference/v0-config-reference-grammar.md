@@ -21,14 +21,14 @@ Configuration defines vocabulary and policy. The engine defines storage, indexin
   entities.toml
   relations.toml
   workflows.toml
-  logic.cozo
+  logic.dl
 ```
 
 Only `project.toml` is mandatory.
 
 `.docgraph` lives at the Git worktree root. `project.toml` owns the project,
 documents, frontmatter, validation, named-query, and agent-instruction tables; each
-other TOML file owns the table matching its filename. `logic.cozo` contains
+other TOML file owns the table matching its filename. `logic.dl` contains
 repository logic.
 
 `commands.toml` and provider-adapter configuration described later are reserved
@@ -55,8 +55,8 @@ an empty list.
 
 `schema_version` versions the complete repository-facing contract, including the
 configuration and reference grammar, managed document conventions, supported
-CozoScript subset, and built-in predicate signatures. It does not version or expose
-the embedded Cozo API or storage format.
+the supported Datalog subset and built-in predicate signatures. It does not version
+or expose the logic backend or storage format.
 
 Optional frontmatter mapping:
 
@@ -300,7 +300,7 @@ External URL availability is not checked by offline validation.
 ## 11.1 Semantic Authority
 
 Managed frontmatter, configured state, and explicit semantic relations are
-authoritative. Facts deterministically derived from them by `logic.cozo` are
+authoritative. Facts deterministically derived from them by `logic.dl` are
 authoritative derived state. Ordinary Markdown links are informational, and FTS or
 vector matches are discovery results only.
 
@@ -481,26 +481,27 @@ Workflow state is explicit. Derived state is computed through repository logic a
 
 ## 17. Logic
 
-`logic.cozo` contains repo-specific inference and predicates used by named queries.
+`logic.dl` contains repo-specific inference and predicates used by named queries.
 It does not define validation policy, transition guards, or canonical mutation
 side effects.
 
-The file is an inline-rule module rather than a complete CozoScript program. v0
-accepts only:
+The file is a restricted Datalog module rather than a complete engine program. v0
+uses Souffle-compatible rules with named predicate heads, recursion, safe
+stratified negation, and comparisons. Declarations and I/O are owned by docgraph.
 
-- named inline rules defined with `:=`, including multiple clauses
+- named, period-terminated rules defined with `:-`, including multiple clauses
 - calls to versioned docgraph built-ins and predicates defined in the same module
 - variables, scalar literals, unification, and basic scalar comparisons
 - conjunction, positive recursion, and safe stratified negation
 
-Everything else is rejected during configuration validation. Aggregation and the
-broader Cozo function library are not part of v0. Docgraph supplies the entry query
-and timeout and executes the combined program through Cozo's read-only API. The
-embedded Cozo build omits the optional `requests` feature.
+Everything else is rejected during configuration validation: directives, includes,
+components, pragmas, types, and custom functors are not repository syntax.
+Aggregation is also out of scope. Docgraph supplies declarations, SQLite input,
+the entry/output relation, and a five-second process deadline.
 
 Only this documented subset and the versioned built-in predicates are part of the
-repository contract. The embedded Cozo version and unsupported CozoScript features
-are implementation details.
+repository contract. The embedded engine and unsupported engine features are
+implementation details.
 
 The engine exposes these v1 built-in predicate signatures:
 
@@ -837,7 +838,7 @@ The generic CLI and named-query invocation remain available in v0.
 - arbitrary relation/entity type strings
 - typed managed entity and relation properties
 - declarative workflows
-- CozoScript inference
+- restricted Datalog inference
 - inline, read-only repository logic with docgraph-controlled entry queries
 - no executable repository plugins
 - no repo-specific Rust code
@@ -846,4 +847,4 @@ The generic CLI and named-query invocation remain available in v0.
 
 ## 29. v0 Success Criterion
 
-A new repository can define a novel ontology, workflow, and inference logic using only configuration, the supported CozoScript subset, and Markdown/frontmatter, and obtain normalization, indexing, graph traversal, FTS, validation, inference, impact analysis, safe transition/relation mutation, structured introspection, and generated agent guidance without recompiling docgraph.
+A new repository can define a novel ontology, workflow, and inference logic using only configuration, the supported Datalog subset, and Markdown/frontmatter, and obtain normalization, indexing, graph traversal, FTS, validation, inference, impact analysis, safe transition/relation mutation, structured introspection, and generated agent guidance without recompiling docgraph.

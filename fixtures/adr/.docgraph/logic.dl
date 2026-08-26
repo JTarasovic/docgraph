@@ -1,0 +1,1 @@
+accepted_adr(adr) :- entity_type(adr, "adr"), entity_state(adr, "accepted").

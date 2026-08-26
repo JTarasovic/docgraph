@@ -235,7 +235,7 @@ fn fingerprint(
         "entities.toml",
         "relations.toml",
         "workflows.toml",
-        "logic.cozo",
+        "logic.dl",
     ] {
         let absolute = repository.config_dir().join(name);
         match fs::read(&absolute) {

@@ -1,0 +1,1 @@
+supported_finding(research, finding) :- relation(research, "supports", finding).

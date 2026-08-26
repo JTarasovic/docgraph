@@ -120,7 +120,7 @@ A repository defines its ontology and policy:
   relations.toml
   workflows.toml
   commands.toml
-  logic.cozo
+  logic.dl
 ```
 
 The exact file layout may evolve.
@@ -202,25 +202,23 @@ transition(entity, target_state)
 
 Simple structure and workflow constraints belong in config.
 
-`logic.cozo` contains repo-specific inference and the predicates used by named
+`logic.dl` contains repo-specific inference and the predicates used by named
 queries. It does not define validation policy, transition guards, or canonical
 mutation side effects.
 
-More expressive inference should use CozoScript/Datalog rather than a bespoke
-logic language.
+More expressive inference should use the supported Datalog subset rather than a
+bespoke logic language.
 
-Repository logic is an inline-rule module, not an unrestricted CozoScript entry
-program. It may define named inline rules with `:=` but may not define the `?`
-entry query, invoke fixed rules with `<~` or `<-`, specify query options, perform
-mutations, or invoke system operations. Docgraph supplies the entry query and a
-query timeout, executes it through Cozo's read-only API, and builds Cozo without
-the optional `requests` feature. Selected fixed-rule capabilities may be exposed
-later through explicit docgraph operations rather than directly from repository
-logic.
+Repository logic is a restricted Souffle-compatible module, not an unrestricted
+Souffle program. It may define period-terminated named rules using `:-`, recursion,
+safe stratified negation, and comparisons. It may not declare relations or types,
+control I/O, include files, use components, pragmas, or custom functors. Docgraph
+supplies declarations, SQLite input, the entry/output relation, and a five-second
+process deadline.
 
 The repository schema version covers the supported logic syntax and built-in
 predicate signatures. That versioned subset is the public contract; the embedded
-Cozo version, APIs, storage format, and unsupported CozoScript features are
+engine version, APIs, storage format, and unsupported engine features are
 implementation details.
 
 v0 logic is a positive allowlist: inline rules, calls to public built-ins or rules in
@@ -702,7 +700,7 @@ Likely crate boundaries:
 crates/
   docgraph-core/
   docgraph-markdown/
-  docgraph-cozo/
+  docgraph-logic/
   docgraph-cli/
 
 fixtures/
@@ -736,14 +734,14 @@ Initial implementation:
 - `serde`
 - Git-aware traversal plus `ignore`
 - BLAKE3
-- Cozo
-- Cozo SQLite persistence
-- Cozo FTS
-- Cozo HNSW
+- a restricted Datalog backend
+- SQLite persistence
+- SQLite FTS
+- SQLite vector search
 - external embedding-provider abstraction
 
-Cozo remains behind an internal adapter. Repository configuration and logic must
-not depend on its storage schema or Rust API.
+The logic backend remains behind an internal adapter. Repository configuration and
+logic must not depend on its storage schema or host-language API.
 
 Avoid initially unless justified:
 

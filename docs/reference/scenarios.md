@@ -333,8 +333,8 @@ Required cases:
 - CI validation of the complete merged worktree
 - repository logic accepts every construct in the v0 allowlist and rejects constructs outside it
 - repository logic cannot redefine public built-ins or access implementation-private predicates
-- repository logic runs through the read-only API with a docgraph-controlled timeout
-- supported logic syntax and built-in predicates remain stable for a schema version across internal Cozo upgrades
+- repository logic runs in a docgraph-owned helper process with a five-second kill deadline
+- supported logic syntax and built-in predicates remain stable for a schema version across internal engine upgrades
 
 ## 16. Retrieval Tests
 
@@ -386,7 +386,7 @@ availability is not part of offline validation.
 
 Repositories may define named explanation queries for important derived predicates.
 These queries return the supporting or blocking facts directly; the engine does not
-promise automatic provenance for arbitrary CozoScript.
+promise automatic provenance for arbitrary repository logic.
 
 Bad:
 

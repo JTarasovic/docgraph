@@ -1,3 +1,4 @@
 /target/
+.tools/
 mise.local.toml
 *.profraw

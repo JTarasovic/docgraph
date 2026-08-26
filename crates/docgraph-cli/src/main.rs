@@ -5,7 +5,7 @@ use docgraph_core::{
     MutationService, PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository,
     RepositoryConfig, SearchIndex, Validator, check_generated_frontmatter,
 };
-use docgraph_cozo::{LogicModule, QueryEngine, QueryValue};
+use docgraph_logic::{LogicModule, QueryEngine, QueryValue};
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -457,7 +457,7 @@ fn validate(json_output: bool) -> Result<(), CliError> {
             "severity": "error",
             "code": "invalid-repository-logic",
             "message": error.to_string(),
-            "path": context.repository.config_dir().join("logic.cozo"),
+            "path": context.repository.config_dir().join("logic.dl"),
         }));
     }
     let valid = report.is_valid() && logic_error.is_none();

@@ -44,7 +44,7 @@ impl RepositoryConfig {
             read_optional(&repository.config_dir().join("relations.toml"))?;
         let workflows: WorkflowFile =
             read_optional(&repository.config_dir().join("workflows.toml"))?;
-        let logic_path = repository.config_dir().join("logic.cozo");
+        let logic_path = repository.config_dir().join("logic.dl");
         let logic = read_optional_text(&logic_path)?;
 
         Ok(Self {
@@ -534,8 +534,8 @@ description = "Work is complete"
 "#,
         );
         fixture.write(
-            "logic.cozo",
-            "actionable[task] := entity_state[task, 'open']\n",
+            "logic.dl",
+            "actionable(task) :- entity_state(task, \"open\").\n",
         );
 
         let config = fixture.load().unwrap();

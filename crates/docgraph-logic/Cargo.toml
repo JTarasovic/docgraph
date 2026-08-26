@@ -1,6 +1,6 @@
 [package]
-name = "docgraph-cozo"
-description = "Private Cozo adapter for docgraph"
+name = "docgraph-logic"
+description = "Private restricted-Datalog adapter for docgraph"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,7 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-cozo.workspace = true
 docgraph-core.workspace = true
 docgraph-markdown.workspace = true
+rusqlite.workspace = true
 toml_edit.workspace = true
