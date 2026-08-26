@@ -59,6 +59,49 @@ pub struct Validator<'a> {
 }
 
 impl<'a> Validator<'a> {
+    pub fn validate_corpus(
+        repository: &'a Repository,
+        config: &'a RepositoryConfig,
+        corpus: &'a crate::CanonicalCorpus,
+        graph: &'a GraphIndex,
+    ) -> ValidationReport {
+        let mut report = Self::validate(repository, config, graph);
+        for (document, node) in graph.documents.iter().enumerate() {
+            if node.entity.is_none() {
+                continue;
+            }
+            let (code, message) =
+                match crate::check_generated_frontmatter(corpus, graph, config, document) {
+                    Ok(crate::GeneratedBlockStatus::Current) => continue,
+                    Ok(crate::GeneratedBlockStatus::Missing) => (
+                        "missing-generated-frontmatter",
+                        "entity document has no generated frontmatter block".to_owned(),
+                    ),
+                    Ok(crate::GeneratedBlockStatus::Stale) => (
+                        "stale-generated-frontmatter",
+                        "entity document generated frontmatter is stale".to_owned(),
+                    ),
+                    Err(error) => ("malformed-generated-frontmatter", error.to_string()),
+                };
+            let location = graph
+                .entities
+                .iter()
+                .find(|entity| entity.document == document)
+                .map(|entity| (&entity.location).into())
+                .unwrap_or_else(|| ValidationLocation {
+                    path: node.path.clone(),
+                    span: None,
+                });
+            report.diagnostics.push(ValidationDiagnostic {
+                severity: DiagnosticSeverity::Error,
+                code,
+                message,
+                location,
+            });
+        }
+        report
+    }
+
     pub fn validate(
         repository: &'a Repository,
         config: &'a RepositoryConfig,

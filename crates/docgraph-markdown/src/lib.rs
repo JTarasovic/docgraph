@@ -10,7 +10,7 @@ pub use document::{Heading, MarkdownLink, ParsedDocument};
 pub use frontmatter::{Frontmatter, FrontmatterError};
 pub use normalize::{
     Normalization, NormalizeError, SectionInsertion, normalize_sections, normalize_sections_with,
-    normalize_sections_with_reserved,
+    normalize_sections_with_reserved, normalize_sections_with_reserved_random,
 };
 pub use reference::{ReferenceClassifier, ReferenceTarget};
 pub use span::SourceSpan;

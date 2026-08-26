@@ -2,7 +2,9 @@
 
 mod config;
 mod corpus;
+mod generated_frontmatter;
 mod graph;
+mod mutation;
 mod repository;
 mod retrieval;
 mod state;
@@ -16,10 +18,15 @@ pub use config::{
     WorkflowConfig,
 };
 pub use corpus::{CanonicalCorpus, CorpusError, CorpusFile, RepositoryFingerprint};
+pub use generated_frontmatter::{
+    GeneratedBlockError, GeneratedBlockStatus, check_generated_frontmatter,
+    sync_generated_frontmatter,
+};
 pub use graph::{
     DiagnosticKind as GraphDiagnosticKind, DocumentNode, EntityNode, GraphDiagnostic, GraphIndex,
     GraphLocation, GraphNode, Relation, RelationOrigin, SectionNode,
 };
+pub use mutation::{FileChange, MutationError, MutationPlan, MutationRequest, MutationService};
 pub use repository::{DiscoveryError, Repository};
 pub use retrieval::{GraphTraversal, Neighbor, SearchHit, SearchIndex};
 pub use state::{DerivedState, DerivedStateError, DerivedStatePaths, IndexStatus};

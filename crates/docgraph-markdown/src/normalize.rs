@@ -50,7 +50,14 @@ impl fmt::Display for NormalizeError {
 impl Error for NormalizeError {}
 
 pub fn normalize_sections(source: &str) -> Result<Normalization, NormalizeError> {
-    normalize_sections_with(source, || {
+    normalize_sections_with_reserved_random(source, std::iter::empty())
+}
+
+pub fn normalize_sections_with_reserved_random(
+    source: &str,
+    reserved: impl IntoIterator<Item = StableSectionId>,
+) -> Result<Normalization, NormalizeError> {
+    normalize_sections_with_reserved(source, reserved, || {
         let mut bytes = [0_u8; TOKEN_LENGTH];
         getrandom::fill(&mut bytes).map_err(|error| error.to_string())?;
         Ok(bytes
