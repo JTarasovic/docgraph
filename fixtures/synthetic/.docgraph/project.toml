@@ -22,6 +22,7 @@ description = "Exercises typed result transport."
 predicate = "scalar_values"
 arguments = [
   { name = "integer", mode = "output", type = "integer" },
+  { name = "float", mode = "output", type = "float" },
   { name = "boolean", mode = "output", type = "boolean" },
   { name = "text", mode = "output", type = "string" },
 ]

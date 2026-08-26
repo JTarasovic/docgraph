@@ -1,2 +1,3 @@
 grommit_target(florp, target) :- relation(florp, "grommits", target).
-scalar_values(integer, boolean, text) :- integer = 42, boolean = 1, text = "left\tright".
+scalar_float(value) :- value = 3.5.
+scalar_values(integer, float, boolean, text) :- integer = 42, scalar_float(float), boolean = 1, text = "left\tright".

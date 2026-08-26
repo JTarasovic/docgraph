@@ -499,7 +499,9 @@ components, pragmas, types, and custom functors are not repository syntax.
 Aggregation is also out of scope. Docgraph supplies declarations, SQLite input,
 the entry/output relation, and a five-second process deadline. Validation passes the
 complete generated program through the packaged runtime so syntax and type errors are
-reported before named queries execute.
+reported before named queries execute. Docgraph infers intermediate predicate types
+from literals, built-in signatures, variable unification, and named-query ABIs;
+conflicting types are validation errors.
 
 Only this documented subset and the versioned built-in predicates are part of the
 repository contract. The embedded engine and unsupported engine features are

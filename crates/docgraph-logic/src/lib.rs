@@ -23,15 +23,48 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const RUNTIME_OVERRIDE: &str = "DOCGRAPH_LOGIC_RUNTIME";
 const RESULT_RELATION: &str = "__docgraph_result";
 const VALIDATION_RELATION: &str = "__docgraph_validation";
-const BUILTINS: &[(&str, usize)] = &[
-    ("entity", 1),
-    ("entity_type", 2),
-    ("entity_state", 2),
-    ("relation", 3),
-    ("relation_property", 5),
-    ("section", 3),
-    ("document", 1),
+const BUILTINS: &[Builtin] = &[
+    Builtin::new("entity", &[EngineType::Symbol]),
+    Builtin::new("entity_type", &[EngineType::Symbol, EngineType::Symbol]),
+    Builtin::new("entity_state", &[EngineType::Symbol, EngineType::Symbol]),
+    Builtin::new(
+        "relation",
+        &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
+    ),
+    Builtin::new(
+        "relation_property",
+        &[
+            EngineType::Symbol,
+            EngineType::Symbol,
+            EngineType::Symbol,
+            EngineType::Symbol,
+            EngineType::Symbol,
+        ],
+    ),
+    Builtin::new(
+        "section",
+        &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
+    ),
+    Builtin::new("document", &[EngineType::Symbol]),
 ];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EngineType {
+    Symbol,
+    Number,
+    Float,
+}
+
+struct Builtin {
+    name: &'static str,
+    types: &'static [EngineType],
+}
+
+impl Builtin {
+    const fn new(name: &'static str, types: &'static [EngineType]) -> Self {
+        Self { name, types }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LogicModule {
@@ -54,7 +87,7 @@ impl LogicModule {
                     "each rule must begin with a named predicate head".to_owned(),
                 )
             })?;
-            if BUILTINS.iter().any(|(builtin, _)| *builtin == name)
+            if BUILTINS.iter().any(|builtin| builtin.name == name)
                 || matches!(name.as_str(), RESULT_RELATION | VALIDATION_RELATION)
             {
                 return Err(LogicError::ReservedPredicate(name));
@@ -183,16 +216,19 @@ pub struct QueryEngine<'a> {
     config: &'a RepositoryConfig,
     graph: &'a GraphIndex,
     logic: LogicModule,
+    predicate_types: BTreeMap<String, Vec<EngineType>>,
 }
 
 impl<'a> QueryEngine<'a> {
     pub fn new(config: &'a RepositoryConfig, graph: &'a GraphIndex) -> Result<Self, QueryError> {
         let logic = LogicModule::parse(config.logic.as_deref().unwrap_or_default())?;
         logic.validate_queries(&config.queries)?;
+        let predicate_types = infer_predicate_types(&logic, &config.queries)?;
         Ok(Self {
             config,
             graph,
             logic,
+            predicate_types,
         })
     }
 
@@ -273,21 +309,8 @@ impl<'a> QueryEngine<'a> {
         database: &Path,
     ) -> String {
         let mut declarations = builtin_declarations();
-        for (name, arity) in &self.logic.predicates {
-            let types = self
-                .config
-                .queries
-                .values()
-                .find(|candidate| candidate.predicate == *name)
-                .map(|candidate| {
-                    candidate
-                        .arguments
-                        .iter()
-                        .map(|argument| souffle_type(argument.value_type))
-                        .collect()
-                })
-                .unwrap_or_else(|| vec!["symbol"; *arity]);
-            declarations.push(declaration(name, &types));
+        for (name, types) in &self.predicate_types {
+            declarations.push(declaration(name, types));
         }
         let result_types: Vec<_> = outputs
             .iter()
@@ -295,9 +318,10 @@ impl<'a> QueryEngine<'a> {
             .collect();
         declarations.push(declaration(RESULT_RELATION, &result_types));
         let database = sqlite_database_uri(database);
-        for (name, _) in BUILTINS {
+        for builtin in BUILTINS {
             declarations.push(format!(
-                ".input {name}(IO=sqlite, dbname={})",
+                ".input {}(IO=sqlite, dbname={})",
+                builtin.name,
                 quote(&database)
             ));
         }
@@ -326,27 +350,15 @@ impl<'a> QueryEngine<'a> {
 
     fn validation_program(&self, database: &Path) -> String {
         let mut declarations = builtin_declarations();
-        for (name, arity) in &self.logic.predicates {
-            let types = self
-                .config
-                .queries
-                .values()
-                .find(|candidate| candidate.predicate == *name)
-                .map(|candidate| {
-                    candidate
-                        .arguments
-                        .iter()
-                        .map(|argument| souffle_type(argument.value_type))
-                        .collect()
-                })
-                .unwrap_or_else(|| vec!["symbol"; *arity]);
-            declarations.push(declaration(name, &types));
+        for (name, types) in &self.predicate_types {
+            declarations.push(declaration(name, types));
         }
-        declarations.push(declaration(VALIDATION_RELATION, &["symbol"]));
+        declarations.push(declaration(VALIDATION_RELATION, &[EngineType::Symbol]));
         let database = sqlite_database_uri(database);
-        for (name, _) in BUILTINS {
+        for builtin in BUILTINS {
             declarations.push(format!(
-                ".input {name}(IO=sqlite, dbname={})",
+                ".input {}(IO=sqlite, dbname={})",
+                builtin.name,
                 quote(&database)
             ));
         }
@@ -362,22 +374,26 @@ impl<'a> QueryEngine<'a> {
         let connection =
             Connection::open(path).map_err(|error| QueryError::Execution(error.to_string()))?;
         let facts = self.builtin_facts();
-        for (name, arity) in BUILTINS {
-            let columns = (0..*arity)
-                .map(|index| format!("c{index} TEXT NOT NULL"))
+        for builtin in BUILTINS {
+            let columns = builtin
+                .types
+                .iter()
+                .enumerate()
+                .map(|(index, kind)| format!("c{index} {} NOT NULL", sqlite_type(*kind)))
                 .collect::<Vec<_>>()
                 .join(", ");
             connection
                 .execute_batch(&format!(
-                    "CREATE TABLE _{name} ({columns}); CREATE VIEW {name} AS SELECT * FROM _{name};"
+                    "CREATE TABLE _{} ({columns}); CREATE VIEW {} AS SELECT * FROM _{};",
+                    builtin.name, builtin.name, builtin.name
                 ))
                 .map_err(|error| QueryError::Execution(error.to_string()))?;
-            let placeholders = (1..=*arity)
+            let placeholders = (1..=builtin.types.len())
                 .map(|index| format!("?{index}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let sql = format!("INSERT INTO _{name} VALUES ({placeholders})");
-            for row in &facts[name] {
+            let sql = format!("INSERT INTO _{} VALUES ({placeholders})", builtin.name);
+            for row in &facts[builtin.name] {
                 connection
                     .execute(&sql, params_from_iter(row))
                     .map_err(|error| QueryError::Execution(error.to_string()))?;
@@ -453,7 +469,10 @@ impl<'a> QueryEngine<'a> {
         match value_type {
             QueryValueType::String => row.get(index).ok().map(QueryValue::String),
             QueryValueType::Integer => row.get(index).ok().map(QueryValue::Integer),
-            QueryValueType::Float => row.get(index).ok().map(QueryValue::Float),
+            QueryValueType::Float => row
+                .get::<_, i64>(index)
+                .ok()
+                .map(|bits| QueryValue::Float(f64::from_bits(bits as u64))),
             QueryValueType::Boolean => match row.get::<_, i64>(index).ok()? {
                 0 => Some(QueryValue::Boolean(false)),
                 1 => Some(QueryValue::Boolean(true)),
@@ -480,7 +499,7 @@ impl<'a> QueryEngine<'a> {
     fn builtin_facts(&self) -> HashMap<&'static str, Vec<Vec<String>>> {
         let mut facts: HashMap<&str, Vec<Vec<String>>> = BUILTINS
             .iter()
-            .map(|(name, _)| (*name, Vec::new()))
+            .map(|builtin| (builtin.name, Vec::new()))
             .collect();
         for (index, document) in self.graph.documents.iter().enumerate() {
             facts
@@ -665,31 +684,440 @@ fn sqlite_database_uri(path: &Path) -> String {
     }
 }
 
+#[derive(Clone, Debug)]
+enum RuleTerm {
+    Variable(String),
+    Literal(EngineType),
+}
+
+struct RuleAtom {
+    name: String,
+    arguments: Vec<RuleTerm>,
+}
+
+fn infer_predicate_types(
+    logic: &LogicModule,
+    queries: &BTreeMap<String, NamedQueryConfig>,
+) -> Result<BTreeMap<String, Vec<EngineType>>, LogicError> {
+    let mut inferred: BTreeMap<String, Vec<Option<EngineType>>> = logic
+        .predicates
+        .iter()
+        .map(|(name, arity)| (name.clone(), vec![None; *arity]))
+        .collect();
+    for query in queries.values() {
+        if let Some(slots) = inferred.get_mut(&query.predicate) {
+            for (position, argument) in query.arguments.iter().enumerate() {
+                merge_predicate_type(
+                    &query.predicate,
+                    position,
+                    &mut slots[position],
+                    souffle_type(argument.value_type),
+                )?;
+            }
+        } else if let Some(builtin) = builtin_types(&query.predicate) {
+            for (position, argument) in query.arguments.iter().enumerate() {
+                if builtin[position] != souffle_type(argument.value_type) {
+                    return Err(LogicError::PredicateTypeConflict {
+                        predicate: query.predicate.clone(),
+                        position,
+                    });
+                }
+            }
+        }
+    }
+
+    let clauses = rule_clauses(&logic.source);
+    loop {
+        let mut changed = false;
+        for clause in &clauses {
+            changed |= infer_clause_types(clause, &mut inferred)?;
+        }
+        if !changed {
+            break;
+        }
+    }
+    Ok(inferred
+        .into_iter()
+        .map(|(name, slots)| {
+            (
+                name,
+                slots
+                    .into_iter()
+                    .map(|kind| kind.unwrap_or(EngineType::Symbol))
+                    .collect(),
+            )
+        })
+        .collect())
+}
+
+fn infer_clause_types(
+    clause: &str,
+    inferred: &mut BTreeMap<String, Vec<Option<EngineType>>>,
+) -> Result<bool, LogicError> {
+    let Some(rule_at) = find_outside(clause, ":-") else {
+        return Ok(false);
+    };
+    let mut atoms = Vec::new();
+    if let Some(atom) = parse_rule_atom(&clause[..rule_at]) {
+        atoms.push(atom);
+    }
+    let body = &clause[rule_at + 2..];
+    let mut comparisons = Vec::new();
+    for item in split_top_level(body, ',') {
+        let item = item.trim().trim_start_matches('!').trim();
+        if let Some(atom) = parse_rule_atom(item) {
+            atoms.push(atom);
+        } else if let Some((left, right)) = comparison_terms(item) {
+            comparisons.push((parse_rule_term(left), parse_rule_term(right)));
+        }
+    }
+
+    let mut variable_types: BTreeMap<String, Option<EngineType>> = BTreeMap::new();
+    let mut occurrences: BTreeMap<String, Vec<(String, usize)>> = BTreeMap::new();
+    let mut equalities = Vec::new();
+    let mut changed = false;
+    for atom in atoms {
+        let builtin = builtin_types(&atom.name);
+        for (position, term) in atom.arguments.into_iter().enumerate() {
+            match term {
+                RuleTerm::Variable(variable) if variable != "_" => {
+                    let entry = variable_types.entry(variable.clone()).or_default();
+                    if let Some(types) = builtin {
+                        merge_type(entry, types[position], &atom.name, position)?;
+                    } else if let Some(slots) = inferred.get(&atom.name) {
+                        if let Some(kind) = slots[position] {
+                            merge_type(entry, kind, &atom.name, position)?;
+                        }
+                        occurrences
+                            .entry(variable)
+                            .or_default()
+                            .push((atom.name.clone(), position));
+                    }
+                }
+                RuleTerm::Literal(kind) => {
+                    if let Some(types) = builtin {
+                        if types[position] != kind {
+                            return Err(LogicError::PredicateTypeConflict {
+                                predicate: atom.name.clone(),
+                                position,
+                            });
+                        }
+                    } else if let Some(slots) = inferred.get_mut(&atom.name) {
+                        changed |=
+                            merge_predicate_type(&atom.name, position, &mut slots[position], kind)?;
+                    }
+                }
+                RuleTerm::Variable(_) => {}
+            }
+        }
+    }
+    for (left, right) in comparisons {
+        match (left, right) {
+            (RuleTerm::Variable(left), RuleTerm::Variable(right))
+                if left != "_" && right != "_" =>
+            {
+                equalities.push((left, right));
+            }
+            (RuleTerm::Variable(variable), RuleTerm::Literal(kind))
+            | (RuleTerm::Literal(kind), RuleTerm::Variable(variable))
+                if variable != "_" =>
+            {
+                merge_type(
+                    variable_types.entry(variable).or_default(),
+                    kind,
+                    "comparison",
+                    0,
+                )?;
+            }
+            _ => {}
+        }
+    }
+    loop {
+        let mut local_change = false;
+        for (left, right) in &equalities {
+            let left_type = variable_types.get(left).copied().flatten();
+            let right_type = variable_types.get(right).copied().flatten();
+            if let Some(kind) = left_type {
+                local_change |= merge_type(
+                    variable_types.entry(right.clone()).or_default(),
+                    kind,
+                    "comparison",
+                    0,
+                )?;
+            }
+            if let Some(kind) = right_type {
+                local_change |= merge_type(
+                    variable_types.entry(left.clone()).or_default(),
+                    kind,
+                    "comparison",
+                    0,
+                )?;
+            }
+        }
+        if !local_change {
+            break;
+        }
+    }
+    for (variable, slots) in occurrences {
+        let Some(kind) = variable_types.get(&variable).copied().flatten() else {
+            continue;
+        };
+        for (predicate, position) in slots {
+            changed |= merge_predicate_type(
+                &predicate,
+                position,
+                &mut inferred.get_mut(&predicate).expect("known predicate")[position],
+                kind,
+            )?;
+        }
+    }
+    Ok(changed)
+}
+
+fn merge_predicate_type(
+    predicate: &str,
+    position: usize,
+    slot: &mut Option<EngineType>,
+    kind: EngineType,
+) -> Result<bool, LogicError> {
+    merge_type(slot, kind, predicate, position)
+}
+
+fn merge_type(
+    slot: &mut Option<EngineType>,
+    kind: EngineType,
+    predicate: &str,
+    position: usize,
+) -> Result<bool, LogicError> {
+    match slot {
+        Some(previous) if *previous != kind => Err(LogicError::PredicateTypeConflict {
+            predicate: predicate.to_owned(),
+            position,
+        }),
+        Some(_) => Ok(false),
+        None => {
+            *slot = Some(kind);
+            Ok(true)
+        }
+    }
+}
+
+fn rule_clauses(source: &str) -> Vec<String> {
+    let source = without_line_comments(source);
+    let bytes = source.as_bytes();
+    let mut clauses = Vec::new();
+    let mut start = 0;
+    let mut quote = false;
+    let mut escaped = false;
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        if quote {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quote = false;
+            }
+        } else if byte == b'"' {
+            quote = true;
+        } else if byte == b'.'
+            && !(index > 0
+                && index + 1 < bytes.len()
+                && bytes[index - 1].is_ascii_digit()
+                && bytes[index + 1].is_ascii_digit())
+        {
+            let clause = source[start..index].trim();
+            if !clause.is_empty() {
+                clauses.push(clause.to_owned());
+            }
+            start = index + 1;
+        }
+    }
+    clauses
+}
+
+fn without_line_comments(source: &str) -> String {
+    let mut output = String::with_capacity(source.len());
+    let mut characters = source.chars().peekable();
+    let mut quote = false;
+    let mut escaped = false;
+    while let Some(character) = characters.next() {
+        if quote {
+            output.push(character);
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                quote = false;
+            }
+        } else if character == '"' {
+            quote = true;
+            output.push(character);
+        } else if character == '/' && characters.peek() == Some(&'/') {
+            let _ = characters.next();
+            for comment in characters.by_ref() {
+                if comment == '\n' {
+                    output.push('\n');
+                    break;
+                }
+            }
+        } else {
+            output.push(character);
+        }
+    }
+    output
+}
+
+fn parse_rule_atom(source: &str) -> Option<RuleAtom> {
+    let source = source.trim();
+    let open = find_outside(source, "(")?;
+    if !source.ends_with(')') {
+        return None;
+    }
+    let name = source[..open].trim();
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        return None;
+    }
+    Some(RuleAtom {
+        name: name.to_owned(),
+        arguments: split_top_level(&source[open + 1..source.len() - 1], ',')
+            .into_iter()
+            .map(parse_rule_term)
+            .collect(),
+    })
+}
+
+fn parse_rule_term(source: &str) -> RuleTerm {
+    let source = source.trim();
+    if source.starts_with('"') && source.ends_with('"') {
+        RuleTerm::Literal(EngineType::Symbol)
+    } else if source.parse::<i64>().is_ok() {
+        RuleTerm::Literal(EngineType::Number)
+    } else if source.parse::<f64>().is_ok() {
+        RuleTerm::Literal(EngineType::Float)
+    } else {
+        RuleTerm::Variable(source.to_owned())
+    }
+}
+
+fn comparison_terms(source: &str) -> Option<(&str, &str)> {
+    for operator in ["!=", "<=", ">=", "=", "<", ">"] {
+        if let Some(index) = find_outside(source, operator) {
+            return Some((&source[..index], &source[index + operator.len()..]));
+        }
+    }
+    None
+}
+
+fn find_outside(source: &str, needle: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut quote = false;
+    let mut escaped = false;
+    let mut depth = 0usize;
+    let mut index = 0;
+    while index + needle.len() <= bytes.len() {
+        let byte = bytes[index];
+        if quote {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quote = false;
+            }
+        } else if byte == b'"' {
+            quote = true;
+        } else if byte == b'(' {
+            if needle == "(" && depth == 0 {
+                return Some(index);
+            }
+            depth += 1;
+        } else if byte == b')' {
+            depth = depth.saturating_sub(1);
+        } else if depth == 0 && source[index..].starts_with(needle) {
+            return Some(index);
+        }
+        index += 1;
+    }
+    None
+}
+
+fn split_top_level(source: &str, separator: char) -> Vec<&str> {
+    let bytes = source.as_bytes();
+    let separator = separator as u8;
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut quote = false;
+    let mut escaped = false;
+    let mut depth = 0usize;
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        if quote {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quote = false;
+            }
+        } else if byte == b'"' {
+            quote = true;
+        } else if byte == b'(' {
+            depth += 1;
+        } else if byte == b')' {
+            depth = depth.saturating_sub(1);
+        } else if byte == separator && depth == 0 {
+            parts.push(&source[start..index]);
+            start = index + 1;
+        }
+    }
+    parts.push(&source[start..]);
+    parts
+}
+
 fn builtin_declarations() -> Vec<String> {
     BUILTINS
         .iter()
-        .map(|(name, arity)| declaration(name, &vec!["symbol"; *arity]))
+        .map(|builtin| declaration(builtin.name, builtin.types))
         .collect()
 }
-fn declaration(name: &str, types: &[&str]) -> String {
+fn declaration(name: &str, types: &[EngineType]) -> String {
     format!(
         ".decl {name}({})",
         types
             .iter()
             .enumerate()
-            .map(|(index, kind)| format!("v{index}:{kind}"))
+            .map(|(index, kind)| format!("v{index}:{}", souffle_type_name(*kind)))
             .collect::<Vec<_>>()
             .join(", ")
     )
 }
-fn souffle_type(value_type: QueryValueType) -> &'static str {
+fn souffle_type(value_type: QueryValueType) -> EngineType {
     match value_type {
-        QueryValueType::Integer | QueryValueType::Boolean => "number",
-        QueryValueType::Float => "float",
+        QueryValueType::Integer | QueryValueType::Boolean => EngineType::Number,
+        QueryValueType::Float => EngineType::Float,
         QueryValueType::String
         | QueryValueType::Datetime
         | QueryValueType::Entity
-        | QueryValueType::Section => "symbol",
+        | QueryValueType::Section => EngineType::Symbol,
+    }
+}
+fn souffle_type_name(value_type: EngineType) -> &'static str {
+    match value_type {
+        EngineType::Symbol => "symbol",
+        EngineType::Number => "number",
+        EngineType::Float => "float",
+    }
+}
+fn sqlite_type(value_type: EngineType) -> &'static str {
+    match value_type {
+        EngineType::Symbol => "TEXT",
+        EngineType::Number => "INTEGER",
+        EngineType::Float => "REAL",
     }
 }
 fn quote(value: &str) -> String {
@@ -698,7 +1126,12 @@ fn quote(value: &str) -> String {
 fn builtin_arity(name: &str) -> Option<usize> {
     BUILTINS
         .iter()
-        .find_map(|(builtin, arity)| (*builtin == name).then_some(*arity))
+        .find_map(|builtin| (builtin.name == name).then_some(builtin.types.len()))
+}
+fn builtin_types(name: &str) -> Option<&'static [EngineType]> {
+    BUILTINS
+        .iter()
+        .find_map(|builtin| (builtin.name == name).then_some(builtin.types))
 }
 fn section_exists(graph: &GraphIndex, reference: &str) -> bool {
     graph.sections.iter().enumerate().any(|(index, section)| {
@@ -847,18 +1280,28 @@ fn reject_unsupported(source: &str) -> Result<(), LogicError> {
     Ok(())
 }
 fn clauses(source: &str) -> Result<Vec<&str>, LogicError> {
-    let clauses = source
-        .split('.')
-        .map(str::trim)
-        .filter(|clause| !clause.is_empty())
-        .collect::<Vec<_>>();
-    if source.trim().is_empty() {
-        Ok(clauses)
-    } else if !source.trim_end().ends_with('.') {
+    if !source.trim().is_empty() && !source.trim_end().ends_with('.') {
         Err(LogicError::InvalidRule(
             "each rule must end with a period".to_owned(),
         ))
     } else {
+        let bytes = source.as_bytes();
+        let mut clauses = Vec::new();
+        let mut start = 0;
+        for (index, byte) in bytes.iter().copied().enumerate() {
+            if byte == b'.'
+                && !(index > 0
+                    && index + 1 < bytes.len()
+                    && bytes[index - 1].is_ascii_digit()
+                    && bytes[index + 1].is_ascii_digit())
+            {
+                let clause = source[start..index].trim();
+                if !clause.is_empty() {
+                    clauses.push(clause);
+                }
+                start = index + 1;
+            }
+        }
         Ok(clauses)
     }
 }
@@ -942,6 +1385,10 @@ pub enum LogicError {
         expected: usize,
         found: usize,
     },
+    PredicateTypeConflict {
+        predicate: String,
+        position: usize,
+    },
 }
 impl fmt::Display for LogicError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -976,6 +1423,14 @@ impl fmt::Display for LogicError {
             } => write!(
                 formatter,
                 "query {query:?} declares {found} arguments but predicate {predicate:?} has arity {expected}"
+            ),
+            Self::PredicateTypeConflict {
+                predicate,
+                position,
+            } => write!(
+                formatter,
+                "predicate {predicate:?} has conflicting types at position {}",
+                position + 1
             ),
         }
     }
@@ -1061,6 +1516,19 @@ impl Error for QueryError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn output_query(predicate: &str, value_type: QueryValueType) -> NamedQueryConfig {
+        NamedQueryConfig {
+            description: "test".to_owned(),
+            predicate: predicate.to_owned(),
+            arguments: vec![QueryArgumentConfig {
+                name: "value".to_owned(),
+                mode: ArgumentMode::Output,
+                value_type,
+            }],
+        }
+    }
+
     #[test]
     fn accepts_recursion_negation_and_comparisons_but_not_engine_escape_hatches() {
         let module = LogicModule::parse("reachable(x, y) :- relation(x, \"links\", y).\nreachable(x, z) :- relation(x, \"links\", y), reachable(y, z).\nblocked(x) :- entity_state(x, \"blocked\").\nactionable(x) :- entity(x), !blocked(x), x != \"archived\".\n").unwrap();
@@ -1085,6 +1553,34 @@ mod tests {
         assert!(matches!(
             LogicModule::parse("p(x) :- entity(x)"),
             Err(LogicError::InvalidRule(_))
+        ));
+    }
+
+    #[test]
+    fn infers_intermediate_numeric_types_from_literals_and_query_abis() {
+        let logic = LogicModule::parse(
+            "intermediate(value) :- value = 1.5.\nanswer(value) :- intermediate(value).\n",
+        )
+        .unwrap();
+        let queries = BTreeMap::from([(
+            "answer".to_owned(),
+            output_query("answer", QueryValueType::Float),
+        )]);
+        let inferred = infer_predicate_types(&logic, &queries).unwrap();
+        assert_eq!(inferred["intermediate"], vec![EngineType::Float]);
+        assert_eq!(inferred["answer"], vec![EngineType::Float]);
+    }
+
+    #[test]
+    fn rejects_conflicting_query_and_rule_types() {
+        let logic = LogicModule::parse("answer(value) :- value = 1.5.\n").unwrap();
+        let queries = BTreeMap::from([(
+            "answer".to_owned(),
+            output_query("answer", QueryValueType::Integer),
+        )]);
+        assert!(matches!(
+            infer_predicate_types(&logic, &queries),
+            Err(LogicError::PredicateTypeConflict { .. })
         ));
     }
     #[test]

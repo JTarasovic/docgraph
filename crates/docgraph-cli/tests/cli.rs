@@ -124,12 +124,13 @@ fn configured_logic_runtime_executes_a_typed_query() {
     );
     let scalars: Value = serde_json::from_slice(&scalars.stdout).unwrap();
     assert_eq!(scalars["rows"][0]["integer"], 42);
+    assert_eq!(scalars["rows"][0]["float"], 3.5);
     assert_eq!(scalars["rows"][0]["boolean"], true);
     assert_eq!(scalars["rows"][0]["text"], "left\tright");
 
     fs::write(
         fixture.0.join(".docgraph/logic.dl"),
-        "grommit_target(florp, target) :- relation(florp, \"grommits\", target), target = .\nscalar_values(integer, boolean, text) :- integer = 42, boolean = 1, text = \"left\\tright\".\n",
+        "grommit_target(florp, target) :- relation(florp, \"grommits\", target), target = .\nscalar_float(value) :- value = 3.5.\nscalar_values(integer, float, boolean, text) :- integer = 42, scalar_float(float), boolean = 1, text = \"left\\tright\".\n",
     )
     .unwrap();
     let validate = fixture.run(&["validate"]);
