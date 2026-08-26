@@ -225,7 +225,6 @@ name = "docgraph-logic"
 version = "0.0.0"
 dependencies = [
  "docgraph-core",
- "docgraph-markdown",
  "rusqlite",
  "toml_edit",
 ]

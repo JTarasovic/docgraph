@@ -12,6 +12,5 @@ path = "src/lib.rs"
 
 [dependencies]
 docgraph-core.workspace = true
-docgraph-markdown.workspace = true
 rusqlite.workspace = true
 toml_edit.workspace = true

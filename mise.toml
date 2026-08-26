@@ -33,3 +33,7 @@ run = "cargo deny check"
 [tasks.machete]
 description = "Check for unused dependencies"
 run = "cargo machete"
+
+[tasks.logic-runtime-windows]
+description = "Build the pinned native Windows logic runtime"
+run = "pwsh -NoProfile -File tools/logic-runtime/build-windows.ps1"

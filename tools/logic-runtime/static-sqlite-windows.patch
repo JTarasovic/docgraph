@@ -1,0 +1,21 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index da535d3d4..c45d8fba8 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -348,10 +348,12 @@ if (SOUFFLE_USE_SQLITE)
+     $<TARGET_FILE_DIR:souffle>)
+   if (WIN32)
+     cmake_path(GET SQLite3_LIBRARY PARENT_PATH SQLite3_LIBRARY_DIR)
+-    add_custom_command(TARGET souffle POST_BUILD
+-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+-      ${SQLite3_LIBRARY_DIR}/../bin/sqlite3.dll
+-      $<TARGET_FILE_DIR:souffle>)
++    if (EXISTS "${SQLite3_LIBRARY_DIR}/../bin/sqlite3.dll")
++      add_custom_command(TARGET souffle POST_BUILD
++        COMMAND ${CMAKE_COMMAND} -E copy_if_different
++        ${SQLite3_LIBRARY_DIR}/../bin/sqlite3.dll
++        $<TARGET_FILE_DIR:souffle>)
++    endif ()
+   endif ()
+ endif ()
+ 

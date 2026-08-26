@@ -33,9 +33,9 @@ impl Fixture {
         self.command(arguments).output().unwrap()
     }
 
-    fn run_without_souffle(&self, arguments: &[&str]) -> std::process::Output {
+    fn run_without_logic_runtime(&self, arguments: &[&str]) -> std::process::Output {
         self.command(arguments)
-            .env_remove("DOCGRAPH_SOUFFLE")
+            .env("DOCGRAPH_LOGIC_RUNTIME", "")
             .output()
             .unwrap()
     }
@@ -81,7 +81,7 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
         String::from_utf8_lossy(&validate.stdout),
         String::from_utf8_lossy(&validate.stderr)
     );
-    let query = fixture.run_without_souffle(&[
+    let query = fixture.run_without_logic_runtime(&[
         "--json",
         "query",
         "grommit_targets",
@@ -89,12 +89,12 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
         "florp=florp:1",
     ]);
     assert!(!query.status.success());
-    assert!(String::from_utf8_lossy(&query.stderr).contains("Souffle runtime is unavailable"));
+    assert!(String::from_utf8_lossy(&query.stderr).contains("logic runtime is unavailable"));
 }
 
 #[test]
-fn configured_souffle_executes_a_typed_query() {
-    if std::env::var_os("DOCGRAPH_SOUFFLE").is_none() {
+fn configured_logic_runtime_executes_a_typed_query() {
+    if std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_none() {
         return;
     }
     let fixture = Fixture::copy("synthetic");

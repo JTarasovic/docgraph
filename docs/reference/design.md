@@ -727,7 +727,7 @@ Given the selected IDs, mutation and formatting must be deterministic and idempo
 Initial implementation:
 
 - Rust
-- single compiled binary
+- one installable package containing the Rust CLI and an opaque logic-runtime companion
 - `clap`
 - `pulldown-cmark`
 - TOML / `toml_edit`

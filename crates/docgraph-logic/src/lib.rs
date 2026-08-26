@@ -1,9 +1,8 @@
-//! Restricted, process-isolated Souffle adapter spike.
+//! Restricted, process-isolated Datalog adapter.
 //!
 //! The public language is deliberately smaller than Souffle. This crate owns
 //! declarations, SQLite input directives, the output relation, and the child
-//! process. Runtime discovery is an environment variable for this spike, not
-//! a distributable Windows backend.
+//! process. The engine is distributed as an opaque companion executable.
 
 use docgraph_core::{
     ArgumentMode, GraphIndex, GraphNode, NamedQueryConfig, QueryArgumentConfig, QueryValueType,
@@ -21,6 +20,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use toml_edit::Value;
 
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
+const RUNTIME_OVERRIDE: &str = "DOCGRAPH_LOGIC_RUNTIME";
 const RESULT_RELATION: &str = "__docgraph_result";
 const BUILTINS: &[(&str, usize)] = &[
     ("entity", 1),
@@ -526,7 +526,7 @@ impl Drop for Scratch {
 }
 
 fn run_souffle(program: &Path, output: &Path) -> Result<(), QueryError> {
-    let executable = std::env::var_os("DOCGRAPH_SOUFFLE").ok_or(QueryError::RuntimeUnavailable)?;
+    let executable = runtime_executable()?;
     let mut child = Command::new(executable)
         .arg("--no-preprocessor")
         .arg("-D")
@@ -566,6 +566,32 @@ fn run_souffle(program: &Path, output: &Path) -> Result<(), QueryError> {
         }
         thread::sleep(Duration::from_millis(10));
     }
+}
+
+fn runtime_executable() -> Result<PathBuf, QueryError> {
+    if let Some(path) = std::env::var_os(RUNTIME_OVERRIDE) {
+        if path.is_empty() {
+            return Err(QueryError::RuntimeUnavailable);
+        }
+        return Ok(PathBuf::from(path));
+    }
+    let current = std::env::current_exe().map_err(|error| QueryError::Io {
+        path: PathBuf::from("current executable"),
+        error,
+    })?;
+    let name = if cfg!(windows) {
+        "docgraph-logic-runtime.exe"
+    } else {
+        "docgraph-logic-runtime"
+    };
+    let companion = current
+        .parent()
+        .ok_or(QueryError::RuntimeUnavailable)?
+        .join(name);
+    companion
+        .is_file()
+        .then_some(companion)
+        .ok_or(QueryError::RuntimeUnavailable)
 }
 
 fn sqlite_database_uri(path: &Path) -> String {
@@ -941,7 +967,7 @@ impl fmt::Display for QueryError {
             }
             Self::RuntimeUnavailable => write!(
                 formatter,
-                "Souffle runtime is unavailable; set DOCGRAPH_SOUFFLE to a supported native executable"
+                "docgraph logic runtime is unavailable; install the companion executable or set {RUNTIME_OVERRIDE}"
             ),
             Self::Timeout => write!(
                 formatter,
@@ -1005,7 +1031,7 @@ mod tests {
         assert!(
             QueryError::RuntimeUnavailable
                 .to_string()
-                .contains("native executable")
+                .contains(RUNTIME_OVERRIDE)
         );
     }
     #[test]
@@ -1017,5 +1043,15 @@ mod tests {
         } else {
             assert_eq!(location, path.to_string_lossy());
         }
+    }
+
+    #[test]
+    fn packaged_runtime_name_is_engine_opaque() {
+        let name = if cfg!(windows) {
+            "docgraph-logic-runtime.exe"
+        } else {
+            "docgraph-logic-runtime"
+        };
+        assert!(!name.to_ascii_lowercase().contains("souffle"));
     }
 }

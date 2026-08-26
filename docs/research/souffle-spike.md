@@ -38,11 +38,11 @@ symbols. The spike does not yet prove full typed, native end-to-end execution.
 
 Native Windows is feasible and is not an architectural blocker for v0. The lack
 of an upstream Windows release artifact means docgraph must own a pinned source
-build and release artifact rather than download one. Before adopting it, add a
-reproducible Windows build/release job, provenance and licence notices, runtime
-discovery instead of the spike's `DOCGRAPH_SOUFFLE` variable, and a maintained
-Souffle revision policy. The source pin above is a known-good upstream commit,
-not a final product-version choice.
+build and release artifact rather than download one. Package it as the opaque
+`docgraph-logic-runtime` companion with provenance and licence notices. The generic
+`DOCGRAPH_LOGIC_RUNTIME` override is for development and tests. The source pin above
+is a known-good upstream commit, not a final product-version choice; maintain an
+explicit revision policy before release.
 
 Compared with Mnestic, Souffle removes the Rust graph-engine dependency but adds
 an external native runtime and release pipeline. Compared with Z3, it is a
