@@ -589,6 +589,10 @@ name = "docgraph-cli"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "docgraph-core",
+ "docgraph-cozo",
+ "serde_json",
+ "toml_edit",
 ]
 
 [[package]]

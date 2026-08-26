@@ -213,8 +213,8 @@ impl<'a> Validator<'a> {
                                 inverse_name,
                             );
                         }
-                        if !constraints_overlap(&relation.source, &inverse.target)
-                            || !constraints_overlap(&relation.target, &inverse.source)
+                        if !constraints_fit(&relation.source, &inverse.target)
+                            || !constraints_fit(&relation.target, &inverse.source)
                         {
                             self.config_error(
                                 "invalid-inverse-endpoints",
@@ -636,12 +636,12 @@ impl<'a> Validator<'a> {
     }
 }
 
-fn constraints_overlap(left: &[String], right: &[String]) -> bool {
-    left.is_empty()
-        || right.is_empty()
-        || left
-            .iter()
-            .any(|item| right.iter().any(|other| item == other))
+fn constraints_fit(original: &[String], inverse: &[String]) -> bool {
+    inverse.is_empty()
+        || (!original.is_empty()
+            && original
+                .iter()
+                .all(|item| inverse.iter().any(|allowed| item == allowed)))
 }
 
 fn scalar_value_matches(value: &ScalarValue, property_type: PropertyType) -> bool {

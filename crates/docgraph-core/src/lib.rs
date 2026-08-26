@@ -4,6 +4,7 @@ mod config;
 mod corpus;
 mod generated_frontmatter;
 mod graph;
+mod instructions;
 mod mutation;
 mod repository;
 mod retrieval;
@@ -25,6 +26,9 @@ pub use generated_frontmatter::{
 pub use graph::{
     DiagnosticKind as GraphDiagnosticKind, DocumentNode, EntityNode, GraphDiagnostic, GraphIndex,
     GraphLocation, GraphNode, Relation, RelationOrigin, SectionNode,
+};
+pub use instructions::{
+    InstructionChange, InstructionError, InstructionService, InstructionStatus,
 };
 pub use mutation::{FileChange, MutationError, MutationPlan, MutationRequest, MutationService};
 pub use repository::{DiscoveryError, Repository};

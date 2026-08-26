@@ -1,0 +1,7 @@
+[entity.adr]
+description = "An architectural decision."
+workflow = "adr"
+
+[entity.adr.property.title]
+type = "string"
+required = true

@@ -1,0 +1,18 @@
+schema_version = 1
+
+[project]
+name = "Synthetic ontology conformance"
+
+[documents]
+root = "docs"
+
+[agent_instructions]
+targets = []
+
+[query.grommit_targets]
+description = "Targets grommitted by a florp."
+predicate = "grommit_target"
+arguments = [
+  { name = "florp", mode = "input", type = "entity" },
+  { name = "target", mode = "output", type = "string" },
+]

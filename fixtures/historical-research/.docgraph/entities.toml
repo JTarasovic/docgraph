@@ -1,0 +1,5 @@
+[entity.research]
+description = "A historical research record."
+
+[entity.finding]
+description = "A durable research finding."

@@ -1,0 +1,16 @@
+[workflow.adr]
+initial = "proposed"
+
+[workflow.adr.states.proposed]
+description = "Awaiting a decision."
+transitions = ["accepted", "rejected"]
+
+[workflow.adr.states.accepted]
+description = "Approved."
+transitions = ["superseded"]
+
+[workflow.adr.states.rejected]
+description = "Declined."
+
+[workflow.adr.states.superseded]
+description = "Replaced by a later decision."

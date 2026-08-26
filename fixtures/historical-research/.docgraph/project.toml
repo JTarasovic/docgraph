@@ -1,0 +1,18 @@
+schema_version = 1
+
+[project]
+name = "Historical research conformance"
+
+[documents]
+root = "docs"
+
+[agent_instructions]
+targets = []
+
+[query.supported_findings]
+description = "Findings supported by a research record."
+predicate = "supported_finding"
+arguments = [
+  { name = "research", mode = "input", type = "entity" },
+  { name = "finding", mode = "output", type = "section" },
+]

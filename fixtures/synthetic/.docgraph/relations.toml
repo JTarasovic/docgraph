@@ -1,0 +1,4 @@
+[relation.grommits]
+description = "The source grommits an external target."
+source = ["florp"]
+target = ["external"]

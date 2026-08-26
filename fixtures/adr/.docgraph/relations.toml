@@ -1,0 +1,13 @@
+[relation.supersedes]
+description = "The source replaces the target."
+source = ["adr"]
+target = ["adr"]
+inverse = "superseded_by"
+acyclic = true
+
+[relation.superseded_by]
+description = "The source is replaced by the target."
+source = ["adr"]
+target = ["adr"]
+inverse = "supersedes"
+acyclic = true

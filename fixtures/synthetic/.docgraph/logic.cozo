@@ -1,0 +1,1 @@
+grommit_target[florp, target] := relation[florp, 'grommits', target]

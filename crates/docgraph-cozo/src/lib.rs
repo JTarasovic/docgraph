@@ -298,12 +298,8 @@ impl<'a> QueryEngine<'a> {
     fn reference_value_exists(&self, value: &QueryValue) -> bool {
         match value {
             QueryValue::Entity(id) => self.graph.entities.iter().any(|entity| entity.id == *id),
-            QueryValue::Section(id) => self.graph.sections.iter().any(|section| {
-                section
-                    .id
-                    .as_ref()
-                    .is_some_and(|section_id| section_id.as_str() == id)
-            }),
+            QueryValue::Section(id) => section_exists(self.graph, id),
+            QueryValue::Datetime(value) => datetime_is_valid(value),
             _ => true,
         }
     }
@@ -318,6 +314,7 @@ impl<'a> QueryEngine<'a> {
             QueryValueType::Boolean => value.get_bool().map(QueryValue::Boolean),
             QueryValueType::Datetime => value
                 .get_str()
+                .filter(|value| datetime_is_valid(value))
                 .map(|value| QueryValue::Datetime(value.to_owned())),
             QueryValueType::Entity => value.get_str().and_then(|id| {
                 self.graph
@@ -327,16 +324,7 @@ impl<'a> QueryEngine<'a> {
                     .then(|| QueryValue::Entity(id.to_owned()))
             }),
             QueryValueType::Section => value.get_str().and_then(|id| {
-                self.graph
-                    .sections
-                    .iter()
-                    .any(|section| {
-                        section
-                            .id
-                            .as_ref()
-                            .is_some_and(|section_id| section_id.as_str() == id)
-                    })
-                    .then(|| QueryValue::Section(id.to_owned()))
+                section_exists(self.graph, id).then(|| QueryValue::Section(id.to_owned()))
             }),
         }
     }
@@ -372,10 +360,13 @@ impl<'a> QueryEngine<'a> {
                 }
             }
         }
-        for section in &self.graph.sections {
+        for (index, section) in self.graph.sections.iter().enumerate() {
             if let Some(id) = &section.id {
                 facts.get_mut("section").unwrap().push(vec![
-                    quote(id.as_str()),
+                    quote(
+                        &node_identity(self.graph, &GraphNode::Section(index))
+                            .unwrap_or_else(|| id.as_str().to_owned()),
+                    ),
                     quote(
                         &self.graph.documents[section.document]
                             .path
@@ -419,6 +410,24 @@ impl<'a> QueryEngine<'a> {
             .collect::<Vec<_>>()
             .join("\n")
     }
+}
+
+fn section_exists(graph: &GraphIndex, reference: &str) -> bool {
+    graph.sections.iter().enumerate().any(|(index, section)| {
+        section
+            .id
+            .as_ref()
+            .is_some_and(|id| id.as_str() == reference)
+            || node_identity(graph, &GraphNode::Section(index)).as_deref() == Some(reference)
+    })
+}
+
+fn datetime_is_valid(value: &str) -> bool {
+    format!("value = {value}")
+        .parse::<toml_edit::DocumentMut>()
+        .ok()
+        .and_then(|document| document["value"].as_datetime().cloned())
+        .is_some()
 }
 
 fn add_relation_facts(
@@ -567,6 +576,20 @@ fn reject_unsupported(source: &str) -> Result<(), LogicError> {
     ];
     if let Some(token) = forbidden.into_iter().find(|token| source.contains(token)) {
         return Err(LogicError::UnsupportedConstruct(token.to_owned()));
+    }
+    if source
+        .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+        .any(|word| word == "in")
+    {
+        return Err(LogicError::UnsupportedConstruct("in".to_owned()));
+    }
+    if ["+", "%", "/", " - "]
+        .into_iter()
+        .any(|operator| source.contains(operator))
+    {
+        return Err(LogicError::UnsupportedConstruct(
+            "scalar arithmetic".to_owned(),
+        ));
     }
     let mut has_rule = false;
     for line in source
@@ -793,6 +816,62 @@ mod tests {
         GraphLocation, ProjectConfig, QueryArgumentConfig, RelationTypeConfig, ValidationConfig,
     };
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::{fs, path::Path};
+
+    static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
+
+    struct ConformanceFixture(PathBuf);
+
+    impl ConformanceFixture {
+        fn copy(name: &str) -> Self {
+            let sequence = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+            let target = std::env::temp_dir().join(format!(
+                "docgraph-conformance-{name}-{}-{sequence}",
+                std::process::id()
+            ));
+            let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join("fixtures")
+                .join(name);
+            copy_directory(&source, &target);
+            Self(target)
+        }
+
+        fn load(
+            &self,
+        ) -> (
+            docgraph_core::Repository,
+            RepositoryConfig,
+            docgraph_core::CanonicalCorpus,
+            GraphIndex,
+        ) {
+            let repository = docgraph_core::Repository::discover(&self.0).unwrap();
+            let config = RepositoryConfig::load(&repository).unwrap();
+            let corpus = docgraph_core::CanonicalCorpus::load(&repository, &config).unwrap();
+            let graph = GraphIndex::build(&corpus, &config);
+            (repository, config, corpus, graph)
+        }
+    }
+
+    impl Drop for ConformanceFixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn copy_directory(source: &Path, target: &Path) {
+        fs::create_dir_all(target).unwrap();
+        for entry in fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            let destination = target.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy_directory(&entry.path(), &destination);
+            } else {
+                fs::copy(entry.path(), destination).unwrap();
+            }
+        }
+    }
 
     #[test]
     fn accepts_only_the_documented_inline_rule_surface() {
@@ -887,5 +966,94 @@ mod tests {
             result.rows[0]["task"],
             QueryValue::Entity("task:1".to_owned())
         );
+    }
+
+    #[test]
+    fn v0_fixtures_validate_without_domain_specific_code() {
+        for name in ["adr", "historical-research", "synthetic"] {
+            let fixture = ConformanceFixture::copy(name);
+            let (repository, config, corpus, graph) = fixture.load();
+            let report =
+                docgraph_core::Validator::validate_corpus(&repository, &config, &corpus, &graph);
+            assert!(report.is_valid(), "{name}: {:?}", report.diagnostics);
+            let logic = LogicModule::parse(config.logic.as_deref().unwrap_or_default()).unwrap();
+            logic.validate_queries(&config.queries).unwrap();
+        }
+    }
+
+    #[test]
+    fn fixture_named_queries_cover_entities_sections_and_external_targets() {
+        let adr = ConformanceFixture::copy("adr");
+        let (_, config, _, graph) = adr.load();
+        let accepted = QueryEngine::new(&config, &graph)
+            .unwrap()
+            .execute("accepted_adrs", BTreeMap::new())
+            .unwrap();
+        assert_eq!(
+            accepted.rows[0]["adr"],
+            QueryValue::Entity("adr:2".to_owned())
+        );
+
+        let history = ConformanceFixture::copy("historical-research");
+        let (_, config, _, graph) = history.load();
+        let findings = QueryEngine::new(&config, &graph)
+            .unwrap()
+            .execute(
+                "supported_findings",
+                BTreeMap::from([(
+                    "research".to_owned(),
+                    QueryValue::Entity("research:retry-history".to_owned()),
+                )]),
+            )
+            .unwrap();
+        assert!(matches!(
+            &findings.rows[0]["finding"],
+            QueryValue::Section(value) if value == "finding:retry-memory#s-5D6F7G8H9J"
+        ));
+
+        let synthetic = ConformanceFixture::copy("synthetic");
+        let (_, config, _, graph) = synthetic.load();
+        let targets = QueryEngine::new(&config, &graph)
+            .unwrap()
+            .execute(
+                "grommit_targets",
+                BTreeMap::from([("florp".to_owned(), QueryValue::Entity("florp:1".to_owned()))]),
+            )
+            .unwrap();
+        assert_eq!(
+            targets.rows[0]["target"],
+            QueryValue::String("github:issue:owner/repo:123".to_owned())
+        );
+    }
+
+    #[test]
+    fn adr_fixture_completes_the_mutate_validate_reindex_loop() {
+        let fixture = ConformanceFixture::copy("adr");
+        let service = docgraph_core::MutationService::open(&fixture.0).unwrap();
+        let preview = service
+            .apply(
+                &docgraph_core::MutationRequest::Transition {
+                    entity: "adr:1".to_owned(),
+                    target_state: "accepted".to_owned(),
+                },
+                true,
+            )
+            .unwrap();
+        assert!(!preview.is_empty());
+        service
+            .apply(
+                &docgraph_core::MutationRequest::Transition {
+                    entity: "adr:1".to_owned(),
+                    target_state: "accepted".to_owned(),
+                },
+                false,
+            )
+            .unwrap();
+        let (repository, config, corpus, graph) = fixture.load();
+        assert!(
+            docgraph_core::Validator::validate_corpus(&repository, &config, &corpus, &graph)
+                .is_valid()
+        );
+        assert!(fixture.0.join(".docgraph/.state/index.sqlite").exists());
     }
 }

@@ -1,0 +1,11 @@
+[relation.supports]
+description = "The source supports the target finding."
+source = ["research"]
+target = ["section"]
+inverse = "supported_by"
+
+[relation.supported_by]
+description = "The source finding is supported by the target record."
+source = ["section"]
+target = ["research"]
+inverse = "supports"
