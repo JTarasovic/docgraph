@@ -513,8 +513,17 @@ The engine exposes these v1 built-in predicate signatures:
 entity[id]
 entity_type[id, type]
 entity_state[id, state]
+entity_property_string[id, key, value]
+entity_property_integer[id, key, value]
+entity_property_float[id, key, value]
+entity_property_boolean[id, key, value]
+entity_property_datetime[id, key, value]
 relation[source, predicate, target]
-relation_property[source, predicate, target, key, value]
+relation_property_string[source, predicate, target, key, value]
+relation_property_integer[source, predicate, target, key, value]
+relation_property_float[source, predicate, target, key, value]
+relation_property_boolean[source, predicate, target, key, value]
+relation_property_datetime[source, predicate, target, key, value]
 section[id, document, heading]
 document[path]
 ```
@@ -523,7 +532,9 @@ These built-in names are reserved and may be called but not defined by repositor
 logic. Repository rules cannot access underlying stored relations or other
 implementation-private predicates.
 
-`relation` and `relation_property` expose only explicit managed relations and
+Property predicates preserve the configured scalar type. Array properties use the
+predicate for their item type and emit one fact per item. `relation` and the
+`relation_property_*` predicates expose only explicit managed relations and
 deterministic derivatives configured by the repository, such as inverses. v0 does
 not expose informational Markdown links to repository logic.
 

@@ -115,6 +115,32 @@ fn configured_logic_runtime_executes_a_typed_query() {
     assert_eq!(query["query"], "grommit_targets");
     assert_eq!(query["rows"][0]["target"], "github:issue:owner/repo:123");
 
+    let confidence = fixture.run(&[
+        "--json",
+        "query",
+        "grommit_confidence",
+        "--arg",
+        "florp=florp:1",
+    ]);
+    assert!(confidence.status.success());
+    let confidence: Value = serde_json::from_slice(&confidence.stdout).unwrap();
+    assert_eq!(confidence["rows"][0]["confidence"], 0.75);
+
+    let details = fixture.run(&["--json", "query", "florp_details", "--arg", "florp=florp:1"]);
+    assert!(
+        details.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&details.stdout),
+        String::from_utf8_lossy(&details.stderr)
+    );
+    let details: Value = serde_json::from_slice(&details.stdout).unwrap();
+    assert_eq!(details["rows"].as_array().unwrap().len(), 2);
+    assert_eq!(details["rows"][0]["title"], "Florp one");
+    assert_eq!(details["rows"][0]["count"], 7);
+    assert_eq!(details["rows"][0]["score"], 2.5);
+    assert_eq!(details["rows"][0]["enabled"], true);
+    assert_eq!(details["rows"][0]["observed"], "2026-08-26T12:30:00Z");
+
     let scalars = fixture.run(&["--json", "query", "scalar_values"]);
     assert!(
         scalars.status.success(),
@@ -128,11 +154,12 @@ fn configured_logic_runtime_executes_a_typed_query() {
     assert_eq!(scalars["rows"][0]["boolean"], true);
     assert_eq!(scalars["rows"][0]["text"], "left\tright");
 
-    fs::write(
-        fixture.0.join(".docgraph/logic.dl"),
-        "grommit_target(florp, target) :- relation(florp, \"grommits\", target), target = .\nscalar_float(value) :- value = 3.5.\nscalar_values(integer, float, boolean, text) :- integer = 42, scalar_float(float), boolean = 1, text = \"left\\tright\".\n",
-    )
-    .unwrap();
+    let logic_path = fixture.0.join(".docgraph/logic.dl");
+    let malformed = fs::read_to_string(&logic_path).unwrap().replace(
+        "relation(florp, \"grommits\", target).",
+        "relation(florp, \"grommits\", target), target = .",
+    );
+    fs::write(logic_path, malformed).unwrap();
     let validate = fixture.run(&["validate"]);
     assert!(!validate.status.success());
     assert!(String::from_utf8_lossy(&validate.stdout).contains("invalid-repository-logic"));

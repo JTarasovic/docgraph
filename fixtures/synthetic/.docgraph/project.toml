@@ -26,3 +26,24 @@ arguments = [
   { name = "boolean", mode = "output", type = "boolean" },
   { name = "text", mode = "output", type = "string" },
 ]
+
+[query.grommit_confidence]
+description = "Returns a typed relation property."
+predicate = "grommit_confidence"
+arguments = [
+  { name = "florp", mode = "input", type = "entity" },
+  { name = "confidence", mode = "output", type = "float" },
+]
+
+[query.florp_details]
+description = "Returns typed entity properties and expanded array items."
+predicate = "florp_details"
+arguments = [
+  { name = "florp", mode = "input", type = "entity" },
+  { name = "title", mode = "output", type = "string" },
+  { name = "count", mode = "output", type = "integer" },
+  { name = "score", mode = "output", type = "float" },
+  { name = "enabled", mode = "output", type = "boolean" },
+  { name = "observed", mode = "output", type = "datetime" },
+  { name = "label", mode = "output", type = "string" },
+]

@@ -1,2 +1,21 @@
 [entity.florp]
 description = "A deliberately unfamiliar entity type."
+
+[entity.florp.property.title]
+type = "string"
+
+[entity.florp.property.count]
+type = "integer"
+
+[entity.florp.property.score]
+type = "float"
+
+[entity.florp.property.enabled]
+type = "boolean"
+
+[entity.florp.property.observed]
+type = "datetime"
+
+[entity.florp.property.labels]
+type = "array"
+items = "string"

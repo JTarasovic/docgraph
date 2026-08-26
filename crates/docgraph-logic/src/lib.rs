@@ -5,9 +5,10 @@
 //! process. The engine is distributed as an opaque companion executable.
 
 use docgraph_core::{
-    ArgumentMode, GraphIndex, GraphNode, NamedQueryConfig, QueryArgumentConfig, QueryValueType,
-    RelationOrigin, RepositoryConfig,
+    ArgumentMode, GraphIndex, GraphNode, NamedQueryConfig, PropertyConfig, PropertyType,
+    QueryArgumentConfig, QueryValueType, RelationOrigin, RepositoryConfig, ScalarType,
 };
+use rusqlite::types::Value as SqlValue;
 use rusqlite::{Connection, params_from_iter};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
@@ -31,21 +32,52 @@ const BUILTINS: &[Builtin] = &[
         "relation",
         &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
     ),
+    Builtin::new("entity_property_string", &PROPERTY_SYMBOL_TYPES),
+    Builtin::new("entity_property_integer", &PROPERTY_NUMBER_TYPES),
+    Builtin::new("entity_property_float", &PROPERTY_FLOAT_TYPES),
+    Builtin::new("entity_property_boolean", &PROPERTY_NUMBER_TYPES),
+    Builtin::new("entity_property_datetime", &PROPERTY_SYMBOL_TYPES),
+    Builtin::new("relation_property_string", &RELATION_PROPERTY_SYMBOL_TYPES),
+    Builtin::new("relation_property_integer", &RELATION_PROPERTY_NUMBER_TYPES),
+    Builtin::new("relation_property_float", &RELATION_PROPERTY_FLOAT_TYPES),
+    Builtin::new("relation_property_boolean", &RELATION_PROPERTY_NUMBER_TYPES),
     Builtin::new(
-        "relation_property",
-        &[
-            EngineType::Symbol,
-            EngineType::Symbol,
-            EngineType::Symbol,
-            EngineType::Symbol,
-            EngineType::Symbol,
-        ],
+        "relation_property_datetime",
+        &RELATION_PROPERTY_SYMBOL_TYPES,
     ),
     Builtin::new(
         "section",
         &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
     ),
     Builtin::new("document", &[EngineType::Symbol]),
+];
+
+const PROPERTY_SYMBOL_TYPES: [EngineType; 3] =
+    [EngineType::Symbol, EngineType::Symbol, EngineType::Symbol];
+const PROPERTY_NUMBER_TYPES: [EngineType; 3] =
+    [EngineType::Symbol, EngineType::Symbol, EngineType::Number];
+const PROPERTY_FLOAT_TYPES: [EngineType; 3] =
+    [EngineType::Symbol, EngineType::Symbol, EngineType::Float];
+const RELATION_PROPERTY_SYMBOL_TYPES: [EngineType; 5] = [
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Symbol,
+];
+const RELATION_PROPERTY_NUMBER_TYPES: [EngineType; 5] = [
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Number,
+];
+const RELATION_PROPERTY_FLOAT_TYPES: [EngineType; 5] = [
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Symbol,
+    EngineType::Float,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -328,15 +360,19 @@ impl<'a> QueryEngine<'a> {
         let arguments = query
             .arguments
             .iter()
-            .map(|argument| match argument.mode {
+            .enumerate()
+            .map(|(index, argument)| match argument.mode {
                 ArgumentMode::Input => inputs[&argument.name].souffle_literal(),
-                ArgumentMode::Output => argument.name.clone(),
+                ArgumentMode::Output => format!("docgraph_value_{index}"),
             })
             .collect::<Vec<_>>()
             .join(", ");
-        let output_names = outputs
+        let output_names = query
+            .arguments
             .iter()
-            .map(|argument| argument.name.as_str())
+            .enumerate()
+            .filter(|(_, argument)| argument.mode == ArgumentMode::Output)
+            .map(|(index, _)| format!("docgraph_value_{index}"))
             .collect::<Vec<_>>()
             .join(", ");
         format!(
@@ -496,18 +532,20 @@ impl<'a> QueryEngine<'a> {
             }
         }
     }
-    fn builtin_facts(&self) -> HashMap<&'static str, Vec<Vec<String>>> {
-        let mut facts: HashMap<&str, Vec<Vec<String>>> = BUILTINS
+    fn builtin_facts(&self) -> HashMap<&'static str, Vec<Vec<SqlValue>>> {
+        let mut facts: HashMap<&str, Vec<Vec<SqlValue>>> = BUILTINS
             .iter()
             .map(|builtin| (builtin.name, Vec::new()))
             .collect();
         for (index, document) in self.graph.documents.iter().enumerate() {
-            facts
-                .get_mut("document")
-                .unwrap()
-                .push(vec![document.path.to_string_lossy().into_owned()]);
+            facts.get_mut("document").unwrap().push(vec![SqlValue::Text(
+                document.path.to_string_lossy().into_owned(),
+            )]);
             if let Some(id) = &document.entity {
-                facts.get_mut("entity").unwrap().push(vec![id.clone()]);
+                facts
+                    .get_mut("entity")
+                    .unwrap()
+                    .push(vec![SqlValue::Text(id.clone())]);
             }
             for entity in self
                 .graph
@@ -515,15 +553,23 @@ impl<'a> QueryEngine<'a> {
                 .iter()
                 .filter(|entity| entity.document == index)
             {
-                facts
-                    .get_mut("entity_type")
-                    .unwrap()
-                    .push(vec![entity.id.clone(), entity.entity_type.clone()]);
+                facts.get_mut("entity_type").unwrap().push(vec![
+                    SqlValue::Text(entity.id.clone()),
+                    SqlValue::Text(entity.entity_type.clone()),
+                ]);
                 if let Some(state) = &entity.state {
-                    facts
-                        .get_mut("entity_state")
-                        .unwrap()
-                        .push(vec![entity.id.clone(), state.clone()]);
+                    facts.get_mut("entity_state").unwrap().push(vec![
+                        SqlValue::Text(entity.id.clone()),
+                        SqlValue::Text(state.clone()),
+                    ]);
+                }
+                if let Some(schema) = self
+                    .config
+                    .entities
+                    .get(&entity.entity_type)
+                    .map(|config| &config.property)
+                {
+                    add_entity_property_facts(&mut facts, &entity.id, &entity.properties, schema);
                 }
             }
         }
@@ -532,12 +578,14 @@ impl<'a> QueryEngine<'a> {
                 let id = node_identity(self.graph, &GraphNode::Section(index))
                     .expect("identified section has identity");
                 facts.get_mut("section").unwrap().push(vec![
-                    id,
-                    self.graph.documents[section.document]
-                        .path
-                        .to_string_lossy()
-                        .into_owned(),
-                    section.heading.clone(),
+                    SqlValue::Text(id),
+                    SqlValue::Text(
+                        self.graph.documents[section.document]
+                            .path
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
+                    SqlValue::Text(section.heading.clone()),
                 ]);
             }
         }
@@ -559,6 +607,10 @@ impl<'a> QueryEngine<'a> {
                 &relation.predicate,
                 &target,
                 &relation.properties,
+                self.config
+                    .relations
+                    .get(&relation.predicate)
+                    .map(|config| &config.property),
             );
             if let Some(inverse) = self
                 .config
@@ -566,7 +618,17 @@ impl<'a> QueryEngine<'a> {
                 .get(&relation.predicate)
                 .and_then(|config| config.inverse.as_deref())
             {
-                add_relation_facts(&mut facts, &target, inverse, &source, &relation.properties);
+                add_relation_facts(
+                    &mut facts,
+                    &target,
+                    inverse,
+                    &source,
+                    &relation.properties,
+                    self.config
+                        .relations
+                        .get(&relation.predicate)
+                        .map(|config| &config.property),
+                );
             }
         }
         facts
@@ -1150,36 +1212,124 @@ fn datetime_is_valid(value: &str) -> bool {
         .is_some()
 }
 fn add_relation_facts(
-    facts: &mut HashMap<&str, Vec<Vec<String>>>,
+    facts: &mut HashMap<&str, Vec<Vec<SqlValue>>>,
     source: &str,
     predicate: &str,
     target: &str,
     properties: &BTreeMap<String, Value>,
+    schema: Option<&BTreeMap<String, PropertyConfig>>,
 ) {
     facts.get_mut("relation").unwrap().push(vec![
-        source.to_owned(),
-        predicate.to_owned(),
-        target.to_owned(),
+        SqlValue::Text(source.to_owned()),
+        SqlValue::Text(predicate.to_owned()),
+        SqlValue::Text(target.to_owned()),
     ]);
+    let Some(schema) = schema else {
+        return;
+    };
     for (key, value) in properties {
-        facts.get_mut("relation_property").unwrap().push(vec![
-            source.to_owned(),
-            predicate.to_owned(),
-            target.to_owned(),
-            key.clone(),
-            property_value(value),
-        ]);
+        let Some(property) = schema.get(key) else {
+            continue;
+        };
+        add_property_values(facts, PropertyOwner::Relation, property, value, |value| {
+            vec![
+                SqlValue::Text(source.to_owned()),
+                SqlValue::Text(predicate.to_owned()),
+                SqlValue::Text(target.to_owned()),
+                SqlValue::Text(key.clone()),
+                value,
+            ]
+        });
     }
 }
-fn property_value(value: &Value) -> String {
-    value
-        .as_str()
-        .map(str::to_owned)
-        .or_else(|| value.as_integer().map(|value| value.to_string()))
-        .or_else(|| value.as_float().map(|value| value.to_string()))
-        .or_else(|| value.as_bool().map(|value| value.to_string()))
-        .or_else(|| value.as_datetime().map(|value| value.to_string()))
-        .unwrap_or_else(|| value.to_string())
+
+fn add_entity_property_facts(
+    facts: &mut HashMap<&str, Vec<Vec<SqlValue>>>,
+    entity: &str,
+    properties: &BTreeMap<String, Value>,
+    schema: &BTreeMap<String, PropertyConfig>,
+) {
+    for (key, value) in properties {
+        let Some(property) = schema.get(key) else {
+            continue;
+        };
+        add_property_values(facts, PropertyOwner::Entity, property, value, |value| {
+            vec![
+                SqlValue::Text(entity.to_owned()),
+                SqlValue::Text(key.clone()),
+                value,
+            ]
+        });
+    }
+}
+
+fn add_property_values(
+    facts: &mut HashMap<&str, Vec<Vec<SqlValue>>>,
+    owner: PropertyOwner,
+    property: &PropertyConfig,
+    value: &Value,
+    row: impl Fn(SqlValue) -> Vec<SqlValue>,
+) {
+    let scalar_type = match property.property_type {
+        PropertyType::String => Some(ScalarType::String),
+        PropertyType::Integer => Some(ScalarType::Integer),
+        PropertyType::Float => Some(ScalarType::Float),
+        PropertyType::Boolean => Some(ScalarType::Boolean),
+        PropertyType::Datetime => Some(ScalarType::Datetime),
+        PropertyType::Array => property.items,
+    };
+    let Some(scalar_type) = scalar_type else {
+        return;
+    };
+    let name = property_builtin_name(owner, scalar_type);
+    let values: Vec<&Value> = if property.property_type == PropertyType::Array {
+        value
+            .as_array()
+            .map(|array| array.iter().collect())
+            .unwrap_or_default()
+    } else {
+        vec![value]
+    };
+    for value in values {
+        if let Some(value) = sql_property_value(value, scalar_type) {
+            facts.get_mut(name).unwrap().push(row(value));
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum PropertyOwner {
+    Entity,
+    Relation,
+}
+
+fn property_builtin_name(owner: PropertyOwner, scalar_type: ScalarType) -> &'static str {
+    match (owner, scalar_type) {
+        (PropertyOwner::Entity, ScalarType::String) => "entity_property_string",
+        (PropertyOwner::Entity, ScalarType::Integer) => "entity_property_integer",
+        (PropertyOwner::Entity, ScalarType::Float) => "entity_property_float",
+        (PropertyOwner::Entity, ScalarType::Boolean) => "entity_property_boolean",
+        (PropertyOwner::Entity, ScalarType::Datetime) => "entity_property_datetime",
+        (PropertyOwner::Relation, ScalarType::String) => "relation_property_string",
+        (PropertyOwner::Relation, ScalarType::Integer) => "relation_property_integer",
+        (PropertyOwner::Relation, ScalarType::Float) => "relation_property_float",
+        (PropertyOwner::Relation, ScalarType::Boolean) => "relation_property_boolean",
+        (PropertyOwner::Relation, ScalarType::Datetime) => "relation_property_datetime",
+    }
+}
+
+fn sql_property_value(value: &Value, scalar_type: ScalarType) -> Option<SqlValue> {
+    match scalar_type {
+        ScalarType::String => value.as_str().map(|value| SqlValue::Text(value.to_owned())),
+        ScalarType::Integer => value.as_integer().map(SqlValue::Integer),
+        ScalarType::Float => value.as_float().map(SqlValue::Real),
+        ScalarType::Boolean => value
+            .as_bool()
+            .map(|value| SqlValue::Integer(i64::from(value))),
+        ScalarType::Datetime => value
+            .as_datetime()
+            .map(|value| SqlValue::Text(value.to_string())),
+    }
 }
 fn node_identity(graph: &GraphIndex, node: &GraphNode) -> Option<String> {
     match node {
