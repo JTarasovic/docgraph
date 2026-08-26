@@ -23,10 +23,19 @@ impl Fixture {
         Self(target)
     }
 
+    fn command(&self, arguments: &[&str]) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_docgraph"));
+        command.current_dir(&self.0).args(arguments);
+        command
+    }
+
     fn run(&self, arguments: &[&str]) -> std::process::Output {
-        Command::new(env!("CARGO_BIN_EXE_docgraph"))
-            .current_dir(&self.0)
-            .args(arguments)
+        self.command(arguments).output().unwrap()
+    }
+
+    fn run_without_souffle(&self, arguments: &[&str]) -> std::process::Output {
+        self.command(arguments)
+            .env_remove("DOCGRAPH_SOUFFLE")
             .output()
             .unwrap()
     }
@@ -52,7 +61,7 @@ fn copy_directory(source: &Path, target: &Path) {
 }
 
 #[test]
-fn structured_describe_validate_and_query_are_stable() {
+fn structured_describe_validate_and_unavailable_query_are_stable() {
     let fixture = Fixture::copy("synthetic");
 
     let describe = fixture.run(&["--json", "describe"]);
@@ -72,7 +81,7 @@ fn structured_describe_validate_and_query_are_stable() {
         String::from_utf8_lossy(&validate.stdout),
         String::from_utf8_lossy(&validate.stderr)
     );
-    let query = fixture.run(&[
+    let query = fixture.run_without_souffle(&[
         "--json",
         "query",
         "grommit_targets",
@@ -81,6 +90,30 @@ fn structured_describe_validate_and_query_are_stable() {
     ]);
     assert!(!query.status.success());
     assert!(String::from_utf8_lossy(&query.stderr).contains("Souffle runtime is unavailable"));
+}
+
+#[test]
+fn configured_souffle_executes_a_typed_query() {
+    if std::env::var_os("DOCGRAPH_SOUFFLE").is_none() {
+        return;
+    }
+    let fixture = Fixture::copy("synthetic");
+    let query = fixture.run(&[
+        "--json",
+        "query",
+        "grommit_targets",
+        "--arg",
+        "florp=florp:1",
+    ]);
+    assert!(
+        query.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&query.stdout),
+        String::from_utf8_lossy(&query.stderr)
+    );
+    let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert_eq!(query["query"], "grommit_targets");
+    assert_eq!(query["rows"][0]["target"], "github:issue:owner/repo:123");
 }
 
 #[test]
