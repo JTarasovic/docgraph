@@ -26,6 +26,10 @@ Configuration defines vocabulary and policy. The engine defines storage, indexin
 
 Only `project.toml` is mandatory.
 
+`.docgraph` lives at the Git worktree root. `project.toml` owns the project,
+documents, frontmatter, named-query, and agent-instruction tables; each other TOML
+file owns the table matching its filename. `logic.cozo` contains repository logic.
+
 `commands.toml` and provider-adapter configuration described later are reserved
 post-v0 extensions. A v0 implementation reports them as unsupported rather than
 silently ignoring them.
@@ -39,9 +43,14 @@ schema_version = 1
 name = "example-project"
 
 [documents]
-include = ["docs/**/*.md"]
-exclude = ["docs/generated/**"]
+root = "docs"
+include = ["**/*.md"]
+exclude = ["generated/**"]
 ```
+
+`documents.root` is required and repository-relative. Include and exclude patterns
+are relative to that root; include defaults to `**/*.md` and exclude defaults to
+an empty list.
 
 `schema_version` versions the complete repository-facing contract, including the
 configuration and reference grammar, managed document conventions, supported

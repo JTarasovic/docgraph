@@ -1,4 +1,15 @@
 //! Core domain model and repository services for docgraph.
 
+mod config;
+mod repository;
+
+pub use config::{
+    AgentInstructionsConfig, ArgumentMode, ConfigDiagnostic, ConfigLoadError, DocumentsConfig,
+    EntityTypeConfig, FrontmatterConfig, NamedQueryConfig, ProjectConfig, PropertyConfig,
+    PropertyType, QueryArgumentConfig, QueryValueType, RelationTypeConfig, RepositoryConfig,
+    ScalarType, ScalarValue, SourceSpan, StateConfig, WorkflowConfig,
+};
+pub use repository::{DiscoveryError, Repository};
+
 /// Repository schema implemented by this pre-release workspace.
-pub const SCHEMA_VERSION: u32 = 0;
+pub const SCHEMA_VERSION: u32 = 1;
