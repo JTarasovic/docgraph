@@ -5,7 +5,7 @@ use docgraph_core::{
     MutationService, PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository,
     RepositoryConfig, SearchIndex, Validator, check_generated_frontmatter,
 };
-use docgraph_logic::{LogicModule, QueryEngine, QueryValue};
+use docgraph_logic::{QueryEngine, QueryValue};
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -435,8 +435,8 @@ fn validate(json_output: bool) -> Result<(), CliError> {
         &context.corpus,
         &context.graph,
     );
-    let logic_error = LogicModule::parse(context.config.logic.as_deref().unwrap_or_default())
-        .and_then(|logic| logic.validate_queries(&context.config.queries))
+    let logic_error = QueryEngine::new(&context.config, &context.graph)
+        .and_then(|engine| engine.validate())
         .err();
     let mut diagnostics: Vec<_> = report
         .diagnostics

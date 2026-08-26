@@ -214,7 +214,8 @@ Souffle program. It may define period-terminated named rules using `:-`, recursi
 safe stratified negation, and comparisons. It may not declare relations or types,
 control I/O, include files, use components, pragmas, or custom functors. Docgraph
 supplies declarations, SQLite input, the entry/output relation, and a five-second
-process deadline.
+process deadline. Repository validation also passes the complete generated program
+through that runtime rather than trusting only docgraph's allowlist parser.
 
 The repository schema version covers the supported logic syntax and built-in
 predicate signatures. That versioned subset is the public contract; the embedded

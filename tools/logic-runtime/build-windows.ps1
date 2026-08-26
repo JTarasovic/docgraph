@@ -22,8 +22,22 @@ $installed = Join-Path $cache "vcpkg-installed"
 $archive = Join-Path $cache "winflexbison.zip"
 $winFlexBison = Join-Path $cache "winflexbison"
 $build = Join-Path $cache "build"
+$artifact = Join-Path $output "docgraph-logic-runtime.exe"
+$stamp = Join-Path $output "build-inputs.sha256"
 
 New-Item -ItemType Directory -Force -Path $cache, $output | Out-Null
+$inputHashes = @(
+    (Get-FileHash -Algorithm SHA256 -LiteralPath $PSCommandPath).Hash,
+    (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $PSScriptRoot "sources.toml")).Hash,
+    (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $PSScriptRoot "static-sqlite-windows.patch")).Hash
+) -join "`n"
+$inputHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($inputHashes)))
+if ((Test-Path -LiteralPath $artifact) -and
+    (Test-Path -LiteralPath $stamp) -and
+    ((Get-Content -Raw -LiteralPath $stamp).Trim() -eq $inputHash)) {
+    Get-FileHash -Algorithm SHA256 -LiteralPath $artifact
+    exit 0
+}
 
 if (-not (Test-Path -LiteralPath (Join-Path $source ".git"))) {
     git clone --filter=blob:none https://github.com/souffle-lang/souffle.git $source
@@ -95,6 +109,7 @@ foreach ($line in (& cmd.exe /d /s /c "`"$vcvars`" >nul && set")) {
     "-DBISON_EXECUTABLE=$(Join-Path $winFlexBison 'win_bison.exe')"
 & $cmake --build $build --target souffle -j4
 
-Copy-Item -Force -LiteralPath (Join-Path $build "src\souffle.exe") -Destination (Join-Path $output "docgraph-logic-runtime.exe")
+Copy-Item -Force -LiteralPath (Join-Path $build "src\souffle.exe") -Destination $artifact
 Copy-Item -Force -Recurse -LiteralPath (Join-Path $source "licenses") -Destination $output
-Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $output "docgraph-logic-runtime.exe")
+Set-Content -NoNewline -LiteralPath $stamp -Value $inputHash
+Get-FileHash -Algorithm SHA256 -LiteralPath $artifact

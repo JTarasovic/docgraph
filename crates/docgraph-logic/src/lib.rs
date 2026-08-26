@@ -22,6 +22,7 @@ use toml_edit::Value;
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const RUNTIME_OVERRIDE: &str = "DOCGRAPH_LOGIC_RUNTIME";
 const RESULT_RELATION: &str = "__docgraph_result";
+const VALIDATION_RELATION: &str = "__docgraph_validation";
 const BUILTINS: &[(&str, usize)] = &[
     ("entity", 1),
     ("entity_type", 2),
@@ -53,7 +54,9 @@ impl LogicModule {
                     "each rule must begin with a named predicate head".to_owned(),
                 )
             })?;
-            if BUILTINS.iter().any(|(builtin, _)| *builtin == name) || name == RESULT_RELATION {
+            if BUILTINS.iter().any(|(builtin, _)| *builtin == name)
+                || matches!(name.as_str(), RESULT_RELATION | VALIDATION_RELATION)
+            {
                 return Err(LogicError::ReservedPredicate(name));
             }
             if let Some(previous) = predicates.insert(name.clone(), arity)
@@ -250,6 +253,18 @@ impl<'a> QueryEngine<'a> {
         self.decode_output(name, &scratch.database, &outputs)
     }
 
+    pub fn validate(&self) -> Result<(), QueryError> {
+        let scratch = Scratch::new()?;
+        self.write_sqlite_input(&scratch.database)?;
+        fs::write(&scratch.program, self.validation_program(&scratch.database)).map_err(
+            |error| QueryError::Io {
+                path: scratch.program.clone(),
+                error,
+            },
+        )?;
+        run_souffle(&scratch.program, &scratch.output)
+    }
+
     fn program(
         &self,
         query: &NamedQueryConfig,
@@ -305,6 +320,40 @@ impl<'a> QueryEngine<'a> {
             declarations.join("\n"),
             self.logic.source,
             query.predicate,
+            quote(&database)
+        )
+    }
+
+    fn validation_program(&self, database: &Path) -> String {
+        let mut declarations = builtin_declarations();
+        for (name, arity) in &self.logic.predicates {
+            let types = self
+                .config
+                .queries
+                .values()
+                .find(|candidate| candidate.predicate == *name)
+                .map(|candidate| {
+                    candidate
+                        .arguments
+                        .iter()
+                        .map(|argument| souffle_type(argument.value_type))
+                        .collect()
+                })
+                .unwrap_or_else(|| vec!["symbol"; *arity]);
+            declarations.push(declaration(name, &types));
+        }
+        declarations.push(declaration(VALIDATION_RELATION, &["symbol"]));
+        let database = sqlite_database_uri(database);
+        for (name, _) in BUILTINS {
+            declarations.push(format!(
+                ".input {name}(IO=sqlite, dbname={})",
+                quote(&database)
+            ));
+        }
+        format!(
+            "{}\n{}\n{VALIDATION_RELATION}(\"ok\").\n.output {VALIDATION_RELATION}(IO=sqlite, dbname={})\n",
+            declarations.join("\n"),
+            self.logic.source,
             quote(&database)
         )
     }

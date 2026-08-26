@@ -126,6 +126,15 @@ fn configured_logic_runtime_executes_a_typed_query() {
     assert_eq!(scalars["rows"][0]["integer"], 42);
     assert_eq!(scalars["rows"][0]["boolean"], true);
     assert_eq!(scalars["rows"][0]["text"], "left\tright");
+
+    fs::write(
+        fixture.0.join(".docgraph/logic.dl"),
+        "grommit_target(florp, target) :- relation(florp, \"grommits\", target), target = .\nscalar_values(integer, boolean, text) :- integer = 42, boolean = 1, text = \"left\\tright\".\n",
+    )
+    .unwrap();
+    let validate = fixture.run(&["validate"]);
+    assert!(!validate.status.success());
+    assert!(String::from_utf8_lossy(&validate.stdout).contains("invalid-repository-logic"));
 }
 
 #[test]
