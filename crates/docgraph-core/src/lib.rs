@@ -4,6 +4,7 @@ mod config;
 mod corpus;
 mod graph;
 mod repository;
+mod retrieval;
 mod state;
 mod validation;
 
@@ -20,6 +21,7 @@ pub use graph::{
     GraphLocation, GraphNode, Relation, RelationOrigin, SectionNode,
 };
 pub use repository::{DiscoveryError, Repository};
+pub use retrieval::{GraphTraversal, Neighbor, SearchHit, SearchIndex};
 pub use state::{DerivedState, DerivedStateError, DerivedStatePaths, IndexStatus};
 pub use validation::{ValidationDiagnostic, ValidationLocation, ValidationReport, Validator};
 

@@ -9,3 +9,9 @@ publish.workspace = true
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+cozo.workspace = true
+docgraph-core.workspace = true
+docgraph-markdown.workspace = true
+toml_edit.workspace = true

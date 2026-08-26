@@ -502,16 +502,16 @@ Only this documented subset and the versioned built-in predicates are part of th
 repository contract. The embedded Cozo version and unsupported CozoScript features
 are implementation details.
 
-The engine should expose versioned built-ins including:
+The engine exposes these v1 built-in predicate signatures:
 
 ```text
-entity
-entity_type
-entity_state
-relation
-relation_property
-section
-document
+entity[id]
+entity_type[id, type]
+entity_state[id, state]
+relation[source, predicate, target]
+relation_property[source, predicate, target, key, value]
+section[id, document, heading]
+document[path]
 ```
 
 These built-in names are reserved and may be called but not defined by repository
