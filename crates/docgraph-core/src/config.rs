@@ -53,6 +53,7 @@ impl RepositoryConfig {
                 documents: project_file.documents,
                 frontmatter: project_file.frontmatter,
                 agent_instructions: project_file.agent_instructions,
+                validation: project_file.validation,
             },
             entities: entities.entity,
             relations: relations.relation,
@@ -69,6 +70,7 @@ pub struct ProjectConfig {
     pub documents: DocumentsConfig,
     pub frontmatter: FrontmatterConfig,
     pub agent_instructions: AgentInstructionsConfig,
+    pub validation: ValidationConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -119,6 +121,20 @@ impl Default for AgentInstructionsConfig {
             targets: vec![PathBuf::from("AGENTS.md"), PathBuf::from("CLAUDE.md")],
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum DiagnosticSeverity {
+    #[default]
+    Warning,
+    Error,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct ValidationConfig {
+    pub broken_internal_links: DiagnosticSeverity,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -252,6 +268,8 @@ struct ProjectFile {
     frontmatter: FrontmatterConfig,
     #[serde(default)]
     agent_instructions: AgentInstructionsConfig,
+    #[serde(default)]
+    validation: ValidationConfig,
     #[serde(default)]
     query: BTreeMap<String, NamedQueryConfig>,
 }
@@ -470,6 +488,9 @@ name = "example"
 [documents]
 root = "docs"
 
+[validation]
+broken_internal_links = "error"
+
 [query.task_blockers]
 description = "Find blockers"
 predicate = "task_blockers"
@@ -522,6 +543,10 @@ description = "Work is complete"
         assert_eq!(config.project.name, "example");
         assert_eq!(config.project.documents.root, PathBuf::from("docs"));
         assert_eq!(config.project.documents.include, ["**/*.md"]);
+        assert_eq!(
+            config.project.validation.broken_internal_links,
+            DiagnosticSeverity::Error
+        );
         assert!(config.entities.contains_key("task"));
         assert!(config.relations["blocked_by"].acyclic);
         assert_eq!(config.workflows["task"].initial, "open");

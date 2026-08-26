@@ -69,7 +69,7 @@ Examples:
 
 ```text
 task:184   blocked_by    adr:42
-task:184   implements    architecture#s-7K3M9Q2W
+task:184   implements    architecture#s-83JRT4K2P6
 adr:42     supersedes    adr:19
 claim:17   supported_by  evidence:81
 ```
@@ -278,7 +278,7 @@ opaque ID written immediately before it. This includes headings inside lists and
 block quotes; text resembling a heading inside code or raw HTML is not a heading.
 
 ```markdown
-<a id="s-7K3M9Q2W"></a>
+<a id="s-83JRT4K2P6"></a>
 ## Retry Semantics
 ```
 
@@ -316,13 +316,13 @@ The indexer processes semantic relationships, ordinary Markdown links, and recog
 ```toml
 [[relations]]
 type = "implements"
-target = "../architecture.md#s-7K3M9Q2W"
+target = "../architecture.md#s-83JRT4K2P6"
 ```
 
 ### 6.2 Ordinary Markdown links
 
 ```markdown
-See [retry semantics](../architecture.md#s-7K3M9Q2W).
+See [retry semantics](../architecture.md#s-83JRT4K2P6).
 ```
 
 Semantic relationships preserve their declared predicate. Ordinary Markdown links
@@ -497,7 +497,7 @@ Generic operations remain available:
 
 ```bash
 docgraph transition adr:42 accepted
-docgraph relate task:184 implements architecture#s-7K3M9Q2W
+docgraph relate task:184 implements architecture#s-83JRT4K2P6
 docgraph query task_blockers --arg task=task:184
 ```
 

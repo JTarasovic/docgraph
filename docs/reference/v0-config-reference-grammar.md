@@ -27,8 +27,9 @@ Configuration defines vocabulary and policy. The engine defines storage, indexin
 Only `project.toml` is mandatory.
 
 `.docgraph` lives at the Git worktree root. `project.toml` owns the project,
-documents, frontmatter, named-query, and agent-instruction tables; each other TOML
-file owns the table matching its filename. `logic.cozo` contains repository logic.
+documents, frontmatter, validation, named-query, and agent-instruction tables; each
+other TOML file owns the table matching its filename. `logic.cozo` contains
+repository logic.
 
 `commands.toml` and provider-adapter configuration described later are reserved
 post-v0 extensions. A v0 implementation reports them as unsupported rather than
@@ -174,7 +175,7 @@ including headings nested in lists or block quotes. Heading-like text inside cod
 raw HTML is not included.
 
 ```markdown
-<a id="s-7K3M9Q2W"></a>
+<a id="s-83JRT4K2P6"></a>
 ## Retry semantics
 ```
 
@@ -204,7 +205,7 @@ Tests may inject a deterministic generator so golden patches are reproducible.
 Canonical section references:
 
 ```text
-spec:retry#s-7K3M9Q2W
+spec:retry#s-83JRT4K2P6
 ```
 
 ## 8. Relation Definitions
@@ -269,7 +270,7 @@ target = "adr:42"
 
 [[relations]]
 type = "implements"
-target = "spec:retry#s-7K3M9Q2W"
+target = "spec:retry#s-83JRT4K2P6"
 ```
 
 Source defaults to the enclosing entity.
@@ -277,7 +278,7 @@ Source defaults to the enclosing entity.
 ## 11. Ordinary Markdown Links
 
 ```markdown
-See [retry semantics](../specs/retry.md#s-7K3M9Q2W).
+See [retry semantics](../specs/retry.md#s-83JRT4K2P6).
 ```
 
 The indexer records this as an informational `links_to` edge from the containing
@@ -319,7 +320,7 @@ References normalize into canonical graph targets before indexing.
 ### 12.1 Current-document section
 
 ```text
-#s-7K3M9Q2W
+#s-83JRT4K2P6
 ```
 
 ### 12.2 Relative document
@@ -331,7 +332,7 @@ References normalize into canonical graph targets before indexing.
 ### 12.3 Relative document section
 
 ```text
-../specs/retry.md#s-7K3M9Q2W
+../specs/retry.md#s-83JRT4K2P6
 ```
 
 ### 12.4 Canonical entity
@@ -343,7 +344,7 @@ adr:42
 ### 12.5 Canonical entity section
 
 ```text
-spec:retry#s-7K3M9Q2W
+spec:retry#s-83JRT4K2P6
 ```
 
 ### 12.6 External URI
@@ -609,7 +610,7 @@ relation = "implements"
 Generated:
 
 ```bash
-docgraph task implements task:184 spec:retry#s-7K3M9Q2W
+docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 ```
 
 ## 20. Generic CLI Escape Hatches
@@ -722,7 +723,7 @@ type = "implemented_by"
 target = "task:184"
 
 [[docgraph_generated.backlinks]]
-source = "adr:42#s-7K3M9Q2W"
+source = "adr:42#s-83JRT4K2P6"
 # docgraph:generated:end
 ```
 

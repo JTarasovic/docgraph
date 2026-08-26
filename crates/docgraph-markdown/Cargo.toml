@@ -9,3 +9,8 @@ publish.workspace = true
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+getrandom.workspace = true
+pulldown-cmark.workspace = true
+toml_edit.workspace = true
