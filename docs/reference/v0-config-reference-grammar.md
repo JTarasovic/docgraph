@@ -2,8 +2,35 @@
 id = "reference:config-grammar"
 type = "reference"
 
+[properties]
+role = "grammar"
+
 # docgraph:generated:v1:begin
 [docgraph_generated]
+
+[[docgraph_generated.incoming]]
+source = "plan:complete-v0"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:audit-v0-success"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:support-section-path-endpoints"
+predicate = "implements"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "plan:complete-v0"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:audit-v0-success"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:support-section-path-endpoints"
 # docgraph:generated:end
 +++
 <a id="s-H8DH7THYWV"></a>

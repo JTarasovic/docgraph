@@ -2,8 +2,19 @@
 id = "reference:design"
 type = "reference"
 
+[properties]
+role = "design"
+
 # docgraph:generated:v1:begin
 [docgraph_generated]
+
+[[docgraph_generated.incoming]]
+source = "task:generate-model-appendix"
+predicate = "implements"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:generate-model-appendix"
 # docgraph:generated:end
 +++
 <a id="s-FEFSK4BQTV"></a>

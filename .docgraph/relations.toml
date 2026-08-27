@@ -1,0 +1,37 @@
+[relation.part_of]
+description = "The source task contributes to the target plan."
+source = ["task"]
+target = ["plan"]
+inverse = "contains"
+
+[relation.contains]
+description = "The source plan contains the target task."
+source = ["plan"]
+target = ["task"]
+inverse = "part_of"
+
+[relation.depends_on]
+description = "The source cannot be completed before the target."
+source = ["task"]
+target = ["task"]
+inverse = "required_by"
+acyclic = true
+
+[relation.required_by]
+description = "The source must be completed before the target."
+source = ["task"]
+target = ["task"]
+inverse = "depends_on"
+acyclic = true
+
+[relation.implements]
+description = "The source performs work required by the target."
+source = ["plan", "task"]
+target = ["reference", "decision", "section"]
+inverse = "implemented_by"
+
+[relation.implemented_by]
+description = "The source requirement or decision is implemented by the target work."
+source = ["reference", "decision", "section"]
+target = ["plan", "task"]
+inverse = "implements"

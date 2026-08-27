@@ -15,5 +15,5 @@ This repository uses docgraph.
 - Keep generated frontmatter current with `docgraph frontmatter sync`.
 - Portable guidance lives in `skills/docgraph/SKILL.md`.
 
-Model: entities [reference]; relations []; workflows []; queries [].
+Model: entities [decision, plan, reference, task]; relations [contains, depends_on, implemented_by, implements, part_of, required_by]; workflows [decision, plan, task]; queries [].
 <!-- docgraph:agent-instructions:end -->

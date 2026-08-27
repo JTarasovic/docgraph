@@ -2,6 +2,9 @@
 id = "reference:scenarios"
 type = "reference"
 
+[properties]
+role = "conformance"
+
 # docgraph:generated:v1:begin
 [docgraph_generated]
 # docgraph:generated:end

@@ -1,0 +1,58 @@
+[workflow.decision]
+initial = "proposed"
+
+[workflow.decision.states.proposed]
+description = "Awaiting a decision."
+transitions = ["accepted", "rejected"]
+
+[workflow.decision.states.accepted]
+description = "The decision is current."
+transitions = ["superseded"]
+
+[workflow.decision.states.rejected]
+description = "The proposal was declined."
+
+[workflow.decision.states.superseded]
+description = "A later decision replaced this one."
+
+[workflow.plan]
+initial = "proposed"
+
+[workflow.plan.states.proposed]
+description = "The plan has not started."
+transitions = ["active", "abandoned"]
+
+[workflow.plan.states.active]
+description = "Work on the plan is underway."
+transitions = ["completed", "abandoned"]
+
+[workflow.plan.states.completed]
+description = "The plan's outcome has been achieved."
+
+[workflow.plan.states.abandoned]
+description = "The plan will not be completed."
+
+[workflow.task]
+initial = "backlog"
+
+[workflow.task.states.backlog]
+description = "The task is known but not ready to start."
+transitions = ["ready", "dropped"]
+
+[workflow.task.states.ready]
+description = "The task can be started."
+transitions = ["in_progress", "dropped"]
+
+[workflow.task.states.in_progress]
+description = "Work on the task is underway."
+transitions = ["done", "blocked", "dropped"]
+
+[workflow.task.states.blocked]
+description = "The task cannot currently proceed."
+transitions = ["ready", "dropped"]
+
+[workflow.task.states.done]
+description = "The task is complete."
+
+[workflow.task.states.dropped]
+description = "The task will not be completed."

@@ -1,2 +1,31 @@
 [entity.reference]
 description = "A docgraph product reference document."
+
+[entity.reference.property.role]
+type = "string"
+required = true
+values = ["design", "grammar", "conformance"]
+
+[entity.decision]
+description = "A recorded architectural or product decision."
+workflow = "decision"
+
+[entity.decision.property.title]
+type = "string"
+required = true
+
+[entity.plan]
+description = "A bounded outcome comprising related work."
+workflow = "plan"
+
+[entity.plan.property.title]
+type = "string"
+required = true
+
+[entity.task]
+description = "A concrete unit of work."
+workflow = "task"
+
+[entity.task.property.title]
+type = "string"
+required = true
