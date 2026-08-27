@@ -22,9 +22,8 @@ target = "reference:config-grammar#s-GVPQBPMPBJ"
 type = "depends_on"
 target = "task:support-section-path-endpoints"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
-# docgraph:generated:end
+schema_version = 1
 +++
 <a id="s-CV1YNY6QW7"></a>
 # Audit the v0 success criterion

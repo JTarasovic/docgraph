@@ -5,9 +5,8 @@ type = "reference"
 [properties]
 role = "conformance"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
-# docgraph:generated:end
+schema_version = 1
 +++
 <a id="s-W2JDJP657B"></a>
 # Draft Scenarios and Conformance Suite
@@ -344,7 +343,7 @@ Required cases:
 - relation mutation refreshes generated incoming and inverse entries on affected documents
 - prose-link changes refresh deterministic generated backlinks
 - generated frontmatter is ignored as input and preserves surrounding authored content
-- frontmatter check rejects missing, malformed, or stale generated blocks
+- frontmatter check rejects missing, malformed, stale, or unsupported generated tables
 - required, optional, enumerated, and homogeneous-array property validation
 - undeclared entity/relation property, optional-property typo, and duplicate explicit relation triple
 - legal/illegal workflow transition

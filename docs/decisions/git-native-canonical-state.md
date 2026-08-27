@@ -6,9 +6,8 @@ state = "accepted"
 [properties]
 title = "Keep canonical state in Git-native documents"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
-# docgraph:generated:end
+schema_version = 1
 +++
 <a id="s-AWWRH5TPT6"></a>
 # Keep canonical state in Git-native documents

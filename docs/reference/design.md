@@ -5,8 +5,8 @@ type = "reference"
 [properties]
 role = "design"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
+schema_version = 1
 
 [[docgraph_generated.incoming]]
 source = "task:generate-model-appendix"
@@ -15,7 +15,6 @@ predicate = "implements"
 [[docgraph_generated.inverses]]
 type = "implemented_by"
 target = "task:generate-model-appendix"
-# docgraph:generated:end
 +++
 <a id="s-FEFSK4BQTV"></a>
 # Draft Design: Git-Native Document Graph and Workflow Engine
@@ -287,7 +286,7 @@ preserves unrelated TOML frontmatter and prose, and assigns stable IDs to headin
 the same recoverable mutation.
 
 Managed facts are changed through docgraph operations. Each entity document also has
-a fenced generated read model containing direct incoming relations, configured
+a reserved generated table containing direct incoming relations, configured
 inverses, and informational backlinks. Generated frontmatter is deterministic,
 disposable, and never an authoritative graph input.
 

@@ -955,7 +955,7 @@ mod tests {
         service.apply(&request, false).unwrap();
         let after = fs::read_to_string(fixture.0.join("docs/one.md")).unwrap();
         assert!(after.contains("state = \"done\""));
-        assert!(after.contains("# docgraph:generated:v1:begin"));
+        assert!(after.contains("[docgraph_generated]\nschema_version = 1"));
         assert!(!service.state.paths.recovery_journal.exists());
         assert!(service.state.paths.index.exists());
     }
@@ -989,7 +989,7 @@ mod tests {
         assert!(adopted.contains("# Three\n\nExisting prose.\n"));
         assert!(adopted.contains("<a id=\"s-"));
         assert!(adopted.contains("type = \"task\""));
-        assert!(adopted.contains("# docgraph:generated:v1:begin"));
+        assert!(adopted.contains("[docgraph_generated]\nschema_version = 1"));
     }
 
     #[test]

@@ -2,9 +2,10 @@ use crate::{CanonicalCorpus, GraphIndex, GraphNode, RelationOrigin, RepositoryCo
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
+use toml_edit::{DocumentMut, Item};
 
-const BEGIN: &str = "# docgraph:generated:v1:begin";
-const END: &str = "# docgraph:generated:end";
+const GENERATED: &str = "docgraph_generated";
+const SCHEMA_VERSION: i64 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GeneratedBlockStatus {
@@ -16,7 +17,7 @@ pub enum GeneratedBlockStatus {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GeneratedBlockError {
     MissingFrontmatter,
-    MalformedMarkers,
+    MalformedTable,
 }
 
 impl fmt::Display for GeneratedBlockError {
@@ -25,8 +26,8 @@ impl fmt::Display for GeneratedBlockError {
             Self::MissingFrontmatter => {
                 formatter.write_str("entity document has no TOML frontmatter")
             }
-            Self::MalformedMarkers => {
-                formatter.write_str("generated frontmatter markers are malformed or ambiguous")
+            Self::MalformedTable => {
+                formatter.write_str("generated frontmatter table is malformed or unsupported")
             }
         }
     }
@@ -50,21 +51,23 @@ pub fn check_generated_frontmatter(
         .frontmatter
         .as_ref()
         .ok_or(GeneratedBlockError::MissingFrontmatter)?;
-    let content = &file.content[frontmatter.content_span.bytes.clone()];
     let newline = if file.content.contains("\r\n") {
         "\r\n"
     } else {
         "\n"
     };
     let expected = projection(graph, config, document, newline);
-    let Some(region) = region(content)? else {
+    let Some(existing) = frontmatter.item(GENERATED) else {
         return Ok(GeneratedBlockStatus::Missing);
     };
-    Ok(if content[region] == expected {
-        GeneratedBlockStatus::Current
-    } else {
-        GeneratedBlockStatus::Stale
-    })
+    validate_generated_item(existing)?;
+    Ok(
+        if normalize_newlines(&render_generated_item(existing)) == normalize_newlines(&expected) {
+            GeneratedBlockStatus::Current
+        } else {
+            GeneratedBlockStatus::Stale
+        },
+    )
 }
 
 pub fn sync_generated_frontmatter(
@@ -79,18 +82,27 @@ pub fn sync_generated_frontmatter(
         .frontmatter
         .as_ref()
         .ok_or(GeneratedBlockError::MissingFrontmatter)?;
-    let content = &source[frontmatter.content_span.bytes.clone()];
     let newline = if source.contains("\r\n") {
         "\r\n"
     } else {
         "\n"
     };
     let expected = projection(graph, config, document, newline);
-    let replacement = if let Some(region) = region(content)? {
-        let mut replacement = content.to_owned();
-        replacement.replace_range(region, &expected);
-        replacement
+    let replacement = if let Some(existing) = frontmatter.item(GENERATED) {
+        validate_generated_item(existing)?;
+        let mut document = frontmatter.to_mut();
+        document.remove(GENERATED);
+        let mut expected = projection_item(&expected);
+        expected
+            .as_table_mut()
+            .expect("generated projection is a table")
+            .decor_mut()
+            .set_prefix(newline);
+        document[GENERATED] = expected;
+        document.set_trailing("");
+        document.to_string()
     } else {
+        let content = &source[frontmatter.content_span.bytes.clone()];
         let mut replacement = content.to_owned();
         if !replacement.is_empty() && !replacement.ends_with('\n') {
             replacement.push('\n');
@@ -139,7 +151,8 @@ fn projection(
         }
     }
 
-    let mut output = format!("{BEGIN}{newline}[docgraph_generated]{newline}");
+    let mut output =
+        format!("[docgraph_generated]{newline}schema_version = {SCHEMA_VERSION}{newline}");
     for (source, predicate) in incoming {
         output.push_str(&format!(
             "{newline}[[docgraph_generated.incoming]]{newline}source = {}{newline}predicate = {}{newline}",
@@ -160,32 +173,62 @@ fn projection(
             toml_string(&source)
         ));
     }
-    output.push_str(END);
-    output.push('\n');
     output
 }
 
-fn region(content: &str) -> Result<Option<std::ops::Range<usize>>, GeneratedBlockError> {
-    let mut begin = Vec::new();
-    let mut end = Vec::new();
-    let mut offset = 0;
-    for line in content.split_inclusive('\n') {
-        let logical = line.strip_suffix('\n').unwrap_or(line);
-        let logical = logical.strip_suffix('\r').unwrap_or(logical);
-        if logical == BEGIN {
-            begin.push(offset);
-        } else if logical == END {
-            end.push(offset + line.len());
-        } else if logical.contains("docgraph:generated") {
-            return Err(GeneratedBlockError::MalformedMarkers);
+fn validate_generated_item(item: &Item) -> Result<(), GeneratedBlockError> {
+    let table = item.as_table().ok_or(GeneratedBlockError::MalformedTable)?;
+    if table.get("schema_version").and_then(Item::as_integer) != Some(SCHEMA_VERSION) {
+        return Err(GeneratedBlockError::MalformedTable);
+    }
+    Ok(())
+}
+
+fn projection_item(projection: &str) -> Item {
+    let mut item = projection
+        .parse::<DocumentMut>()
+        .expect("generated projection is valid TOML")
+        .remove(GENERATED)
+        .expect("generated projection contains its reserved table");
+    clear_positions(&mut item);
+    item
+}
+
+fn clear_positions(item: &mut Item) {
+    match item {
+        Item::Table(table) => {
+            table.set_position(None);
+            for (_, child) in table.iter_mut() {
+                clear_positions(child);
+            }
         }
-        offset += line.len();
+        Item::ArrayOfTables(tables) => {
+            for table in tables.iter_mut() {
+                table.set_position(None);
+                for (_, child) in table.iter_mut() {
+                    clear_positions(child);
+                }
+            }
+        }
+        Item::Value(_) | Item::None => {}
     }
-    match (begin.as_slice(), end.as_slice()) {
-        ([], []) => Ok(None),
-        ([start], [finish]) if start < finish => Ok(Some(*start..*finish)),
-        _ => Err(GeneratedBlockError::MalformedMarkers),
-    }
+}
+
+fn render_generated_item(item: &Item) -> String {
+    let mut item = item.clone();
+    clear_positions(&mut item);
+    item.as_table_mut()
+        .expect("generated item was validated as a table")
+        .decor_mut()
+        .clear();
+    let mut document = DocumentMut::new();
+    document[GENERATED] = item;
+    document.set_trailing("");
+    document.to_string()
+}
+
+fn normalize_newlines(value: &str) -> String {
+    value.replace("\r\n", "\n")
 }
 
 fn target_document(graph: &GraphIndex, node: &GraphNode) -> Option<usize> {
@@ -232,7 +275,7 @@ mod tests {
 
     #[test]
     fn sync_is_idempotent_and_preserves_authored_frontmatter() {
-        let source = "+++\nid = \"task:1\"\ntype = \"task\"\nowner = \"me\"\n+++\n# Task\n";
+        let source = "+++\nid = \"task:1\"\ntype = \"task\"\nowner = \"me\"\n\n[[relations]]\ntype = \"implements\"\ntarget = \"spec:1\"\n+++\n# Task\n";
         let graph = GraphIndex {
             documents: vec![DocumentNode {
                 path: PathBuf::from("docs/task.md"),
@@ -241,7 +284,17 @@ mod tests {
             }],
             entities: Vec::new(),
             sections: Vec::new(),
-            relations: Vec::new(),
+            relations: vec![crate::Relation {
+                source: GraphNode::ExternalUri("https://example.com/source".to_owned()),
+                predicate: "supports".to_owned(),
+                target: GraphNode::Document(0),
+                properties: Default::default(),
+                origin: RelationOrigin::Explicit,
+                location: crate::GraphLocation {
+                    path: PathBuf::from("docs/task.md"),
+                    span: docgraph_markdown::SourceSpan::from_offsets("", 0..0),
+                },
+            }],
             diagnostics: Vec::new(),
         };
         let config = RepositoryConfig {
@@ -264,14 +317,41 @@ mod tests {
         };
         let once = sync_generated_frontmatter(source, &graph, &config, 0).unwrap();
         let twice = sync_generated_frontmatter(&once, &graph, &config, 0).unwrap();
+        let expected = projection(&graph, &config, 0, "\n");
+        assert_eq!(render_generated_item(&projection_item(&expected)), expected);
         assert_eq!(once, twice);
         assert!(once.contains("owner = \"me\""));
-        assert!(once.contains(BEGIN));
+        assert!(once.contains("[docgraph_generated]\nschema_version = 1\n"));
+        assert!(!once.contains("# docgraph:generated"));
     }
 
     #[test]
-    fn refuses_ambiguous_markers() {
-        let content = format!("{BEGIN}\n{BEGIN}\n{END}\n");
-        assert_eq!(region(&content), Err(GeneratedBlockError::MalformedMarkers));
+    fn refuses_a_non_table_generated_value() {
+        let source = "docgraph_generated = true\n";
+        let document = source.parse::<DocumentMut>().unwrap();
+        assert_eq!(
+            validate_generated_item(&document[GENERATED]),
+            Err(GeneratedBlockError::MalformedTable)
+        );
+    }
+
+    #[test]
+    fn refuses_an_unsupported_generated_schema() {
+        let source = "[docgraph_generated]\nschema_version = 2\n";
+        let document = source.parse::<DocumentMut>().unwrap();
+        assert_eq!(
+            validate_generated_item(&document[GENERATED]),
+            Err(GeneratedBlockError::MalformedTable)
+        );
+    }
+
+    #[test]
+    fn requires_a_generated_schema_version() {
+        let source = "[docgraph_generated]\n";
+        let document = source.parse::<DocumentMut>().unwrap();
+        assert_eq!(
+            validate_generated_item(&document[GENERATED]),
+            Err(GeneratedBlockError::MalformedTable)
+        );
     }
 }

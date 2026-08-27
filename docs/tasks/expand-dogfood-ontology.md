@@ -14,9 +14,8 @@ target = "plan:complete-v0"
 type = "implements"
 target = "decision:cli-managed-metadata"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
-# docgraph:generated:end
+schema_version = 1
 +++
 <a id="s-PXSM6K5EZX"></a>
 # Expand the dogfood ontology

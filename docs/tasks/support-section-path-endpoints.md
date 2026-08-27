@@ -14,8 +14,8 @@ target = "plan:complete-v0"
 type = "implements"
 target = "reference:config-grammar#s-TW0V0THMJD"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
+schema_version = 1
 
 [[docgraph_generated.incoming]]
 source = "task:audit-v0-success"
@@ -24,7 +24,6 @@ predicate = "depends_on"
 [[docgraph_generated.inverses]]
 type = "required_by"
 target = "task:audit-v0-success"
-# docgraph:generated:end
 +++
 <a id="s-195M6YNE0Y"></a>
 # Support section endpoints in graph paths

@@ -6,9 +6,8 @@ state = "accepted"
 [properties]
 title = "Use Soufflé as the logic runtime"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
-# docgraph:generated:end
+schema_version = 1
 +++
 <a id="s-A0N5ZETTD3"></a>
 # Use Soufflé as the logic runtime

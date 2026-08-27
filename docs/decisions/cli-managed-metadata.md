@@ -6,8 +6,8 @@ state = "accepted"
 [properties]
 title = "Route managed metadata changes through the CLI"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
+schema_version = 1
 
 [[docgraph_generated.incoming]]
 source = "task:expand-dogfood-ontology"
@@ -16,7 +16,6 @@ predicate = "implements"
 [[docgraph_generated.inverses]]
 type = "implemented_by"
 target = "task:expand-dogfood-ontology"
-# docgraph:generated:end
 +++
 <a id="s-QKJWD5B1Z3"></a>
 # Route managed metadata changes through the CLI

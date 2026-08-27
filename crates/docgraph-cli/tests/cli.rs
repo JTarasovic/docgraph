@@ -107,7 +107,7 @@ fn adopt_previews_then_manages_an_existing_document() {
     );
     let adopted = fs::read_to_string(&document).unwrap();
     assert!(adopted.contains("id = \"florp:adopted\""));
-    assert!(adopted.contains("# docgraph:generated:v1:begin"));
+    assert!(adopted.contains("[docgraph_generated]\nschema_version = 1"));
     assert!(adopted.contains("# Adopt me\n\nKeep this prose.\n"));
     assert!(adopted.contains("<a id=\"s-"));
 
@@ -369,7 +369,7 @@ fn historical_research_mutation_updates_context_and_query_results() {
     let section: Value = serde_json::from_slice(&section.stdout).unwrap();
     assert_eq!(section["kind"], "section");
     assert_eq!(section["document"], "docs/finding.md");
-    assert_eq!(section["span"]["start_line"], 21);
+    assert_eq!(section["span"]["start_line"], 20);
     assert_eq!(section["span"]["line_count"], 3);
     assert!(
         section["content"]

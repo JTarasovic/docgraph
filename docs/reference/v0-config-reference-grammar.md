@@ -5,8 +5,8 @@ type = "reference"
 [properties]
 role = "grammar"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
+schema_version = 1
 
 [[docgraph_generated.incoming]]
 source = "plan:complete-v0"
@@ -31,7 +31,6 @@ target = "task:audit-v0-success"
 [[docgraph_generated.inverses]]
 type = "implemented_by"
 target = "task:support-section-path-endpoints"
-# docgraph:generated:end
 +++
 <a id="s-H8DH7THYWV"></a>
 # Draft v0 Repository Configuration and Reference Grammar
@@ -805,11 +804,11 @@ The tool owns format-preserving mutation of managed fields.
 
 Entity properties declared by the repository schema are also managed fields.
 
-Each entity document has one generated block:
+Each entity document has one reserved generated table:
 
 ```toml
-# docgraph:generated:v1:begin
 [docgraph_generated]
+schema_version = 1
 
 [[docgraph_generated.incoming]]
 source = "task:184"
@@ -821,16 +820,16 @@ target = "task:184"
 
 [[docgraph_generated.backlinks]]
 source = "adr:42#s-83JRT4K2P6"
-# docgraph:generated:end
 ```
 
 The fixed v0 projection contains direct incoming managed relations, configured direct
 inverses, and resolved informational Markdown backlinks. Entries have deterministic
-ordering and preserve origin. The block is ignored as graph input.
+ordering and preserve origin. The table is ignored as graph input and must not be
+authored directly.
 
-`docgraph frontmatter sync` inserts or replaces generated blocks and supports
-`--dry-run`. `frontmatter check` is read-only. Missing, malformed, or stale blocks
-fail validation. Content outside the block is preserved byte-for-byte.
+`docgraph frontmatter sync` inserts or replaces the reserved table structurally and
+supports `--dry-run`. `frontmatter check` is read-only. Missing, malformed, stale, or
+unsupported generated tables fail validation. Other frontmatter is preserved.
 
 <a id="s-C8KEVFRV5J"></a>
 ## 24. Config Validation

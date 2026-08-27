@@ -10,8 +10,8 @@ title = "Complete the v0 product contract"
 type = "implements"
 target = "reference:config-grammar#s-D6B9JYV06F"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
+schema_version = 1
 
 [[docgraph_generated.incoming]]
 source = "task:audit-v0-success"
@@ -44,7 +44,6 @@ target = "task:generate-model-appendix"
 [[docgraph_generated.inverses]]
 type = "contains"
 target = "task:support-section-path-endpoints"
-# docgraph:generated:end
 +++
 <a id="s-9Q7F6PPPE0"></a>
 # Complete the v0 product contract

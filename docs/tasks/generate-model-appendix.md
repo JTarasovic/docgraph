@@ -14,8 +14,8 @@ target = "plan:complete-v0"
 type = "implements"
 target = "reference:design#s-DD5NS2HR0R"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
+schema_version = 1
 
 [[docgraph_generated.incoming]]
 source = "task:audit-v0-success"
@@ -24,7 +24,6 @@ predicate = "depends_on"
 [[docgraph_generated.inverses]]
 type = "required_by"
 target = "task:audit-v0-success"
-# docgraph:generated:end
 +++
 <a id="s-395T841P69"></a>
 # Generate the repository-model appendix

@@ -15,9 +15,8 @@ type = "grommits"
 target = "github:issue:owner/repo:123"
 confidence = 0.75
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
-# docgraph:generated:end
+schema_version = 1
 +++
 <a id="s-9K8J7H6G5F"></a>
 # Florp one

@@ -6,9 +6,8 @@ type = "research"
 type = "supports"
 target = "finding:retry-memory#s-5D6F7G8H9J"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
-# docgraph:generated:end
+schema_version = 1
 +++
 <a id="s-1A2B3C4D5E"></a>
 # Retry history

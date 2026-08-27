@@ -10,9 +10,8 @@ title = "Use stable section identities"
 type = "supersedes"
 target = "adr:1"
 
-# docgraph:generated:v1:begin
 [docgraph_generated]
-# docgraph:generated:end
+schema_version = 1
 +++
 <a id="s-7K3M9Q2W"></a>
 # Use stable section identities
