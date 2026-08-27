@@ -168,6 +168,11 @@ state = "proposed"
 
 Path is physical location; entity ID is semantic identity.
 
+`docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>]` adds the managed identity,
+initial workflow state when applicable, and missing section IDs in one recoverable
+mutation. It preserves prose and non-reserved TOML frontmatter and rejects collisions
+with configured managed fields.
+
 ## 7. Section Identity
 
 Every `pulldown-cmark` heading event in an indexed document has an opaque stable ID,
@@ -633,6 +638,7 @@ docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 
 ```bash
 docgraph describe
+docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>] [--dry-run]
 docgraph get <entity-or-stable-section>
 docgraph search <query>
 docgraph transition <entity> <state>

@@ -65,6 +65,60 @@ fn logic_runtime_configured() -> bool {
 }
 
 #[test]
+fn adopt_previews_then_manages_an_existing_document() {
+    let fixture = Fixture::copy("synthetic");
+    let document = fixture.0.join("docs/adopt-me.md");
+    let original = "# Adopt me\n\nKeep this prose.\n";
+    fs::write(&document, original).unwrap();
+
+    let preview = fixture.run(&[
+        "adopt",
+        "docs/adopt-me.md",
+        "--id",
+        "florp:adopted",
+        "--type",
+        "florp",
+        "--property",
+        "title=Adopted florp",
+        "--dry-run",
+    ]);
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    assert_eq!(fs::read_to_string(&document).unwrap(), original);
+    assert!(String::from_utf8_lossy(&preview.stdout).contains("florp:adopted"));
+
+    let apply = fixture.run(&[
+        "adopt",
+        "docs/adopt-me.md",
+        "--id",
+        "florp:adopted",
+        "--type",
+        "florp",
+        "--property",
+        "title=Adopted florp",
+    ]);
+    assert!(
+        apply.status.success(),
+        "{}",
+        String::from_utf8_lossy(&apply.stderr)
+    );
+    let adopted = fs::read_to_string(&document).unwrap();
+    assert!(adopted.contains("id = \"florp:adopted\""));
+    assert!(adopted.contains("# docgraph:generated:v1:begin"));
+    assert!(adopted.contains("# Adopt me\n\nKeep this prose.\n"));
+    assert!(adopted.contains("<a id=\"s-"));
+
+    let get = fixture.run(&["--json", "get", "florp:adopted"]);
+    assert!(get.status.success());
+    let get: Value = serde_json::from_slice(&get.stdout).unwrap();
+    assert_eq!(get["id"], "florp:adopted");
+    assert_eq!(get["properties"]["title"], "Adopted florp");
+}
+
+#[test]
 fn structured_describe_validate_and_unavailable_query_are_stable() {
     let fixture = Fixture::copy("synthetic");
 

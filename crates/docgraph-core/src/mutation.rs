@@ -14,6 +14,12 @@ use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
 #[derive(Clone, Debug)]
 pub enum MutationRequest {
+    Adopt {
+        path: PathBuf,
+        id: String,
+        entity_type: String,
+        properties: BTreeMap<String, toml_edit::Value>,
+    },
     Transition {
         entity: String,
         target_state: String,
@@ -173,6 +179,60 @@ impl MutationService {
             .map(|file| (file.path.clone(), file.content.clone()))
             .collect();
         match request {
+            MutationRequest::Adopt {
+                path,
+                id,
+                entity_type,
+                properties,
+            } => {
+                let path = repository_relative_path(self.repository.root(), path)?;
+                let file = corpus
+                    .files
+                    .iter()
+                    .find(|file| file.path == path)
+                    .ok_or_else(|| {
+                        MutationError::InvalidRequest(format!(
+                            "document {:?} is outside the configured corpus or does not exist",
+                            path.display()
+                        ))
+                    })?;
+                if graph.entities.iter().any(|entity| entity.id == *id) {
+                    return Err(MutationError::InvalidRequest(format!(
+                        "entity {id:?} already exists"
+                    )));
+                }
+                let entity_config = self.config.entities.get(entity_type).ok_or_else(|| {
+                    MutationError::InvalidRequest(format!("unknown entity type {entity_type:?}"))
+                })?;
+                let workflow = entity_config
+                    .workflow
+                    .as_deref()
+                    .map(|name| {
+                        self.config.workflows.get(name).ok_or_else(|| {
+                            MutationError::InvalidRequest(format!(
+                                "entity type {entity_type:?} references unknown workflow {name:?}"
+                            ))
+                        })
+                    })
+                    .transpose()?;
+                let source = contents.get(&file.path).expect("corpus content exists");
+                let adopted = adopt_document(
+                    source,
+                    &self.config,
+                    id,
+                    entity_type,
+                    workflow.map(|workflow| workflow.initial.as_str()),
+                    properties,
+                )?;
+                let reserved: BTreeSet<StableSectionId> = graph
+                    .sections
+                    .iter()
+                    .filter_map(|section| section.id.clone())
+                    .collect();
+                let normalized = normalize_sections_with_reserved_random(&adopted, reserved)
+                    .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+                contents.insert(file.path.clone(), normalized.content);
+            }
             MutationRequest::Transition {
                 entity,
                 target_state,
@@ -499,6 +559,99 @@ fn edit_document(
     Ok(output)
 }
 
+fn repository_relative_path(root: &Path, requested: &Path) -> Result<PathBuf, MutationError> {
+    let relative = if requested.is_absolute() {
+        requested.strip_prefix(root).map_err(|_| {
+            MutationError::InvalidRequest(format!(
+                "document {:?} is outside the repository",
+                requested.display()
+            ))
+        })?
+    } else {
+        requested
+    };
+    let mut normalized = PathBuf::new();
+    for component in relative.components() {
+        match component {
+            std::path::Component::Normal(component) => normalized.push(component),
+            std::path::Component::CurDir => {}
+            _ => {
+                return Err(MutationError::InvalidRequest(format!(
+                    "document path {:?} must stay within the repository",
+                    requested.display()
+                )));
+            }
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        return Err(MutationError::InvalidRequest(
+            "document path must not be empty".to_owned(),
+        ));
+    }
+    Ok(normalized)
+}
+
+fn adopt_document(
+    source: &str,
+    config: &RepositoryConfig,
+    id: &str,
+    entity_type: &str,
+    initial_state: Option<&str>,
+    properties: &BTreeMap<String, toml_edit::Value>,
+) -> Result<String, MutationError> {
+    let parsed = ParsedDocument::parse(source)
+        .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+    let managed_fields = [
+        config.project.frontmatter.id.as_str(),
+        config.project.frontmatter.entity_type.as_str(),
+        config.project.frontmatter.state.as_str(),
+        config.project.frontmatter.relations.as_str(),
+        config.project.frontmatter.properties.as_str(),
+        "docgraph_generated",
+    ];
+    let mut document = parsed
+        .frontmatter
+        .as_ref()
+        .map_or_else(DocumentMut::new, |frontmatter| frontmatter.to_mut());
+    if let Some(field) = managed_fields
+        .iter()
+        .find(|field| document.get(field).is_some())
+    {
+        return Err(MutationError::InvalidRequest(format!(
+            "document already contains managed frontmatter field {field:?}"
+        )));
+    }
+    document[&config.project.frontmatter.id] = value(id);
+    document[&config.project.frontmatter.entity_type] = value(entity_type);
+    if let Some(state) = initial_state {
+        document[&config.project.frontmatter.state] = value(state);
+    }
+    if !properties.is_empty() {
+        let mut table = Table::new();
+        for (name, property) in properties {
+            table.insert(name, Item::Value(property.clone()));
+        }
+        document.insert(&config.project.frontmatter.properties, Item::Table(table));
+    }
+
+    if let Some(frontmatter) = &parsed.frontmatter {
+        let mut output = source.to_owned();
+        output.replace_range(
+            frontmatter.content_span.bytes.clone(),
+            &document.to_string(),
+        );
+        Ok(output)
+    } else {
+        let newline = if source.contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
+        let frontmatter = document.to_string().replace('\n', newline);
+        Ok(format!("+++{newline}{frontmatter}+++{newline}{source}"))
+    }
+}
+
 fn relations_mut<'a>(
     document: &'a mut DocumentMut,
     field: &str,
@@ -805,6 +958,72 @@ mod tests {
         assert!(after.contains("# docgraph:generated:v1:begin"));
         assert!(!service.state.paths.recovery_journal.exists());
         assert!(service.state.paths.index.exists());
+    }
+
+    #[test]
+    fn adopt_preserves_prose_and_initializes_managed_frontmatter() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("docs/three.md");
+        let original = "# Three\n\nExisting prose.\n";
+        fs::write(&path, original).unwrap();
+        let service = MutationService::open(&fixture.0).unwrap();
+        let request = MutationRequest::Adopt {
+            path: PathBuf::from("docs/three.md"),
+            id: "task:3".to_owned(),
+            entity_type: "task".to_owned(),
+            properties: BTreeMap::new(),
+        };
+
+        let preview = service.apply(&request, true).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        let adopted = preview
+            .changes
+            .iter()
+            .find(|change| change.path == Path::new("docs/three.md"))
+            .unwrap();
+        assert!(adopted.intended.contains("id = \"task:3\""));
+        assert!(adopted.intended.contains("state = \"open\""));
+
+        service.apply(&request, false).unwrap();
+        let adopted = fs::read_to_string(&path).unwrap();
+        assert!(adopted.contains("# Three\n\nExisting prose.\n"));
+        assert!(adopted.contains("<a id=\"s-"));
+        assert!(adopted.contains("type = \"task\""));
+        assert!(adopted.contains("# docgraph:generated:v1:begin"));
+    }
+
+    #[test]
+    fn adopt_preserves_unmanaged_frontmatter_and_rejects_managed_collisions() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("docs/three.md");
+        fs::write(&path, "+++\ntitle = \"Three\"\n+++\n# Three\n").unwrap();
+        let service = MutationService::open(&fixture.0).unwrap();
+        service
+            .apply(
+                &MutationRequest::Adopt {
+                    path: PathBuf::from("docs/three.md"),
+                    id: "task:3".to_owned(),
+                    entity_type: "task".to_owned(),
+                    properties: BTreeMap::new(),
+                },
+                false,
+            )
+            .unwrap();
+        let adopted = fs::read_to_string(&path).unwrap();
+        assert!(adopted.contains("title = \"Three\""));
+
+        let error = service
+            .apply(
+                &MutationRequest::Adopt {
+                    path: PathBuf::from("docs/three.md"),
+                    id: "task:4".to_owned(),
+                    entity_type: "task".to_owned(),
+                    properties: BTreeMap::new(),
+                },
+                false,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("managed frontmatter field"));
     }
 
     #[test]

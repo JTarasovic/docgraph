@@ -10,6 +10,7 @@ use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use toml_edit::Value;
 
@@ -28,6 +29,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Adopt an existing document into the managed graph.
+    Adopt {
+        path: PathBuf,
+        #[arg(long)]
+        id: String,
+        #[arg(long = "type")]
+        entity_type: String,
+        #[arg(long = "property")]
+        properties: Vec<String>,
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Describe the configured repository model.
     Describe {
         #[arg(value_enum)]
@@ -174,6 +187,32 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
+        Command::Adopt {
+            path,
+            id,
+            entity_type,
+            properties,
+            dry_run,
+        } => {
+            let service = MutationService::open(".").map_err(CliError::boxed)?;
+            let entity =
+                service.config().entities.get(&entity_type).ok_or_else(|| {
+                    CliError::message(format!("unknown entity type {entity_type:?}"))
+                })?;
+            let properties = parse_properties(&properties, &entity.property, "entity")?;
+            let plan = service
+                .apply(
+                    &MutationRequest::Adopt {
+                        path,
+                        id,
+                        entity_type,
+                        properties,
+                    },
+                    dry_run,
+                )
+                .map_err(CliError::boxed)?;
+            print_plan(&plan, dry_run, cli.json)
+        }
         Command::Describe { kind, name } => {
             let context = Context::load()?;
             describe(&context.config, kind, name.as_deref(), cli.json)
@@ -235,7 +274,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 .relations
                 .get(&relation)
                 .ok_or_else(|| CliError::message(format!("unknown relation {relation:?}")))?;
-            let properties = parse_properties(&properties, &relation_config.property)?;
+            let properties = parse_properties(&properties, &relation_config.property, "relation")?;
             let plan = service
                 .apply(
                     &MutationRequest::AddRelation {
@@ -775,12 +814,13 @@ fn frontmatter(action: FrontmatterAction, json_output: bool) -> Result<(), CliEr
 fn parse_properties(
     raw: &[String],
     schema: &BTreeMap<String, PropertyConfig>,
+    owner: &str,
 ) -> Result<BTreeMap<String, Value>, CliError> {
     raw.iter()
         .map(|assignment| {
             let (name, raw) = split_assignment(assignment)?;
             let property = schema.get(name).ok_or_else(|| {
-                CliError::message(format!("undeclared relation property {name:?}"))
+                CliError::message(format!("undeclared {owner} property {name:?}"))
             })?;
             Ok((name.to_owned(), parse_toml_value(raw, property)?))
         })

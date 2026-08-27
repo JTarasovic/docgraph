@@ -247,6 +247,10 @@ target = "adr:19"
 
 Repositories may map existing metadata conventions onto the normalized model, but the tool should provide a preferred convention.
 
+`docgraph adopt <path> --id <entity> --type <type>` adds the managed identity,
+preserves unrelated TOML frontmatter and prose, and assigns stable IDs to headings in
+the same recoverable mutation.
+
 Managed facts are changed through docgraph operations. Each entity document also has
 a fenced generated read model containing direct incoming relations, configured
 inverses, and informational backlinks. Generated frontmatter is deterministic,
