@@ -1,4 +1,4 @@
-use crate::{DerivedState, Repository, RepositoryConfig};
+use crate::{ArgumentMode, DerivedState, Repository, RepositoryConfig};
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, OpenOptions};
@@ -131,13 +131,103 @@ impl<'a> InstructionService<'a> {
     }
 
     fn generated_block(&self) -> String {
-        let entity_types = joined(self.config.entities.keys().map(String::as_str));
-        let relations = joined(self.config.relations.keys().map(String::as_str));
-        let workflows = joined(self.config.workflows.keys().map(String::as_str));
-        let queries = joined(self.config.queries.keys().map(String::as_str));
+        let appendix = self.repository_appendix();
         format!(
-            "{BEGIN}\nThis repository uses docgraph.\n\n- Edit prose directly. Use `docgraph` commands for managed frontmatter and semantic relationships.\n- Inspect the repository model with `docgraph describe`; do not reconstruct semantic impact with grep.\n- Preview substantial changes with `--dry-run`, then run `docgraph validate`.\n- Keep generated frontmatter current with `docgraph frontmatter sync`.\n- Portable guidance lives in `skills/docgraph/SKILL.md`.\n\nModel: entities [{entity_types}]; relations [{relations}]; workflows [{workflows}]; queries [{queries}].\n{END}"
+            "{BEGIN}\nThis repository uses docgraph.\n\n- Edit prose directly. Use `docgraph` commands for managed frontmatter and semantic relationships.\n- Inspect the repository model with `docgraph describe`; do not reconstruct semantic impact with grep.\n- Preview substantial changes with `--dry-run`, then run `docgraph validate`.\n- Keep generated frontmatter current with `docgraph frontmatter sync`.\n- Portable guidance lives in `skills/docgraph/SKILL.md`.\n\n{appendix}\n{END}"
         )
+    }
+
+    fn repository_appendix(&self) -> String {
+        let mut output = String::from("## Docgraph repository model\n\nEntity types:\n");
+        if self.config.entities.is_empty() {
+            output.push_str("- None configured.\n");
+        } else {
+            for (name, entity) in &self.config.entities {
+                let workflow = entity
+                    .workflow
+                    .as_ref()
+                    .map(|workflow| format!("; workflow `{workflow}`"))
+                    .unwrap_or_default();
+                output.push_str(&format!(
+                    "- `{name}`{workflow} — {}\n",
+                    inline_text(&entity.description)
+                ));
+            }
+        }
+
+        output.push_str("\nRelations:\n");
+        if self.config.relations.is_empty() {
+            output.push_str("- None configured.\n");
+        } else {
+            for (name, relation) in &self.config.relations {
+                let source = endpoint_types(&relation.source);
+                let target = endpoint_types(&relation.target);
+                let inverse = relation
+                    .inverse
+                    .as_ref()
+                    .map(|inverse| format!("; inverse `{inverse}`"))
+                    .unwrap_or_default();
+                let acyclic = if relation.acyclic { "; acyclic" } else { "" };
+                output.push_str(&format!(
+                    "- `{name}`: {source} → {target}{inverse}{acyclic} — {}\n",
+                    inline_text(&relation.description)
+                ));
+            }
+        }
+
+        output.push_str("\nWorkflows:\n");
+        if self.config.workflows.is_empty() {
+            output.push_str("- None configured.\n");
+        } else {
+            for (name, workflow) in &self.config.workflows {
+                let mut states = Vec::new();
+                if let Some(initial) = workflow.states.get(&workflow.initial) {
+                    states.push(workflow_state(&workflow.initial, &initial.transitions));
+                }
+                states.extend(
+                    workflow
+                        .states
+                        .iter()
+                        .filter(|(state, _)| *state != &workflow.initial)
+                        .map(|(state, config)| workflow_state(state, &config.transitions)),
+                );
+                output.push_str(&format!(
+                    "- `{name}`; initial `{}`: {}\n",
+                    workflow.initial,
+                    states.join("; ")
+                ));
+            }
+        }
+
+        output.push_str("\nNamed queries:\n");
+        if self.config.queries.is_empty() {
+            output.push_str("- None configured.\n");
+        } else {
+            for (name, query) in &self.config.queries {
+                let inputs = query
+                    .arguments
+                    .iter()
+                    .filter(|argument| argument.mode == ArgumentMode::Input)
+                    .map(|argument| format!(" --arg {}=<value>", argument.name))
+                    .collect::<String>();
+                output.push_str(&format!(
+                    "- `docgraph query {name}{inputs}` — {}\n",
+                    inline_text(&query.description)
+                ));
+            }
+        }
+
+        output.push_str("\nCommon operations:\n");
+        output.push_str(
+            "- Inspect: `docgraph describe`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.\n",
+        );
+        output.push_str(
+            "- Mutate: `docgraph transition`, `docgraph property`, `docgraph relate`, `docgraph unrelate`, and `docgraph normalize`.\n",
+        );
+        output.push_str(
+            "- Maintain: `docgraph validate`, `docgraph frontmatter`, and `docgraph instructions`.",
+        );
+        output
     }
 
     fn target_path(&self, target: &Path) -> Result<PathBuf, InstructionError> {
@@ -152,8 +242,41 @@ impl<'a> InstructionService<'a> {
     }
 }
 
-fn joined<'a>(values: impl Iterator<Item = &'a str>) -> String {
-    values.collect::<Vec<_>>().join(", ")
+fn endpoint_types(values: &[String]) -> String {
+    if values.is_empty() {
+        "any".to_owned()
+    } else {
+        joined_code(values.iter().map(String::as_str))
+    }
+}
+
+fn joined_code<'a>(values: impl Iterator<Item = &'a str>) -> String {
+    values
+        .map(|value| format!("`{value}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn workflow_state(state: &str, transitions: &[String]) -> String {
+    if transitions.is_empty() {
+        format!("`{state}` (terminal)")
+    } else {
+        format!(
+            "`{state}` → {}",
+            joined_code(transitions.iter().map(String::as_str))
+        )
+    }
+}
+
+fn inline_text(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 fn replace_block(source: &str, block: &str) -> Result<String, InstructionError> {
@@ -336,6 +459,21 @@ mod tests {
             "schema_version = 1\n[project]\nname = \"fixture\"\n[documents]\nroot = \"docs\"\n[agent_instructions]\ntargets = [\"AGENTS.md\"]\n",
         )
         .unwrap();
+        fs::write(
+            root.join(".docgraph/entities.toml"),
+            "[entity.task]\ndescription = \"Executable work.\"\nworkflow = \"task\"\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join(".docgraph/relations.toml"),
+            "[relation.blocks]\ndescription = \"Prevents completion.\"\nsource = [\"task\"]\ntarget = [\"task\"]\nacyclic = true\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join(".docgraph/workflows.toml"),
+            "[workflow.task]\ninitial = \"open\"\n[workflow.task.states.done]\ndescription = \"Complete.\"\n[workflow.task.states.open]\ndescription = \"Active.\"\ntransitions = [\"done\"]\n",
+        )
+        .unwrap();
         fs::write(root.join("AGENTS.md"), "# Keep me\n").unwrap();
         let repository = Repository::discover(&root).unwrap();
         let config = RepositoryConfig::load(&repository).unwrap();
@@ -351,6 +489,10 @@ mod tests {
         let synced = fs::read_to_string(root.join("AGENTS.md")).unwrap();
         assert!(synced.starts_with("# Keep me\n"));
         assert!(synced.contains(BEGIN));
+        assert!(synced.contains("`task`; workflow `task` — Executable work."));
+        assert!(synced.contains("`blocks`: `task` → `task`; acyclic"));
+        assert!(synced.contains("`task`; initial `open`: `open` → `done`; `done` (terminal)"));
+        assert!(synced.contains("Common operations:"));
         assert!(service.sync(false).unwrap().is_empty());
         assert_eq!(service.check().unwrap()[0].1, InstructionStatus::Current);
         let _ = fs::remove_dir_all(root);

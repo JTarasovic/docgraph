@@ -906,6 +906,9 @@ protocol and refuses to overwrite a concurrently changed target.
 The block tells agents that prose is freely editable, all managed frontmatter changes
 use docgraph operations, generated frontmatter must be synchronized, dependency
 reconstruction must not rely on grep, and relevant changes must be validated.
+Its deterministic final section is the concise repository-model appendix: configured
+entity types, relations, workflow transitions, callable named queries, and common
+generic operations. The appendix is part of the managed block, not a separate file.
 
 <a id="s-D6B9JYV06F"></a>
 ## 27. v0 Delivery Scope

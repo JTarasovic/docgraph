@@ -2,7 +2,7 @@
 
 id = "task:generate-model-appendix"
 type = "task"
-state = "ready"
+state = "done"
 
 [properties]
 title = "Generate the repository-model appendix"

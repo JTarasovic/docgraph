@@ -326,21 +326,30 @@ fn generated_agent_guidance_is_checked_and_safely_synchronized() {
     assert!(fixture.run(&["instructions", "check"]).status.success());
 
     let agents = fixture.0.join("AGENTS.md");
-    let stale = fs::read_to_string(&agents)
-        .unwrap()
-        .replace("Model: entities [florp]", "Model: entities [stale]");
+    let stale = fs::read_to_string(&agents).unwrap().replace(
+        "A deliberately unfamiliar entity type.",
+        "A stale entity description.",
+    );
     fs::write(&agents, &stale).unwrap();
     assert!(!fixture.run(&["instructions", "check"]).status.success());
 
     let preview = fixture.run(&["instructions", "sync", "--dry-run"]);
     assert!(preview.status.success());
-    assert!(String::from_utf8_lossy(&preview.stdout).contains("entities [florp]"));
+    assert!(
+        String::from_utf8_lossy(&preview.stdout)
+            .contains("`florp` — A deliberately unfamiliar entity type.")
+    );
     assert_eq!(fs::read_to_string(&agents).unwrap(), stale);
 
     assert!(fixture.run(&["instructions", "sync"]).status.success());
     let synchronized = fs::read_to_string(&agents).unwrap();
     assert!(synchronized.contains("This user-authored text must survive"));
-    assert!(synchronized.contains("Model: entities [florp]"));
+    assert!(synchronized.contains("## Docgraph repository model"));
+    assert!(synchronized.contains("`florp` — A deliberately unfamiliar entity type."));
+    assert!(synchronized.contains("`grommits`: `florp` → `external`"));
+    assert!(synchronized.contains("Workflows:\n- None configured."));
+    assert!(synchronized.contains("docgraph query grommit_targets --arg florp=<value>"));
+    assert!(synchronized.contains("- Maintain: `docgraph validate`"));
     assert!(fixture.run(&["instructions", "check"]).status.success());
     assert!(fixture.run(&["instructions", "sync"]).stdout.is_empty());
 }

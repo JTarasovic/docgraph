@@ -659,9 +659,12 @@ concurrent-change protection as other safe mutations.
 
 The portable skill explains how docgraph works.
 
-A tiny generated repository appendix describes available entity types, important workflows, and common named commands.
+A tiny repository appendix at the end of each generated instruction block describes
+configured entity types, relations, workflows, named queries, and common generic
+operations. `docgraph instructions sync` and `check` manage it with the rest of the
+block; it is not a separate generated file.
 
-Detailed ontology remains dynamically queryable through `describe_project`, `describe_type`, and `describe_relation`.
+Detailed ontology remains dynamically queryable through `docgraph describe`.
 
 <a id="s-Y4QFB1ZND8"></a>
 ### 11.4 Tested documentation
