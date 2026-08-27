@@ -549,14 +549,14 @@ The index contains:
 - vector index (post-v0)
 - index metadata
 
-The initial v0 slice builds the normalized graph and FTS in memory from canonical
-inputs for each command. A persistent SQLite derived index, reuse across commands,
-and query-time freshness enforcement remain follow-on implementation work.
+v0 persists normalized graph facts, exact source locations, metadata, and FTS in a
+per-worktree SQLite index. Operations fingerprint canonical inputs; a missing,
+stale, old-format, or corrupt disposable index is rebuilt, while search reuses a
+fresh FTS index across commands.
 
-Incremental persistent indexing should use Git blob IDs where available and BLAKE3 otherwise.
-
-Unchanged files should not be reparsed. Changed chunks are the only chunks
-re-embedded once post-v0 vector indexing exists.
+Cross-command parse caching and persistent materialization of inferred facts remain
+post-v0 performance work. Named queries evaluate configured logic against the current
+canonical graph. Changed-chunk re-embedding belongs to post-v0 vector indexing.
 
 The index records enough metadata to detect staleness after checkout, merge, parser changes, schema changes, or embedding changes.
 
@@ -907,17 +907,18 @@ operations and named-query invocation instead.
 
 This work is tracked by [Close the initial design gaps](../plans/close-initial-design-gaps.md).
 
-The narrow v0 success criterion is proven, but the broader initial design still has
-four cohesive implementation gaps:
+The narrow v0 success criterion was proven first. The four broader implementation
+gaps tracked by the follow-on plan are now closed:
 
-- replace the derived-index marker with a persistent per-worktree SQLite graph/FTS index
-- run recovery and freshness handling before reads as well as mutations
-- complete explicit stable-section relation mutation and preserve exact section endpoints in generated projections
-- expand the conformance fixtures and CI so generic workflows, inference, recovery, and the packaged logic runtime are exercised continuously
+- the per-worktree SQLite graph/FTS index replaces the marker and enforces freshness
+- reads recover interrupted mutations before loading the graph
+- stable-section relation mutation and projections retain exact endpoints
+- conformance covers generic workflows, recursion, cycles, recovery, worktrees, and the packaged runtime in CI
 
 Document creation/deletion/moves, automated section split/merge/delete, provider
-adapters, vectors, generated domain commands, semantic diff/merge, and expanded
-retrieval convenience commands remain explicitly deferred rather than hidden gaps.
+adapters, vectors, generated domain commands, semantic diff/merge, expanded
+retrieval convenience commands, cross-command parse caching, and persistent inferred
+fact materialization remain explicitly deferred rather than hidden gaps.
 
 <a id="s-HESSVR7FJT"></a>
 ## 16. Primary Acceptance Principle

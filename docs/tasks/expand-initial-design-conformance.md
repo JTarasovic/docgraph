@@ -2,7 +2,7 @@
 
 id = "task:expand-initial-design-conformance"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Expand initial-design conformance"

@@ -2,7 +2,7 @@
 
 id = "plan:close-initial-design-gaps"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Close the initial design gaps"

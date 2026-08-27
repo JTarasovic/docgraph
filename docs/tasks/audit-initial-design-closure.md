@@ -2,7 +2,7 @@
 
 id = "task:audit-initial-design-closure"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Audit initial-design closure"
@@ -43,3 +43,14 @@ target = "docs/tasks/audit-initial-design-closure.md"
 # Audit initial-design closure
 
 Exercise the accounted initial-design scope end to end, verify every remaining promise is either implemented or explicitly deferred, and record the evidence and any residual gap.
+
+<a id="s-T81YFS8M1D"></a>
+## Evidence
+
+- The four follow-on increments are implemented and covered by 75 passing local tests with no skips.
+- GitHub Actions run `33097159329` passed runtime-backed logic tests and dependency checks on Linux in 48 seconds.
+- Repository validation, generated frontmatter, and generated instructions are current.
+- Cross-command parse caching and persistent inferred-fact materialization are explicit performance deferrals; the other post-v0 directions remain listed in the reference boundary.
+- Dogfooding friction remains visible as issues rather than unaccounted v0 contract gaps.
+
+No unaccounted implementation gap remains inside the stated v0 boundary.

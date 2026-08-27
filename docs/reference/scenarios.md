@@ -530,12 +530,15 @@ split/merge, and semantic diff remain the post-v0 conformance roadmap.
 <a id="s-N6Z4YKP9M0"></a>
 ### 20.2 Current Coverage and Remaining Gaps
 
-The current fixtures prove parsing, normalization, typed configuration and
-properties, stable sections, explicit and informational relations, workflow
-transitions, validation, FTS, restricted recursive logic, typed named queries, safe
-transition/relation patches, generated frontmatter, and generated agent guidance.
+The fixtures and cross-cutting tests now prove parsing, normalization, typed
+configuration and properties, multiple workflows, stable sections, exact section
+relations, inverse projections, allowed and rejected cycles, persistent FTS,
+restricted recursive logic, derived readiness, typed named queries, safe mutation
+and recovery, worktree isolation, generated frontmatter, and generated agent
+guidance. Runtime-backed logic tests run on Windows locally and from a checksummed
+Linux package in CI.
 
-The next conformance increment must add:
+Covered follow-on cases include:
 
 - a richer synthetic ontology with multiple workflows, inverse and cyclic relations, section endpoints, and derived readiness/transitive queries
 - persistent-index refresh/staleness and read-before-recovery scenarios
@@ -544,8 +547,8 @@ The next conformance increment must add:
 - runtime-backed logic execution in CI rather than only parser/type tests
 
 File/entity creation, deletion, and moves; automated section split/merge/delete;
-provider shorthand; vectors; dynamic commands; semantic diff; and semantic merge
-remain post-v0 scenarios.
+provider shorthand; vectors; dynamic commands; semantic diff/merge; cross-command
+parse caching; and persistent inferred-fact materialization remain post-v0 scenarios.
 
 <a id="s-7BT3682S4Q"></a>
 ## 21. Primary Conformance Requirement

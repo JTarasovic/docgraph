@@ -1021,15 +1021,15 @@ The generic CLI and named-query invocation remain available in v0.
 <a id="s-P73QA8YDQB"></a>
 ### 27.1 Implementation Accounting
 
-The completed v0 success slice uses an in-memory graph and FTS rebuilt from canonical
-inputs. The broader initial contract still requires four follow-on increments:
+The initial success slice was followed by four completed contract increments:
 
 - a real per-worktree SQLite derived index with refresh/rebuild behavior
 - recovery and derived-state freshness checks before read commands
 - CLI mutation of relations whose explicit source is a stable section, plus generated projections that retain the exact section endpoint
 - expanded conformance fixtures and CI coverage, including runtime-backed logic tests on the CI platform
 
-The following remain deferred: vectors and embedding providers, repository-host
+The following remain deferred: cross-command parse caching, persistent inferred-fact
+materialization, vectors and embedding providers, repository-host
 adapters, generated nested commands, entity/document creation/deletion/moves,
 automated section split/merge/delete, semantic diff/merge, and dedicated
 `incoming`/`outgoing`/`traverse`/expanded-`context` commands. Existing `get`,
