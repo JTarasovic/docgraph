@@ -10,6 +10,11 @@ role = "design"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "plan:address-post-v0-reference-work"
+predicate = "implements"
+target = "reference:design#s-DRW3RR84VS"
+
+[[docgraph_generated.incoming]]
 source = "plan:close-initial-design-gaps"
 predicate = "implements"
 target = "reference:design#s-DRW3RR84VS"
@@ -58,6 +63,11 @@ target = "plan:project-aware-commands"
 source = "reference:design#s-DD5NS2HR0R"
 type = "implemented_by"
 target = "task:generate-model-appendix"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-DRW3RR84VS"
+type = "implemented_by"
+target = "plan:address-post-v0-reference-work"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-DRW3RR84VS"

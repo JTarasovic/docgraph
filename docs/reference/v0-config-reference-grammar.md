@@ -25,6 +25,11 @@ predicate = "affects"
 target = "reference:config-grammar#s-MTVEFXHGWD"
 
 [[docgraph_generated.incoming]]
+source = "plan:address-post-v0-reference-work"
+predicate = "implements"
+target = "reference:config-grammar#s-P73QA8YDQB"
+
+[[docgraph_generated.incoming]]
 source = "plan:close-initial-design-gaps"
 predicate = "implements"
 target = "reference:config-grammar#s-P73QA8YDQB"
@@ -93,6 +98,11 @@ target = "task:complete-section-relation-roundtrip"
 source = "reference:config-grammar#s-MTVEFXHGWD"
 type = "affected_by"
 target = "issue:workflow-adoption-initial-state"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-P73QA8YDQB"
+type = "implemented_by"
+target = "plan:address-post-v0-reference-work"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-P73QA8YDQB"
