@@ -10,6 +10,16 @@ title = "Use Soufflé as the logic runtime"
 [docgraph_generated]
 schema_version = 1
 
+[[docgraph_generated.incoming]]
+source = "issue:slow-logic-query-startup"
+predicate = "affects"
+target = "decision:souffle-runtime"
+
+[[docgraph_generated.inverses]]
+source = "decision:souffle-runtime"
+type = "affected_by"
+target = "issue:slow-logic-query-startup"
+
 +++
 <a id="s-A0N5ZETTD3"></a>
 # Use Soufflé as the logic runtime

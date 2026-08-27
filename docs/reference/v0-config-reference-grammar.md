@@ -15,6 +15,11 @@ predicate = "affects"
 target = "reference:config-grammar#s-V5R4RB2AP1"
 
 [[docgraph_generated.incoming]]
+source = "issue:slow-logic-query-startup"
+predicate = "affects"
+target = "reference:config-grammar#s-QVTHMJGF4H"
+
+[[docgraph_generated.incoming]]
 source = "issue:workflow-adoption-initial-state"
 predicate = "affects"
 target = "reference:config-grammar#s-MTVEFXHGWD"
@@ -103,6 +108,11 @@ target = "task:audit-initial-design-closure"
 source = "reference:config-grammar#s-Q9K2W13EGT"
 type = "implemented_by"
 target = "task:complete-section-relation-roundtrip"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-QVTHMJGF4H"
+type = "affected_by"
+target = "issue:slow-logic-query-startup"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-TW0V0THMJD"

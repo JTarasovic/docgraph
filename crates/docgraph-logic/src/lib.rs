@@ -407,8 +407,11 @@ impl<'a> QueryEngine<'a> {
     }
 
     fn write_sqlite_input(&self, path: &Path) -> Result<(), QueryError> {
-        let connection =
+        let mut connection =
             Connection::open(path).map_err(|error| QueryError::Execution(error.to_string()))?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| QueryError::Execution(error.to_string()))?;
         let facts = self.builtin_facts();
         for builtin in BUILTINS {
             let columns = builtin
@@ -418,7 +421,7 @@ impl<'a> QueryEngine<'a> {
                 .map(|(index, kind)| format!("c{index} {} NOT NULL", sqlite_type(*kind)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            connection
+            transaction
                 .execute_batch(&format!(
                     "CREATE TABLE _{} ({columns}); CREATE VIEW {} AS SELECT * FROM _{};",
                     builtin.name, builtin.name, builtin.name
@@ -430,12 +433,14 @@ impl<'a> QueryEngine<'a> {
                 .join(", ");
             let sql = format!("INSERT INTO _{} VALUES ({placeholders})", builtin.name);
             for row in &facts[builtin.name] {
-                connection
+                transaction
                     .execute(&sql, params_from_iter(row))
                     .map_err(|error| QueryError::Execution(error.to_string()))?;
             }
         }
-        Ok(())
+        transaction
+            .commit()
+            .map_err(|error| QueryError::Execution(error.to_string()))
     }
 
     fn decode_output(
