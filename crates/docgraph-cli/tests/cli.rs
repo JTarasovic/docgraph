@@ -74,6 +74,18 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
     assert_eq!(describe["project"], "Synthetic ontology conformance");
     assert_eq!(describe["entity_types"][0], "florp");
 
+    let get = fixture.run(&["--json", "get", "florp:1"]);
+    assert!(get.status.success());
+    let get: Value = serde_json::from_slice(&get.stdout).unwrap();
+    assert_eq!(get["properties"]["title"], "Florp one");
+    assert_eq!(get["properties"]["count"], 7);
+    assert_eq!(get["properties"]["score"], 2.5);
+    assert_eq!(get["properties"]["enabled"], true);
+    assert_eq!(
+        get["properties"]["labels"],
+        serde_json::json!(["odd", "novel"])
+    );
+
     let validate = fixture.run(&["validate"]);
     assert!(
         validate.status.success(),
@@ -213,4 +225,118 @@ fn generated_agent_guidance_is_checked_and_safely_synchronized() {
     assert!(synchronized.contains("Model: entities [florp]"));
     assert!(fixture.run(&["instructions", "check"]).status.success());
     assert!(fixture.run(&["instructions", "sync"]).stdout.is_empty());
+}
+
+#[test]
+fn historical_research_mutation_updates_context_and_query_results() {
+    if std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_none() {
+        return;
+    }
+    let fixture = Fixture::copy("historical-research");
+    let target = "finding:retry-memory#s-5D6F7G8H9J";
+
+    let query = fixture.run(&[
+        "--json",
+        "query",
+        "supported_findings",
+        "--arg",
+        "research=research:retry-history",
+    ]);
+    assert!(query.status.success());
+    let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert_eq!(query["rows"][0]["finding"], target);
+
+    let preview = fixture.run(&[
+        "unrelate",
+        "research:retry-history",
+        "supports",
+        target,
+        "--dry-run",
+    ]);
+    assert!(preview.status.success());
+    assert!(String::from_utf8_lossy(&preview.stdout).contains("finding.md"));
+
+    assert!(
+        fixture
+            .run(&["unrelate", "research:retry-history", "supports", target,])
+            .status
+            .success()
+    );
+    assert!(fixture.run(&["frontmatter", "check"]).status.success());
+    let query = fixture.run(&[
+        "--json",
+        "query",
+        "supported_findings",
+        "--arg",
+        "research=research:retry-history",
+    ]);
+    let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert_eq!(query["rows"], serde_json::json!([]));
+
+    let relate = fixture.run(&["relate", "research:retry-history", "supports", target]);
+    assert!(
+        relate.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&relate.stdout),
+        String::from_utf8_lossy(&relate.stderr)
+    );
+    assert!(fixture.run(&["frontmatter", "check"]).status.success());
+    assert!(fixture.run(&["validate"]).status.success());
+    let query = fixture.run(&[
+        "--json",
+        "query",
+        "supported_findings",
+        "--arg",
+        "research=research:retry-history",
+    ]);
+    let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert_eq!(query["rows"][0]["finding"], target);
+}
+
+#[test]
+fn v0_fixtures_exercise_exact_graph_search_and_named_query_retrieval() {
+    if std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_none() {
+        return;
+    }
+    for (fixture_name, entity, search_term, query_name, query_argument) in [
+        ("adr", "adr:2", "stable anchors", "accepted_adrs", None),
+        (
+            "historical-research",
+            "research:retry-history",
+            "2019 outage",
+            "supported_findings",
+            Some("research=research:retry-history"),
+        ),
+        (
+            "synthetic",
+            "florp:1",
+            "novel ontology",
+            "grommit_targets",
+            Some("florp=florp:1"),
+        ),
+    ] {
+        let fixture = Fixture::copy(fixture_name);
+        assert!(fixture.run(&["--json", "get", entity]).status.success());
+        let search = fixture.run(&["--json", "search", search_term]);
+        assert!(search.status.success());
+        let search: Value = serde_json::from_slice(&search.stdout).unwrap();
+        assert!(!search["rows"].as_array().unwrap().is_empty());
+        let neighbors = fixture.run(&["--json", "neighbors", entity, "--all"]);
+        assert!(neighbors.status.success());
+        let neighbors: Value = serde_json::from_slice(&neighbors.stdout).unwrap();
+        assert!(!neighbors["rows"].as_array().unwrap().is_empty());
+
+        let mut arguments = vec!["--json", "query", query_name];
+        if let Some(argument) = query_argument {
+            arguments.extend(["--arg", argument]);
+        }
+        let query = fixture.run(&arguments);
+        assert!(
+            query.status.success(),
+            "{fixture_name}: {}",
+            String::from_utf8_lossy(&query.stderr)
+        );
+        let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+        assert!(!query["rows"].as_array().unwrap().is_empty());
+    }
 }

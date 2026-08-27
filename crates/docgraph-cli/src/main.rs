@@ -400,7 +400,7 @@ fn get(context: &Context, id: &str, json_output: bool) -> Result<(), CliError> {
     let properties: BTreeMap<_, _> = entity
         .properties
         .iter()
-        .map(|(key, value)| (key, value.to_string()))
+        .map(|(key, value)| (key, toml_value_json(value)))
         .collect();
     let value = json!({
         "id": entity.id,
@@ -722,6 +722,24 @@ fn property_schema_json(schema: &BTreeMap<String, PropertyConfig>) -> JsonValue 
             })
             .collect(),
     )
+}
+
+fn toml_value_json(value: &Value) -> JsonValue {
+    if let Some(value) = value.as_str() {
+        JsonValue::String(value.to_owned())
+    } else if let Some(value) = value.as_integer() {
+        JsonValue::from(value)
+    } else if let Some(value) = value.as_float() {
+        JsonValue::from(value)
+    } else if let Some(value) = value.as_bool() {
+        JsonValue::from(value)
+    } else if let Some(value) = value.as_datetime() {
+        JsonValue::String(value.to_string())
+    } else if let Some(value) = value.as_array() {
+        JsonValue::Array(value.iter().map(toml_value_json).collect())
+    } else {
+        JsonValue::Null
+    }
 }
 
 fn print_plan(plan: &MutationPlan, dry_run: bool, json_output: bool) -> Result<(), CliError> {

@@ -216,9 +216,14 @@ impl MutationService {
                 let path = &graph.documents[node.document].path;
                 let input = contents.get(path).expect("corpus content exists");
                 let edited = edit_document(input, |document| {
+                    let generated_position = document
+                        .get("docgraph_generated")
+                        .and_then(Item::as_table)
+                        .and_then(Table::position);
                     let relations =
                         relations_mut(document, &self.config.project.frontmatter.relations)?;
                     let mut relation = Table::new();
+                    relation.set_position(generated_position.map(|position| position - 1));
                     relation.insert("type", value(predicate.clone()));
                     relation.insert("target", value(target.clone()));
                     for (key, property) in properties {
@@ -284,16 +289,32 @@ impl MutationService {
             MutationRequest::SyncFrontmatter => {}
         }
 
-        let preliminary = candidate_corpus(corpus, &contents)?;
-        let preliminary_graph = GraphIndex::build(&preliminary, &self.config);
-        for (document, node) in preliminary_graph.documents.iter().enumerate() {
-            if node.entity.is_none() {
-                continue;
+        let mut projections_converged = false;
+        for _ in 0..3 {
+            let snapshot = candidate_corpus(corpus, &contents)?;
+            let snapshot_graph = GraphIndex::build(&snapshot, &self.config);
+            let mut updates = Vec::new();
+            for (document, node) in snapshot_graph.documents.iter().enumerate() {
+                if node.entity.is_none() {
+                    continue;
+                }
+                let source = contents.get(&node.path).expect("corpus content exists");
+                let synced =
+                    sync_generated_frontmatter(source, &snapshot_graph, &self.config, document)?;
+                if synced != *source {
+                    updates.push((node.path.clone(), synced));
+                }
             }
-            let source = contents.get(&node.path).expect("corpus content exists");
-            let synced =
-                sync_generated_frontmatter(source, &preliminary_graph, &self.config, document)?;
-            contents.insert(node.path.clone(), synced);
+            if updates.is_empty() {
+                projections_converged = true;
+                break;
+            }
+            contents.extend(updates);
+        }
+        if !projections_converged {
+            return Err(MutationError::InvalidRequest(
+                "generated frontmatter did not converge".to_owned(),
+            ));
         }
 
         let candidate = candidate_corpus(corpus, &contents)?;
@@ -308,7 +329,14 @@ impl MutationService {
             return Err(MutationError::ProspectiveValidation(
                 report
                     .errors()
-                    .map(|diagnostic| format!("{}: {}", diagnostic.code, diagnostic.message))
+                    .map(|diagnostic| {
+                        format!(
+                            "{}: {}: {}",
+                            diagnostic.location.path.display(),
+                            diagnostic.code,
+                            diagnostic.message
+                        )
+                    })
                     .collect(),
             ));
         }
@@ -740,6 +768,30 @@ mod tests {
         assert!(target.contains("predicate = \"blocks\""));
         assert!(target.contains("type = \"blocked_by\""));
         assert!(target.contains("target = \"task:1\""));
+
+        service
+            .apply(
+                &MutationRequest::RemoveRelation {
+                    source: "task:1".to_owned(),
+                    predicate: "blocks".to_owned(),
+                    target: "task:2".to_owned(),
+                },
+                false,
+            )
+            .unwrap();
+        service
+            .apply(
+                &MutationRequest::AddRelation {
+                    source: "task:1".to_owned(),
+                    predicate: "blocks".to_owned(),
+                    target: "task:2".to_owned(),
+                    properties: BTreeMap::new(),
+                },
+                false,
+            )
+            .unwrap();
+        let target = fs::read_to_string(fixture.0.join("docs/two.md")).unwrap();
+        assert!(target.contains("predicate = \"blocks\""));
     }
 
     #[test]
