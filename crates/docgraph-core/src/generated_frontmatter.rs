@@ -323,6 +323,7 @@ mod tests {
             relations: Default::default(),
             workflows: Default::default(),
             queries: Default::default(),
+            commands: Default::default(),
             logic: None,
         };
         let once = sync_generated_frontmatter(source, &graph, &config, 0).unwrap();

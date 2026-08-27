@@ -62,3 +62,11 @@ predicate = "ready_florp"
 arguments = [
   { name = "florp", mode = "output", type = "entity" },
 ]
+
+[query.ready_florps_command]
+description = "Returns ready florps, optionally filtered by label."
+predicate = "ready_florp_command"
+arguments = [
+  { name = "florp", mode = "output", type = "entity" },
+  { name = "label", mode = "input", type = "string", default = "" },
+]

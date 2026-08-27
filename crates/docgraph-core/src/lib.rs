@@ -13,11 +13,11 @@ mod state;
 mod validation;
 
 pub use config::{
-    AgentInstructionsConfig, ArgumentMode, ConfigDiagnostic, ConfigLoadError, DiagnosticSeverity,
-    DocumentsConfig, EntityTypeConfig, FrontmatterConfig, NamedQueryConfig, ProjectConfig,
-    PropertyConfig, PropertyType, QueryArgumentConfig, QueryValueType, RelationTypeConfig,
-    RepositoryConfig, ScalarType, ScalarValue, SourceSpan, StateConfig, ValidationConfig,
-    WorkflowConfig,
+    AgentInstructionsConfig, ArgumentMode, CommandConfig, CommandOperation, ConfigDiagnostic,
+    ConfigLoadError, DiagnosticSeverity, DocumentsConfig, EntityTypeConfig, FrontmatterConfig,
+    NamedQueryConfig, ProjectConfig, PropertyConfig, PropertyType, QueryArgumentConfig,
+    QueryValueType, RelationTypeConfig, RepositoryConfig, ScalarType, ScalarValue, SourceSpan,
+    StateConfig, ValidationConfig, WorkflowConfig,
 };
 pub use corpus::{CanonicalCorpus, CorpusError, CorpusFile, RepositoryFingerprint};
 pub use derived_index::DerivedSearchHit;

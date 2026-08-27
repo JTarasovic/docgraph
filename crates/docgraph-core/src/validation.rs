@@ -1,12 +1,32 @@
 use crate::{
-    DiagnosticSeverity, GraphIndex, GraphLocation, GraphNode, PropertyConfig, PropertyType,
-    RelationOrigin, Repository, RepositoryConfig, ScalarType, ScalarValue,
+    ArgumentMode, CommandOperation, DiagnosticSeverity, GraphIndex, GraphLocation, GraphNode,
+    PropertyConfig, PropertyType, RelationOrigin, Repository, RepositoryConfig, ScalarType,
+    ScalarValue,
 };
 use docgraph_markdown::SourceSpan;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use toml_edit::Value;
+
+const BUILT_IN_COMMANDS: &[&str] = &[
+    "adopt",
+    "describe",
+    "get",
+    "search",
+    "transition",
+    "property",
+    "relate",
+    "unrelate",
+    "neighbors",
+    "path",
+    "normalize",
+    "validate",
+    "query",
+    "instructions",
+    "frontmatter",
+    "help",
+];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValidationLocation {
@@ -239,6 +259,17 @@ impl<'a> Validator<'a> {
                         &argument.name,
                     );
                 }
+                if argument.default.is_some() && argument.mode != ArgumentMode::Input {
+                    self.config_error(
+                        "invalid-query-default",
+                        format!(
+                            "query {name:?} output argument {:?} cannot have a default",
+                            argument.name
+                        ),
+                        "project.toml",
+                        &argument.name,
+                    );
+                }
             }
             if query.arguments.is_empty() {
                 self.config_error(
@@ -247,6 +278,143 @@ impl<'a> Validator<'a> {
                     "project.toml",
                     name,
                 );
+            }
+        }
+
+        for (name, command) in &self.config.commands {
+            if name.split('.').any(|segment| {
+                segment.is_empty()
+                    || !segment.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                    })
+            }) {
+                self.config_error(
+                    "invalid-command-name",
+                    format!("command {name:?} contains an empty path segment"),
+                    "commands.toml",
+                    name,
+                );
+            }
+            if name
+                .split('.')
+                .next()
+                .is_some_and(|root| BUILT_IN_COMMANDS.contains(&root))
+            {
+                self.config_error(
+                    "reserved-command-name",
+                    format!("command {name:?} conflicts with a built-in command"),
+                    "commands.toml",
+                    name,
+                );
+            }
+            match &command.operation {
+                CommandOperation::Query { query, entity_type } => {
+                    let configured_query = self.config.queries.get(query);
+                    if configured_query.is_none() {
+                        self.config_error(
+                            "unknown-command-query",
+                            format!("command {name:?} references unknown query {query:?}"),
+                            "commands.toml",
+                            query,
+                        );
+                    }
+                    if let Some(entity_type) = entity_type
+                        && !self.config.entities.contains_key(entity_type)
+                    {
+                        self.config_error(
+                            "unknown-command-entity-type",
+                            format!(
+                                "command {name:?} references unknown entity type {entity_type:?}"
+                            ),
+                            "commands.toml",
+                            entity_type,
+                        );
+                    }
+                    if entity_type.is_some()
+                        && !configured_query.is_some_and(|query| {
+                            query.arguments.first().is_some_and(|argument| {
+                                argument.mode == ArgumentMode::Input
+                                    && argument.value_type == crate::QueryValueType::Entity
+                            })
+                        })
+                    {
+                        self.config_error(
+                            "invalid-command-entity-input",
+                            format!("command {name:?} with entity_type requires an entity-valued first query input"),
+                            "commands.toml",
+                            query,
+                        );
+                    }
+                }
+                CommandOperation::Transition {
+                    entity_type,
+                    target_state,
+                } => {
+                    let workflow = self
+                        .config
+                        .entities
+                        .get(entity_type)
+                        .and_then(|entity| entity.workflow.as_ref())
+                        .and_then(|workflow| self.config.workflows.get(workflow));
+                    if workflow.is_none() {
+                        self.config_error(
+                            "invalid-command-workflow",
+                            format!("command {name:?} entity type {entity_type:?} has no configured workflow"),
+                            "commands.toml",
+                            entity_type,
+                        );
+                    } else if !workflow
+                        .is_some_and(|workflow| workflow.states.contains_key(target_state))
+                    {
+                        self.config_error(
+                            "unknown-command-target-state",
+                            format!(
+                                "command {name:?} references unknown target state {target_state:?}"
+                            ),
+                            "commands.toml",
+                            target_state,
+                        );
+                    }
+                }
+                CommandOperation::AddRelation {
+                    entity_type,
+                    relation,
+                } => {
+                    if !self.config.entities.contains_key(entity_type) {
+                        self.config_error(
+                            "unknown-command-entity-type",
+                            format!(
+                                "command {name:?} references unknown entity type {entity_type:?}"
+                            ),
+                            "commands.toml",
+                            entity_type,
+                        );
+                    }
+                    if !self.config.relations.contains_key(relation) {
+                        self.config_error(
+                            "unknown-command-relation",
+                            format!("command {name:?} references unknown relation {relation:?}"),
+                            "commands.toml",
+                            relation,
+                        );
+                    }
+                    if self
+                        .config
+                        .relations
+                        .get(relation)
+                        .is_some_and(|configured| {
+                            !configured.source.is_empty()
+                                && !configured.source.iter().any(|source| source == entity_type)
+                        })
+                    {
+                        self.config_error(
+                            "invalid-command-relation-source",
+                            format!("command {name:?} entity type {entity_type:?} cannot source relation {relation:?}"),
+                            "commands.toml",
+                            relation,
+                        );
+                    }
+                }
             }
         }
     }

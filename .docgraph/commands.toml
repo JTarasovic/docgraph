@@ -1,0 +1,4 @@
+[command.next]
+description = "Show project-level candidates for what to do next."
+operation = "query"
+query = "next_work"

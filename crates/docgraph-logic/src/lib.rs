@@ -1675,6 +1675,7 @@ mod tests {
                 name: "value".to_owned(),
                 mode: ArgumentMode::Output,
                 value_type,
+                default: None,
             }],
         }
     }

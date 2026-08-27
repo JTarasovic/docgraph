@@ -1,0 +1,22 @@
+[command."florp.ready"]
+description = "List florps with no incoming precedence edge."
+operation = "query"
+query = "ready_florps_command"
+
+[command."florp.targets"]
+description = "List targets grommitted by a florp."
+operation = "query"
+query = "grommit_targets"
+entity_type = "florp"
+
+[command."florp.activate"]
+description = "Activate a queued florp."
+operation = "transition"
+entity_type = "florp"
+target_state = "active"
+
+[command."florp.grommit"]
+description = "Add a grommits relation."
+operation = "add_relation"
+entity_type = "florp"
+relation = "grommits"

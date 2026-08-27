@@ -280,6 +280,67 @@ fn configured_logic_runtime_executes_a_typed_query() {
 }
 
 #[test]
+fn repository_commands_appear_in_help_and_dispatch_named_queries() {
+    let fixture = Fixture::copy("synthetic");
+    let help = fixture.run(&["--help"]);
+    assert!(help.status.success());
+    let help = String::from_utf8_lossy(&help.stdout);
+    assert!(help.contains("Repository commands:"));
+    assert!(help.contains("florp ready"));
+
+    let command_help = fixture.run(&["florp", "ready", "--help"]);
+    assert!(command_help.status.success());
+    assert!(
+        String::from_utf8_lossy(&command_help.stdout)
+            .contains("List florps with no incoming precedence edge.")
+    );
+
+    let group_help = fixture.run(&["florp", "--help"]);
+    assert!(group_help.status.success());
+    let group_help = String::from_utf8_lossy(&group_help.stdout);
+    assert!(group_help.contains("ready"));
+    assert!(group_help.contains("targets"));
+
+    if !logic_runtime_configured() {
+        return;
+    }
+    let output = fixture.run(&["--json", "florp", "ready"]);
+    assert!(
+        output.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["query"], "ready_florps_command");
+    assert_eq!(output["rows"][0]["florp"], "florp:1");
+
+    let filtered = fixture.run(&["--json", "florp", "ready", "--label", "odd"]);
+    assert!(filtered.status.success());
+    let filtered: Value = serde_json::from_slice(&filtered.stdout).unwrap();
+    assert_eq!(filtered["rows"].as_array().unwrap().len(), 1);
+
+    let targets = fixture.run(&["--json", "florp", "targets", "florp:1"]);
+    assert!(targets.status.success());
+    let targets: Value = serde_json::from_slice(&targets.stdout).unwrap();
+    assert_eq!(targets["rows"][0]["target"], "github:issue:owner/repo:123");
+
+    let transition = fixture.run(&["florp", "activate", "florp:2", "--dry-run"]);
+    assert!(transition.status.success());
+    assert!(String::from_utf8_lossy(&transition.stdout).contains("state = \"active\""));
+
+    let relation = fixture.run(&[
+        "florp",
+        "grommit",
+        "florp:1",
+        "https://example.com/new",
+        "--dry-run",
+    ]);
+    assert!(relation.status.success());
+    assert!(String::from_utf8_lossy(&relation.stdout).contains("https://example.com/new"));
+}
+
+#[test]
 fn transition_dry_run_then_apply_updates_the_fixture() {
     if !logic_runtime_configured() {
         return;

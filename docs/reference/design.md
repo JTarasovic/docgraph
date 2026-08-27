@@ -15,6 +15,11 @@ predicate = "implements"
 target = "reference:design#s-DRW3RR84VS"
 
 [[docgraph_generated.incoming]]
+source = "plan:project-aware-commands"
+predicate = "implements"
+target = "reference:design#s-DAR1R6WHJE"
+
+[[docgraph_generated.incoming]]
 source = "task:audit-initial-design-closure"
 predicate = "implements"
 target = "reference:design#s-DRW3RR84VS"
@@ -43,6 +48,11 @@ target = "task:implement-derived-index-lifecycle"
 source = "reference:design#s-B7542FYPRY"
 type = "implemented_by"
 target = "task:complete-safe-read-mutation-boundary"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-DAR1R6WHJE"
+type = "implemented_by"
+target = "plan:project-aware-commands"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-DD5NS2HR0R"
@@ -594,8 +604,8 @@ large model into the binary.
 <a id="s-DAR1R6WHJE"></a>
 ## 10. Repo-Aware CLI
 
-The engine exposes generic primitives through the v0 CLI. Dynamically generated,
-repository-specific commands are post-v0 direction.
+The engine exposes generic primitives through the v0 CLI. Repositories may layer
+project-specific commands over those primitives.
 
 Generic operations remain available:
 
@@ -610,15 +620,15 @@ maps directly to its repository-logic predicate. Docgraph validates the predicat
 arity, binds inputs by name, type-checks results, and exposes declared output columns
 through a stable structured JSON envelope.
 
-Post-v0, repositories may define higher-level commands:
+Repositories may define higher-level commands:
 
 ```toml
-[commands."adr.accept"]
+[command."adr.accept"]
 operation = "transition"
 entity_type = "adr"
 target_state = "accepted"
 
-[commands."task.blockers"]
+[command."task.blockers"]
 entity_type = "task"
 query = "task_blockers"
 ```
@@ -632,6 +642,12 @@ docgraph task ready
 ```
 
 Project-aware `--help` should expose repository-defined commands and descriptions.
+Dot-separated command names form nested command paths. Query commands expose named
+query inputs as long options; an input with a configured default is optional. When
+`entity_type` is set, the first query input is instead the positional source entity.
+
+A top-level query command can answer project-wide questions without inventing an
+entity namespace, for example `docgraph next [--plan <plan>]`.
 
 Humans and agents should normally use named operations rather than write Datalog directly.
 

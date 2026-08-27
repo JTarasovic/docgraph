@@ -1,9 +1,10 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use docgraph_core::{
-    CanonicalCorpus, DerivedState, DiagnosticSeverity, GeneratedBlockStatus, GraphIndex, GraphNode,
-    GraphTraversal, InstructionService, InstructionStatus, MutationPlan, MutationRequest,
-    MutationService, PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository,
-    RepositoryConfig, Validator, check_generated_frontmatter,
+    CanonicalCorpus, CommandConfig, CommandOperation, DerivedState, DiagnosticSeverity,
+    GeneratedBlockStatus, GraphIndex, GraphNode, GraphTraversal, InstructionService,
+    InstructionStatus, MutationPlan, MutationRequest, MutationService, PropertyConfig,
+    PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig, Validator,
+    check_generated_frontmatter,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde_json::{Value as JsonValue, json};
@@ -123,6 +124,8 @@ enum Command {
         #[command(subcommand)]
         action: FrontmatterAction,
     },
+    #[command(external_subcommand)]
+    Custom(Vec<String>),
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -131,6 +134,7 @@ enum DescribeKind {
     Relation,
     Workflow,
     Query,
+    Command,
 }
 
 #[derive(Subcommand)]
@@ -186,6 +190,16 @@ impl Context {
 }
 
 fn main() -> ExitCode {
+    let arguments: Vec<_> = std::env::args_os().collect();
+    if arguments.len() == 2 && matches!(arguments[1].to_str(), Some("--help" | "-h")) {
+        return match print_root_help() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     match run(Cli::parse()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
@@ -373,7 +387,227 @@ fn run(cli: Cli) -> Result<(), CliError> {
         Command::Query { name, arguments } => query(&name, &arguments, cli.json),
         Command::Instructions { action } => instructions(action, cli.json),
         Command::Frontmatter { action } => frontmatter(action, cli.json),
+        Command::Custom(arguments) => custom_command(&arguments, cli.json),
     }
+}
+
+fn print_root_help() -> Result<(), CliError> {
+    let mut command = Cli::command();
+    if let Ok(repository) = Repository::discover(".")
+        && let Ok(config) = RepositoryConfig::load(&repository)
+        && !config.commands.is_empty()
+    {
+        let mut help = String::from("Repository commands:\n");
+        for (name, configured) in &config.commands {
+            help.push_str(&format!(
+                "  {:20} {}\n",
+                name.replace('.', " "),
+                configured.description
+            ));
+        }
+        command = command.after_help(help);
+    }
+    command.print_long_help().map_err(CliError::boxed)?;
+    println!();
+    Ok(())
+}
+
+fn custom_command(arguments: &[String], json_output: bool) -> Result<(), CliError> {
+    let repository = Repository::discover(".").map_err(CliError::boxed)?;
+    let config = RepositoryConfig::load(&repository).map_err(CliError::boxed)?;
+    if arguments
+        .last()
+        .is_some_and(|argument| matches!(argument.as_str(), "--help" | "-h"))
+    {
+        let path = arguments[..arguments.len() - 1].join(".");
+        if let Some(command) = config.commands.get(&path) {
+            return print_custom_help(&path, command, &config);
+        }
+        return print_custom_group_help(&path, &config);
+    }
+    let (name, consumed) = resolve_custom_command(&config, arguments)?;
+    let command = &config.commands[&name];
+    let remaining = &arguments[consumed..];
+    if remaining
+        .iter()
+        .any(|argument| matches!(argument.as_str(), "--help" | "-h"))
+    {
+        return print_custom_help(&name, command, &config);
+    }
+    match &command.operation {
+        CommandOperation::Query {
+            query: name,
+            entity_type,
+        } => {
+            let query = config.queries.get(name).ok_or_else(|| {
+                CliError::message(format!(
+                    "repository command references unknown query {name:?}"
+                ))
+            })?;
+            let inputs: Vec<_> = query
+                .arguments
+                .iter()
+                .filter(|argument| argument.mode == docgraph_core::ArgumentMode::Input)
+                .collect();
+            let mut raw = BTreeMap::new();
+            let mut index = 0;
+            if entity_type.is_some() && !inputs.is_empty() {
+                let value = remaining
+                    .first()
+                    .filter(|value| !value.starts_with('-'))
+                    .ok_or_else(|| CliError::message(format!("missing {}", inputs[0].name)))?;
+                raw.insert(inputs[0].name.clone(), value.clone());
+                index = 1;
+            }
+            while index < remaining.len() {
+                let option = remaining[index].strip_prefix("--").ok_or_else(|| {
+                    CliError::message(format!("expected --name, found {:?}", remaining[index]))
+                })?;
+                let value = remaining
+                    .get(index + 1)
+                    .ok_or_else(|| CliError::message(format!("missing value for --{option}")))?;
+                if raw.insert(option.to_owned(), value.clone()).is_some() {
+                    return Err(CliError::message(format!("duplicate --{option}")));
+                }
+                index += 2;
+            }
+            execute_query(name, raw, json_output)
+        }
+        CommandOperation::Transition { .. } => {
+            let (entity, dry_run) = parse_entity_mutation_arguments(remaining)?;
+            let CommandOperation::Transition { target_state, .. } = &command.operation else {
+                unreachable!()
+            };
+            mutate(
+                MutationRequest::Transition {
+                    entity,
+                    target_state: target_state.clone(),
+                },
+                dry_run,
+                json_output,
+            )
+        }
+        CommandOperation::AddRelation { relation, .. } => {
+            let dry_run = remaining.iter().any(|argument| argument == "--dry-run");
+            let positional: Vec<_> = remaining
+                .iter()
+                .filter(|argument| argument.as_str() != "--dry-run")
+                .collect();
+            if positional.len() != 2 {
+                return Err(CliError::message(
+                    "relation command requires SOURCE TARGET [--dry-run]",
+                ));
+            }
+            mutate(
+                MutationRequest::AddRelation {
+                    source: positional[0].clone(),
+                    predicate: relation.clone(),
+                    target: positional[1].clone(),
+                    properties: BTreeMap::new(),
+                },
+                dry_run,
+                json_output,
+            )
+        }
+    }
+}
+
+fn print_custom_group_help(path: &str, config: &RepositoryConfig) -> Result<(), CliError> {
+    let prefix = if path.is_empty() {
+        String::new()
+    } else {
+        format!("{path}.")
+    };
+    let matches: Vec<_> = config
+        .commands
+        .iter()
+        .filter(|(name, _)| name.starts_with(&prefix))
+        .collect();
+    if matches.is_empty() {
+        return Err(CliError::message(format!(
+            "unknown repository command group {:?}",
+            path.replace('.', " ")
+        )));
+    }
+    println!("Usage: docgraph {} <COMMAND>\n", path.replace('.', " "));
+    println!("Commands:");
+    for (name, command) in matches {
+        let suffix = &name[prefix.len()..];
+        println!("  {:20} {}", suffix.replace('.', " "), command.description);
+    }
+    Ok(())
+}
+
+fn resolve_custom_command(
+    config: &RepositoryConfig,
+    arguments: &[String],
+) -> Result<(String, usize), CliError> {
+    for consumed in (1..=arguments.len()).rev() {
+        let name = arguments[..consumed].join(".");
+        if config.commands.contains_key(&name) {
+            return Ok((name, consumed));
+        }
+    }
+    Err(CliError::message(format!(
+        "unknown repository command {:?}",
+        arguments.first().map(String::as_str).unwrap_or_default()
+    )))
+}
+
+fn print_custom_help(
+    name: &str,
+    command: &CommandConfig,
+    config: &RepositoryConfig,
+) -> Result<(), CliError> {
+    println!("{}", command.description);
+    match &command.operation {
+        CommandOperation::Query { query, entity_type } => {
+            let query = config.queries.get(query).ok_or_else(|| {
+                CliError::message(format!(
+                    "repository command references unknown query {query:?}"
+                ))
+            })?;
+            print!("\nUsage: docgraph {}", name.replace('.', " "));
+            for (index, argument) in query
+                .arguments
+                .iter()
+                .filter(|argument| argument.mode == docgraph_core::ArgumentMode::Input)
+                .enumerate()
+            {
+                if index == 0 && entity_type.is_some() {
+                    print!(" <{}>", argument.name);
+                } else if argument.default.is_some() {
+                    print!(" [--{} <VALUE>]", argument.name);
+                } else {
+                    print!(" --{} <VALUE>", argument.name);
+                }
+            }
+            println!();
+        }
+        CommandOperation::Transition { .. } => println!(
+            "\nUsage: docgraph {} <ENTITY> [--dry-run]",
+            name.replace('.', " ")
+        ),
+        CommandOperation::AddRelation { .. } => println!(
+            "\nUsage: docgraph {} <SOURCE> <TARGET> [--dry-run]",
+            name.replace('.', " ")
+        ),
+    }
+    Ok(())
+}
+
+fn parse_entity_mutation_arguments(arguments: &[String]) -> Result<(String, bool), CliError> {
+    let dry_run = arguments.iter().any(|argument| argument == "--dry-run");
+    let positional: Vec<_> = arguments
+        .iter()
+        .filter(|argument| argument.as_str() != "--dry-run")
+        .collect();
+    if positional.len() != 1 {
+        return Err(CliError::message(
+            "transition command requires ENTITY [--dry-run]",
+        ));
+    }
+    Ok((positional[0].clone(), dry_run))
 }
 
 fn describe(
@@ -390,6 +624,7 @@ fn describe(
             "relations": config.relations.keys().collect::<Vec<_>>(),
             "workflows": config.workflows.keys().collect::<Vec<_>>(),
             "queries": config.queries.keys().collect::<Vec<_>>(),
+            "commands": config.commands.keys().collect::<Vec<_>>(),
         }),
         (Some(DescribeKind::Type), Some(name)) => {
             let item = config
@@ -418,8 +653,32 @@ fn describe(
                 .queries
                 .get(name)
                 .ok_or_else(|| CliError::message(format!("unknown query {name:?}")))?;
-            let arguments: Vec<_> = item.arguments.iter().map(|argument| json!({ "name": argument.name, "mode": format!("{:?}", argument.mode).to_lowercase(), "type": format!("{:?}", argument.value_type).to_lowercase() })).collect();
+            let arguments: Vec<_> = item.arguments.iter().map(|argument| json!({ "name": argument.name, "mode": format!("{:?}", argument.mode).to_lowercase(), "type": format!("{:?}", argument.value_type).to_lowercase(), "default": argument.default })).collect();
             json!({ "name": name, "description": item.description, "predicate": item.predicate, "arguments": arguments })
+        }
+        (Some(DescribeKind::Command), Some(name)) => {
+            let item = config
+                .commands
+                .get(name)
+                .ok_or_else(|| CliError::message(format!("unknown command {name:?}")))?;
+            let operation = match &item.operation {
+                CommandOperation::Query { query, entity_type } => json!({
+                    "type": "query", "query": query, "entity_type": entity_type,
+                }),
+                CommandOperation::Transition {
+                    entity_type,
+                    target_state,
+                } => json!({
+                    "type": "transition", "entity_type": entity_type, "target_state": target_state,
+                }),
+                CommandOperation::AddRelation {
+                    entity_type,
+                    relation,
+                } => json!({
+                    "type": "add_relation", "entity_type": entity_type, "relation": relation,
+                }),
+            };
+            json!({ "name": name, "description": item.description, "operation": operation })
         }
         (Some(_), None) => return Err(CliError::message("describe kind requires a name")),
         (None, Some(_)) => return Err(CliError::message("describe name requires a kind")),
@@ -668,6 +927,21 @@ fn validate(json_output: bool) -> Result<(), CliError> {
 }
 
 fn query(name: &str, raw: &[String], json_output: bool) -> Result<(), CliError> {
+    let mut parsed = BTreeMap::new();
+    for argument in raw {
+        let (name, value) = split_assignment(argument)?;
+        if parsed.insert(name.to_owned(), value.to_owned()).is_some() {
+            return Err(CliError::message(format!("duplicate query input {name:?}")));
+        }
+    }
+    execute_query(name, parsed, json_output)
+}
+
+fn execute_query(
+    name: &str,
+    raw: BTreeMap<String, String>,
+    json_output: bool,
+) -> Result<(), CliError> {
     let context = Context::load()?;
     context.ensure_derived()?;
     let query = context
@@ -675,10 +949,6 @@ fn query(name: &str, raw: &[String], json_output: bool) -> Result<(), CliError> 
         .queries
         .get(name)
         .ok_or_else(|| CliError::message(format!("unknown query {name:?}")))?;
-    let raw: BTreeMap<_, _> = raw
-        .iter()
-        .map(|argument| split_assignment(argument))
-        .collect::<Result<_, _>>()?;
     let mut inputs = BTreeMap::new();
     for argument in query
         .arguments
@@ -687,13 +957,14 @@ fn query(name: &str, raw: &[String], json_output: bool) -> Result<(), CliError> 
     {
         let value = raw
             .get(argument.name.as_str())
+            .or(argument.default.as_ref())
             .ok_or_else(|| CliError::message(format!("missing --arg {}=...", argument.name)))?;
         inputs.insert(
             argument.name.clone(),
             parse_query_value(value, argument.value_type)?,
         );
     }
-    if raw.len() != inputs.len() {
+    if raw.keys().any(|name| !inputs.contains_key(name)) {
         return Err(CliError::message(
             "query received an unknown or duplicate input",
         ));

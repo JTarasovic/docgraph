@@ -235,6 +235,7 @@ fn fingerprint(
         "entities.toml",
         "relations.toml",
         "workflows.toml",
+        "commands.toml",
         "logic.dl",
     ] {
         let absolute = repository.config_dir().join(name);
@@ -335,10 +336,13 @@ mod tests {
 
         fs::write(fixture.0.join("unrelated.txt"), "two\n").unwrap();
         let (_, _, unrelated_change) = fixture.load();
+        fs::write(fixture.0.join(".docgraph/commands.toml"), "").unwrap();
+        let (_, _, command_change) = fixture.load();
         fs::write(fixture.0.join("docs/a.md"), "# Changed\n").unwrap();
         let (_, _, canonical_change) = fixture.load();
 
         assert_eq!(first.fingerprint, unrelated_change.fingerprint);
+        assert_ne!(first.fingerprint, command_change.fingerprint);
         assert_ne!(first.fingerprint, canonical_change.fingerprint);
     }
 

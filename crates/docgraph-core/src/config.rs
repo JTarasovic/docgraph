@@ -1,5 +1,5 @@
 use crate::{Repository, SCHEMA_VERSION};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
@@ -8,8 +8,6 @@ use std::io;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-const RESERVED_FILES: &[&str] = &["commands.toml"];
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct RepositoryConfig {
     pub project: ProjectConfig,
@@ -17,18 +15,12 @@ pub struct RepositoryConfig {
     pub relations: BTreeMap<String, RelationTypeConfig>,
     pub workflows: BTreeMap<String, WorkflowConfig>,
     pub queries: BTreeMap<String, NamedQueryConfig>,
+    pub commands: BTreeMap<String, CommandConfig>,
     pub logic: Option<String>,
 }
 
 impl RepositoryConfig {
     pub fn load(repository: &Repository) -> Result<Self, ConfigLoadError> {
-        for reserved in RESERVED_FILES {
-            let path = repository.config_dir().join(reserved);
-            if path.exists() {
-                return Err(ConfigLoadError::UnsupportedFile { path });
-            }
-        }
-
         let project_path = repository.project_file();
         let project_file: ProjectFile = read_required(&project_path)?;
         if project_file.schema_version != SCHEMA_VERSION {
@@ -44,6 +36,7 @@ impl RepositoryConfig {
             read_optional(&repository.config_dir().join("relations.toml"))?;
         let workflows: WorkflowFile =
             read_optional(&repository.config_dir().join("workflows.toml"))?;
+        let commands: CommandFile = read_optional(&repository.config_dir().join("commands.toml"))?;
         let logic_path = repository.config_dir().join("logic.dl");
         let logic = read_optional_text(&logic_path)?;
 
@@ -59,6 +52,7 @@ impl RepositoryConfig {
             relations: relations.relation,
             workflows: workflows.workflow,
             queries: project_file.query,
+            commands: commands.command,
             logic,
         })
     }
@@ -237,6 +231,88 @@ pub struct QueryArgumentConfig {
     pub mode: ArgumentMode,
     #[serde(rename = "type")]
     pub value_type: QueryValueType,
+    #[serde(default)]
+    pub default: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommandConfig {
+    pub description: String,
+    pub operation: CommandOperation,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CommandOperation {
+    Query {
+        query: String,
+        entity_type: Option<String>,
+    },
+    Transition {
+        entity_type: String,
+        target_state: String,
+    },
+    AddRelation {
+        entity_type: String,
+        relation: String,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawCommandConfig {
+    description: String,
+    operation: RawCommandOperation,
+    #[serde(default)]
+    query: Option<String>,
+    #[serde(default)]
+    entity_type: Option<String>,
+    #[serde(default)]
+    target_state: Option<String>,
+    #[serde(default)]
+    relation: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum RawCommandOperation {
+    Query,
+    Transition,
+    AddRelation,
+}
+
+impl<'de> Deserialize<'de> for CommandConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawCommandConfig::deserialize(deserializer)?;
+        let operation = match raw.operation {
+            RawCommandOperation::Query => CommandOperation::Query {
+                query: raw.query.ok_or_else(|| de::Error::missing_field("query"))?,
+                entity_type: raw.entity_type,
+            },
+            RawCommandOperation::Transition => CommandOperation::Transition {
+                entity_type: raw
+                    .entity_type
+                    .ok_or_else(|| de::Error::missing_field("entity_type"))?,
+                target_state: raw
+                    .target_state
+                    .ok_or_else(|| de::Error::missing_field("target_state"))?,
+            },
+            RawCommandOperation::AddRelation => CommandOperation::AddRelation {
+                entity_type: raw
+                    .entity_type
+                    .ok_or_else(|| de::Error::missing_field("entity_type"))?,
+                relation: raw
+                    .relation
+                    .ok_or_else(|| de::Error::missing_field("relation"))?,
+            },
+        };
+        Ok(Self {
+            description: raw.description,
+            operation,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
@@ -301,6 +377,13 @@ struct WorkflowFile {
     workflow: BTreeMap<String, WorkflowConfig>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CommandFile {
+    #[serde(default)]
+    command: BTreeMap<String, CommandConfig>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceSpan {
     pub bytes: Range<usize>,
@@ -327,9 +410,6 @@ pub enum ConfigLoadError {
         found: u32,
         supported: u32,
     },
-    UnsupportedFile {
-        path: PathBuf,
-    },
 }
 
 impl fmt::Display for ConfigLoadError {
@@ -352,11 +432,6 @@ impl fmt::Display for ConfigLoadError {
             } => write!(
                 formatter,
                 "{}: unsupported schema_version {found}; this binary supports {supported}",
-                path.display()
-            ),
-            Self::UnsupportedFile { path } => write!(
-                formatter,
-                "{} is reserved for a post-v0 extension and is not supported",
                 path.display()
             ),
         }
@@ -599,17 +674,36 @@ excludes = ["generated/**"]
     }
 
     #[test]
-    fn rejects_reserved_post_v0_files() {
+    fn loads_dynamic_commands() {
         let fixture = Fixture::new();
         fixture.write(
             "project.toml",
             "schema_version = 1\n[project]\nname = \"example\"\n[documents]\nroot = \"docs\"\n",
         );
-        fixture.write("commands.toml", "");
+        fixture.write(
+            "commands.toml",
+            "[command.next]\ndescription = \"Find candidate work\"\noperation = \"query\"\nquery = \"next_work\"\n",
+        );
 
+        let config = fixture.load().unwrap();
         assert!(matches!(
-            fixture.load(),
-            Err(ConfigLoadError::UnsupportedFile { path }) if path.ends_with("commands.toml")
+            config.commands["next"].operation,
+            CommandOperation::Query { ref query, entity_type: None } if query == "next_work"
         ));
+    }
+
+    #[test]
+    fn rejects_unknown_dynamic_command_fields() {
+        let fixture = Fixture::new();
+        fixture.write(
+            "project.toml",
+            "schema_version = 1\n[project]\nname = \"example\"\n[documents]\nroot = \"docs\"\n",
+        );
+        fixture.write(
+            "commands.toml",
+            "[command.next]\ndescription = \"Find candidate work\"\nopertion = \"query\"\nquery = \"next_work\"\n",
+        );
+
+        assert!(matches!(fixture.load(), Err(ConfigLoadError::Parse(_))));
     }
 }

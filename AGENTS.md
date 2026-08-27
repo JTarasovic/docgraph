@@ -4,7 +4,7 @@ This repository builds docgraph. The product contract lives in `docs/reference/`
 
 ## Dogfooding boundary
 
-Docgraph manages only the configured `docs/reference` corpus. Use its CLI for managed frontmatter changes; prose remains directly editable. Do not interpret ordinary links as graph policy. Generated docgraph instructions may extend this file inside their marked block; they do not replace these implementation instructions.
+Docgraph manages only the configured `docs` corpus. Use its CLI for managed frontmatter changes; prose remains directly editable. Do not interpret ordinary links as graph policy. Generated docgraph instructions may extend this file inside their marked block; they do not replace these implementation instructions.
 
 <!-- docgraph:agent-instructions:v1:begin -->
 This repository uses docgraph.
@@ -41,7 +41,10 @@ Workflows:
 - `task`; initial `backlog`: `backlog` → `ready`, `dropped`; `blocked` → `ready`, `dropped`; `done` (terminal); `dropped` (terminal); `in_progress` → `done`, `blocked`, `dropped`; `ready` → `in_progress`, `dropped`
 
 Named queries:
-- None configured.
+- `docgraph query next_work [--arg plan=<value>]` — Find project-level candidates for what to do next.
+
+Repository commands:
+- `docgraph next` — Show project-level candidates for what to do next.
 
 Common operations:
 - Inspect: `docgraph describe`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.

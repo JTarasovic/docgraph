@@ -33,7 +33,14 @@ Named queries:
 - `docgraph query grommit_targets --arg florp=<value>` — Targets grommitted by a florp.
 - `docgraph query reachable_florps --arg source=<value>` — Returns the transitive precedence closure from a florp.
 - `docgraph query ready_florps` — Returns florps with no incoming precedence edge.
+- `docgraph query ready_florps_command [--arg label=<value>]` — Returns ready florps, optionally filtered by label.
 - `docgraph query scalar_values` — Exercises typed result transport.
+
+Repository commands:
+- `docgraph florp activate` — Activate a queued florp.
+- `docgraph florp grommit` — Add a grommits relation.
+- `docgraph florp ready` — List florps with no incoming precedence edge.
+- `docgraph florp targets` — List targets grommitted by a florp.
 
 Common operations:
 - Inspect: `docgraph describe`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.

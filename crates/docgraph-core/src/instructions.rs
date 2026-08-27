@@ -208,11 +208,30 @@ impl<'a> InstructionService<'a> {
                     .arguments
                     .iter()
                     .filter(|argument| argument.mode == ArgumentMode::Input)
-                    .map(|argument| format!(" --arg {}=<value>", argument.name))
+                    .map(|argument| {
+                        if argument.default.is_some() {
+                            format!(" [--arg {}=<value>]", argument.name)
+                        } else {
+                            format!(" --arg {}=<value>", argument.name)
+                        }
+                    })
                     .collect::<String>();
                 output.push_str(&format!(
                     "- `docgraph query {name}{inputs}` — {}\n",
                     inline_text(&query.description)
+                ));
+            }
+        }
+
+        output.push_str("\nRepository commands:\n");
+        if self.config.commands.is_empty() {
+            output.push_str("- None configured.\n");
+        } else {
+            for (name, command) in &self.config.commands {
+                output.push_str(&format!(
+                    "- `docgraph {}` — {}\n",
+                    name.replace('.', " "),
+                    inline_text(&command.description)
                 ));
             }
         }

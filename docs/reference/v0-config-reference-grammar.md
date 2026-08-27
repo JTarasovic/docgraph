@@ -30,6 +30,11 @@ predicate = "implements"
 target = "reference:config-grammar#s-D6B9JYV06F"
 
 [[docgraph_generated.incoming]]
+source = "plan:project-aware-commands"
+predicate = "implements"
+target = "reference:config-grammar#s-3B3J65MSQN"
+
+[[docgraph_generated.incoming]]
 source = "task:audit-initial-design-closure"
 predicate = "implements"
 target = "reference:config-grammar#s-P73QA8YDQB"
@@ -58,6 +63,11 @@ target = "reference:config-grammar#s-Q9K2W13EGT"
 source = "task:support-section-path-endpoints"
 predicate = "implements"
 target = "reference:config-grammar#s-TW0V0THMJD"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-3B3J65MSQN"
+type = "implemented_by"
+target = "plan:project-aware-commands"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-D6B9JYV06F"
@@ -136,6 +146,7 @@ Configuration defines vocabulary and policy. The engine defines storage, indexin
   entities.toml
   relations.toml
   workflows.toml
+  commands.toml
   logic.dl
 ```
 
@@ -143,12 +154,11 @@ Only `project.toml` is mandatory.
 
 `.docgraph` lives at the Git worktree root. `project.toml` owns the project,
 documents, frontmatter, validation, named-query, and agent-instruction tables; each
-other TOML file owns the table matching its filename. `logic.dl` contains
-repository logic.
+other TOML file owns the table matching its filename. `commands.toml` owns
+repository-defined CLI commands, and `logic.dl` contains repository logic.
 
-`commands.toml` and provider-adapter configuration described later are reserved
-post-v0 extensions. A v0 implementation reports them as unsupported rather than
-silently ignoring them.
+Provider-adapter configuration described later remains reserved. An implementation
+reports unsupported configuration rather than silently ignoring it.
 
 <a id="s-BPCW03FYW9"></a>
 ## 3. Project Configuration
@@ -706,8 +716,9 @@ arguments = [
 ```
 
 The ordered `arguments` array is the query ABI and maps directly to predicate
-positions. Argument names must be unique; `mode` is `input` or `output`. v0 supports
-the property scalar types plus `entity` and `section`. The predicate arity must equal
+positions. Argument names must be unique; `mode` is `input` or `output`. The
+supported values are the property scalar types plus `entity` and `section`. An input
+may declare a string-form `default`; outputs cannot. The predicate arity must equal
 the number of declared arguments. Inputs are bound by name and type-checked before
 execution; every returned output is type-checked against its declaration.
 
@@ -734,7 +745,7 @@ docgraph query task_blockers --arg task=task:184
 ```
 
 <a id="s-3B3J65MSQN"></a>
-## 19. Dynamic Commands (post-v0)
+## 19. Dynamic Commands
 
 Transition:
 
@@ -766,6 +777,22 @@ Generated:
 
 ```bash
 docgraph task blockers task:184
+```
+
+Project-level query:
+
+```toml
+[command.next]
+description = "Show project-level candidates for what to do next."
+operation = "query"
+query = "next_work"
+```
+
+Generated:
+
+```bash
+docgraph next
+docgraph next --plan plan:active-work
 ```
 
 Relation:

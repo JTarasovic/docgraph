@@ -1,0 +1,16 @@
+unfinished_dependency(task) :- relation(task, "depends_on", dependency), !entity_state(dependency, "done").
+
+actionable_task(task, plan) :- entity_type(task, "task"), entity_state(task, "ready"), relation(task, "part_of", plan), entity_state(plan, "active"), !unfinished_dependency(task).
+current_task(task, plan) :- entity_type(task, "task"), entity_state(task, "in_progress"), relation(task, "part_of", plan), entity_state(plan, "active").
+plan_has_current_work(plan) :- actionable_task(_, plan).
+plan_has_current_work(plan) :- current_task(_, plan).
+
+next_work("task", task, plan, "ready and unblocked", "") :- actionable_task(task, plan).
+next_work("task", task, plan, "ready and unblocked", plan) :- actionable_task(task, plan).
+next_work("task", task, plan, "continue in-progress work", "") :- current_task(task, plan).
+next_work("task", task, plan, "continue in-progress work", plan) :- current_task(task, plan).
+next_work("plan", plan, plan, "active plan has no current or actionable task", "") :- entity_type(plan, "plan"), entity_state(plan, "active"), !plan_has_current_work(plan).
+next_work("plan", plan, plan, "active plan has no current or actionable task", plan) :- entity_type(plan, "plan"), entity_state(plan, "active"), !plan_has_current_work(plan).
+next_work("plan", plan, "", "proposed plan needs activation", "") :- entity_type(plan, "plan"), entity_state(plan, "proposed").
+next_work("issue", issue, "", "open issue needs disposition", "") :- entity_type(issue, "issue"), entity_state(issue, "open").
+next_work("issue", issue, plan, "open issue affects this plan", plan) :- entity_type(issue, "issue"), entity_state(issue, "open"), relation(issue, "affects", plan).

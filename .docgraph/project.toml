@@ -9,3 +9,14 @@ exclude = ["research/**"]
 
 [agent_instructions]
 targets = ["AGENTS.md"]
+
+[query.next_work]
+description = "Find project-level candidates for what to do next."
+predicate = "next_work"
+arguments = [
+  { name = "kind", mode = "output", type = "string" },
+  { name = "candidate", mode = "output", type = "entity" },
+  { name = "containing_plan", mode = "output", type = "string" },
+  { name = "reason", mode = "output", type = "string" },
+  { name = "plan", mode = "input", type = "string", default = "" },
+]
