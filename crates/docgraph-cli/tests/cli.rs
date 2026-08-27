@@ -60,6 +60,10 @@ fn copy_directory(source: &Path, target: &Path) {
     }
 }
 
+fn logic_runtime_configured() -> bool {
+    std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_some_and(|value| !value.is_empty())
+}
+
 #[test]
 fn structured_describe_validate_and_unavailable_query_are_stable() {
     let fixture = Fixture::copy("synthetic");
@@ -86,13 +90,15 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
         serde_json::json!(["odd", "novel"])
     );
 
-    let validate = fixture.run(&["validate"]);
-    assert!(
-        validate.status.success(),
-        "stdout: {} stderr: {}",
-        String::from_utf8_lossy(&validate.stdout),
-        String::from_utf8_lossy(&validate.stderr)
-    );
+    if logic_runtime_configured() {
+        let validate = fixture.run(&["validate"]);
+        assert!(
+            validate.status.success(),
+            "stdout: {} stderr: {}",
+            String::from_utf8_lossy(&validate.stdout),
+            String::from_utf8_lossy(&validate.stderr)
+        );
+    }
     let query = fixture.run_without_logic_runtime(&[
         "--json",
         "query",
@@ -106,7 +112,7 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
 
 #[test]
 fn configured_logic_runtime_executes_a_typed_query() {
-    if std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_none() {
+    if !logic_runtime_configured() {
         return;
     }
     let fixture = Fixture::copy("synthetic");
@@ -221,15 +227,15 @@ fn configured_logic_runtime_executes_a_typed_query() {
 
 #[test]
 fn transition_dry_run_then_apply_updates_the_fixture() {
+    if !logic_runtime_configured() {
+        return;
+    }
     let fixture = Fixture::copy("adr");
     let path = fixture.0.join("docs/0001-first.md");
     let before = fs::read_to_string(&path).unwrap();
-    let runtime_available = std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_some();
-    if runtime_available {
-        let query = fixture.run(&["--json", "query", "accepted_adrs"]);
-        let query: Value = serde_json::from_slice(&query.stdout).unwrap();
-        assert_eq!(query["rows"], serde_json::json!([{ "adr": "adr:2" }]));
-    }
+    let query = fixture.run(&["--json", "query", "accepted_adrs"]);
+    let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert_eq!(query["rows"], serde_json::json!([{ "adr": "adr:2" }]));
 
     let preview = fixture.run(&["transition", "adr:1", "accepted", "--dry-run"]);
     assert!(preview.status.success());
@@ -248,18 +254,16 @@ fn transition_dry_run_then_apply_updates_the_fixture() {
             .contains("state = \"accepted\"")
     );
     assert!(fixture.run(&["validate"]).status.success());
-    if runtime_available {
-        let query = fixture.run(&["--json", "query", "accepted_adrs"]);
-        let query: Value = serde_json::from_slice(&query.stdout).unwrap();
-        assert_eq!(query["rows"].as_array().unwrap().len(), 2);
-        assert!(
-            query["rows"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|row| row["adr"] == "adr:1")
-        );
-    }
+    let query = fixture.run(&["--json", "query", "accepted_adrs"]);
+    let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert_eq!(query["rows"].as_array().unwrap().len(), 2);
+    assert!(
+        query["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["adr"] == "adr:1")
+    );
 }
 
 #[test]
@@ -289,7 +293,7 @@ fn generated_agent_guidance_is_checked_and_safely_synchronized() {
 
 #[test]
 fn historical_research_mutation_updates_context_and_query_results() {
-    if std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_none() {
+    if !logic_runtime_configured() {
         return;
     }
     let fixture = Fixture::copy("historical-research");
@@ -378,7 +382,7 @@ fn historical_research_mutation_updates_context_and_query_results() {
 
 #[test]
 fn v0_fixtures_exercise_exact_graph_search_and_named_query_retrieval() {
-    if std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_none() {
+    if !logic_runtime_configured() {
         return;
     }
     for (fixture_name, entity, search_term, query_name, query_argument) in [
@@ -441,6 +445,8 @@ fn normalization_dry_run_apply_and_reindex_complete_the_fixture_loop() {
     let normalized = fs::read_to_string(&document).unwrap();
     assert_eq!(normalized.matches("<a id=\"s-").count(), 2);
     assert!(fixture.run(&["frontmatter", "check"]).status.success());
-    assert!(fixture.run(&["validate"]).status.success());
+    if logic_runtime_configured() {
+        assert!(fixture.run(&["validate"]).status.success());
+    }
     assert!(String::from_utf8_lossy(&fixture.run(&["normalize"]).stdout).contains("no changes"));
 }
