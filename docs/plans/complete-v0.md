@@ -2,7 +2,7 @@
 
 id = "plan:complete-v0"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Complete the v0 product contract"
