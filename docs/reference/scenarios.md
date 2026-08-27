@@ -1,3 +1,12 @@
++++
+id = "reference:scenarios"
+type = "reference"
+
+# docgraph:generated:v1:begin
+[docgraph_generated]
+# docgraph:generated:end
++++
+<a id="s-W2JDJP657B"></a>
 # Draft Scenarios and Conformance Suite
 
 **Status:** Draft
@@ -6,6 +15,7 @@
 The v0 conformance slice in Section 20 defines the release contract. Sections or
 cases identified as post-v0 remain design targets, not v0 acceptance requirements.
 
+<a id="s-ZV6AWWNBQT"></a>
 ## 1. Purpose
 
 A stable set of fixture repositories should define what “generic” means and prevent development from overfitting to one workflow.
@@ -29,6 +39,7 @@ The suite must collectively exercise:
 
 These should become executable end-to-end fixture repositories.
 
+<a id="s-YBDS8T5BK3"></a>
 ## 2. Architecture Decisions
 
 Entities: ADR, Task, Specification.
@@ -45,6 +56,7 @@ accepted → superseded
 
 Tests: legal/illegal transitions, inverse relations, downstream impact, supersession traversal, stable identity across moves, section references across heading renames, automatic unblocking, blocker explanation.
 
+<a id="s-K62BXQKZGB"></a>
 ## 3. Task Dependency Graph
 
 ```text
@@ -65,6 +77,7 @@ actionable(Task-A) =
 
 Tests: recursive dependencies, cycles, derived readiness, direct/transitive blockers, `explain`, downstream changes.
 
+<a id="s-P7TNAVGGZ9"></a>
 ## 4. Requirements Traceability
 
 Entities: Requirement, Component, Test, Evidence.
@@ -81,6 +94,7 @@ Evidence
 
 Queries include uncovered requirements, missing verification, evidence chains, and impact of requirement changes.
 
+<a id="s-99B9NPC7EJ"></a>
 ## 5. Specification Section → Implementation
 
 Entities: Document, Section, Task, SourceArtifact.
@@ -95,6 +109,7 @@ src/retry.rs
 
 Tests: normalization of stable IDs for every heading, relative/logical references, Markdown backlinks, semantic edges, heading rename, dangling refs, exact source spans.
 
+<a id="s-M4NVGRJE96"></a>
 ## 6. Human-Agent Proposal and Approval
 
 ```text
@@ -107,6 +122,7 @@ Task-184
 
 Tests: proposal state, approval/rejection, dry-run impact, derived updates, Git-reviewable mutation, future review of proposed graph mutations.
 
+<a id="s-K780D8XY84"></a>
 ## 7. Incident and Remediation
 
 Entities: Incident, Component, Task, Decision, RequirementGap.
@@ -115,6 +131,7 @@ Relations: caused_by, revealed, remediated_by, resulted_in, related_to.
 
 This stresses evolving ontology and heterogeneous relationships not known to the executable.
 
+<a id="s-PD8SW07HEH"></a>
 ## 8. Compliance and Assurance
 
 Entities: Requirement, Control, Procedure, Evidence, Test.
@@ -130,6 +147,7 @@ effective(Control) =
 
 Tests relation properties, temporal facts, completeness, inference, and explanation.
 
+<a id="s-6CAQR9GBED"></a>
 ## 9. Research and Design Rationale
 
 Entities: Claim, Evidence, Source, Decision.
@@ -138,12 +156,14 @@ Relations: supported_by, contradicted_by, derived_from, motivates.
 
 This stresses edge properties, competing evidence, section-level citations, and graph + FTS + vector retrieval.
 
+<a id="s-CHY0WX7VZ9"></a>
 ## 10. Release Planning
 
 Entities: Release, Milestone, Task, Decision, Requirement.
 
 Queries: release blockers, transitive required work, decision dependencies, minimal blocking frontier, readiness explanation.
 
+<a id="s-B3R38XW473"></a>
 ## 11. Documentation Maintenance
 
 Entities: Document, Section, Concept.
@@ -152,6 +172,7 @@ Tests: Markdown links, backlinks, non-failing broken-link diagnostics, supersede
 references, semantic vs casual links, stable structural references, and text
 retrieval. Semantic retrieval is a post-v0 extension.
 
+<a id="s-35SY325PT6"></a>
 ## 12. Historical Research
 
 A non-software fixture prevents accidental software-development assumptions.
@@ -162,6 +183,7 @@ Relations: participated_in, occurred_at, claims, supported_by, contradicts, cite
 
 Supporting this fixture must require no domain-specific Rust code.
 
+<a id="s-Z037AH2GE5"></a>
 ## 13. Synthetic Genericity Torture Test
 
 An intentionally meaningless ontology prevents both developers and agents from relying on semantic intuition.
@@ -229,10 +251,12 @@ docgraph florp glorpable florp:1
 
 No Florp-specific code may exist in the binary.
 
+<a id="s-PH9DH662QH"></a>
 ## 14. Repository-Host Reference Conformance (post-v0)
 
 Provider shorthand should be exercised in both the documentation-maintenance fixture and synthetic fixture.
 
+<a id="s-877RYGYVW4"></a>
 ### GitHub-like cases
 
 ```text
@@ -244,6 +268,7 @@ owner/repo@a5c3785
 
 Cover repo-local shorthand, cross-repository refs, qualified commits, ordinary URLs, and offline normalization.
 
+<a id="s-K0ZPST2XDR"></a>
 ### GitLab-like cases
 
 ```text
@@ -255,6 +280,7 @@ group/project!47
 
 Include self-hosted GitLab configuration.
 
+<a id="s-XQB7X1ZP6T"></a>
 ### Ambiguity
 
 Verify:
@@ -264,6 +290,7 @@ Verify:
 - canonical docgraph refs take precedence where necessary
 - malformed shorthand yields a diagnostic rather than a guessed target
 
+<a id="s-NPF2JACCZS"></a>
 ### Repository configuration
 
 Cover:
@@ -276,6 +303,7 @@ Cover:
 - self-hosted provider
 - no remote
 
+<a id="s-WHY9H5Q3BM"></a>
 ### Graph behavior
 
 Provider references normalize into ordinary graph targets:
@@ -298,6 +326,7 @@ github:issue:owner/repo:123
 
 This must work without Florp-specific or GitHub-workflow-specific Rust code.
 
+<a id="s-9P22A3H49K"></a>
 ## 15. Cross-Cutting Mutation Tests
 
 Required cases:
@@ -336,6 +365,7 @@ Required cases:
 - repository logic runs in a docgraph-owned helper process with a five-second kill deadline
 - supported logic syntax and built-in predicates remain stable for a schema version across internal engine upgrades
 
+<a id="s-G9XSW3SPS6"></a>
 ## 16. Retrieval Tests
 
 Each v0 fixture should exercise exact retrieval, graph traversal, FTS, named queries,
@@ -353,12 +383,14 @@ Named-query tests must cover ordered input/output argument binding, missing and
 ill-typed inputs, predicate-arity mismatch, ill-typed predicate results, declared
 output-column order, and the stable JSON result envelope.
 
+<a id="s-SRJWV4WZ2T"></a>
 ## 17. Dynamic CLI Tests (post-v0)
 
 Fixture configuration should define named commands and prove the binary generates them without domain-specific code.
 
 Tests: hierarchy, arguments, help text, read-only queries, transitions, relation mutations, JSON output, invalid command config.
 
+<a id="s-4NJ8MJP7SH"></a>
 ## 18. Agent-Guidance Tests
 
 Verify:
@@ -375,6 +407,7 @@ Verify:
 - repo-specific appendix reflects configured ontology
 - skill examples remain valid against fixtures
 
+<a id="s-5GX1TKTSCE"></a>
 ## 19. Validation and Explainability
 
 Validation must fail on unresolved managed references, duplicate or missing section
@@ -402,6 +435,7 @@ Task-184 is not actionable because:
   Task-172 is incomplete
 ```
 
+<a id="s-640PX8YW69"></a>
 ## 20. Fixture Structure
 
 ```text
@@ -438,6 +472,7 @@ files
 
 Golden tests verify exact patches, structured output, graph facts, and diagnostics.
 
+<a id="s-2BW6BW30JA"></a>
 ### 20.1 v0 Conformance Slice
 
 v0 requires the ADR, historical-research, and synthetic fixtures. Together they must
@@ -447,6 +482,7 @@ remaining fixtures and the tests
 for vectors, repository-host shorthand, generated nested commands, automated section
 split/merge, and semantic diff remain the post-v0 conformance roadmap.
 
+<a id="s-7BT3682S4Q"></a>
 ## 21. Primary Conformance Requirement
 
 For any semantic mutation represented by the repository model:

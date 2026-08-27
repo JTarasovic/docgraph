@@ -4,6 +4,16 @@ This repository builds docgraph. The product contract lives in `docs/reference/`
 
 ## Dogfooding boundary
 
-The current Markdown is design input, not a docgraph-managed corpus. Until this repository commits a `.docgraph/project.toml` with an explicit docs root, do not add managed frontmatter or stable anchors, run hypothetical docgraph commands, or interpret ordinary links as graph policy.
+Docgraph manages only the configured `docs/reference` corpus. Use its CLI for managed frontmatter changes; prose remains directly editable. Do not interpret ordinary links as graph policy. Generated docgraph instructions may extend this file inside their marked block; they do not replace these implementation instructions.
 
-Once dogfooding is enabled, use docgraph only for the configured corpus and use its CLI for managed frontmatter changes. Prose remains directly editable. Generated docgraph instructions may extend this file inside their marked block; they do not replace these implementation instructions.
+<!-- docgraph:agent-instructions:v1:begin -->
+This repository uses docgraph.
+
+- Edit prose directly. Use `docgraph` commands for managed frontmatter and semantic relationships.
+- Inspect the repository model with `docgraph describe`; do not reconstruct semantic impact with grep.
+- Preview substantial changes with `--dry-run`, then run `docgraph validate`.
+- Keep generated frontmatter current with `docgraph frontmatter sync`.
+- Portable guidance lives in `skills/docgraph/SKILL.md`.
+
+Model: entities [reference]; relations []; workflows []; queries [].
+<!-- docgraph:agent-instructions:end -->

@@ -1,3 +1,12 @@
++++
+id = "reference:design"
+type = "reference"
+
+# docgraph:generated:v1:begin
+[docgraph_generated]
+# docgraph:generated:end
++++
+<a id="s-FEFSK4BQTV"></a>
 # Draft Design: Git-Native Document Graph and Workflow Engine
 
 **Status:** Draft
@@ -7,6 +16,7 @@ The v0 delivery scope in Section 15.1 is the release contract. Material identifi
 as post-v0 is directional: it should fit the architecture, but is not required for
 v0 conformance.
 
+<a id="s-1T5ZJGP27R"></a>
 ## 1. Purpose
 
 Build a generic, repository-local engine for structured document state, relationships, retrieval, validation, and safe mutation by humans and software agents.
@@ -15,14 +25,17 @@ Markdown/frontmatter committed to Git are canonical. Search indexes, graph state
 
 The system exists to prevent humans and agents from having to reconstruct project semantics with repository-wide grep/search and then inconsistently hand-edit related files.
 
+<a id="s-YNPWHT3H8T"></a>
 ## 2. Core Principles
 
+<a id="s-ZF437PWHX2"></a>
 ### 2.1 Repository content is canonical
 
 The repository remains readable, reviewable, mergeable, and usable without the derived database.
 
 The database may be deleted and rebuilt at any time.
 
+<a id="s-09FZ0ZJJJK"></a>
 ### 2.2 Mechanism belongs to the tool; policy belongs to the repository
 
 The executable understands generic primitives:
@@ -41,6 +54,7 @@ The executable understands generic primitives:
 
 It must not hard-code concepts such as ADR, task, requirement, control, or incident.
 
+<a id="s-PDYXWR5YH8"></a>
 ### 2.3 Semantic mutations go through the tool
 
 Humans and agents may edit prose directly.
@@ -57,6 +71,7 @@ Managed semantic changes should use tool operations:
 
 The tool calculates impact, validates prospective state, and applies the complete patch as a recoverable validated transaction.
 
+<a id="s-M27J7G8FS4"></a>
 ### 2.4 Arbitrary relationships are first-class
 
 Relationships normalize to:
@@ -76,12 +91,14 @@ claim:17   supported_by  evidence:81
 
 Relation types are data, not Rust enums.
 
+<a id="s-MTQ9N1DBBA"></a>
 ### 2.5 Prefer derived state
 
 Store lifecycle state only when necessary.
 
 Derive concepts such as blocked, ready, actionable, covered, effective, and stale from graph relationships and repository logic.
 
+<a id="s-X2073SHCMW"></a>
 ### 2.6 Semantic impact is queryable
 
 Agents should not need to grep the repository to answer supported questions such as:
@@ -93,6 +110,7 @@ Agents should not need to grep the repository to answer supported questions such
 - What changes if this transition occurs?
 - Which requirements lack implementation or verification?
 
+<a id="s-SE7TAGV5CQ"></a>
 ### 2.7 Semantic authority is explicit
 
 Managed frontmatter, configured state, and explicit semantic relations are
@@ -109,6 +127,7 @@ them silently.
 Complete impact means complete with respect to the authoritative managed graph and
 configured logic. Meaning expressed only in prose remains outside that guarantee.
 
+<a id="s-MN0E1TQVNG"></a>
 ## 3. Repository Model
 
 A repository defines its ontology and policy:
@@ -128,6 +147,7 @@ The exact file layout may evolve.
 `commands.toml` is part of the post-v0 direction; v0 uses the generic CLI and named
 queries.
 
+<a id="s-Z44JC2K1TN"></a>
 ### 3.1 Entity types
 
 ```toml
@@ -152,6 +172,7 @@ Entity property values live under a configurable, reserved `[properties]` table 
 document frontmatter. Keys in that table must be declared for the entity type;
 unrelated top-level frontmatter remains outside docgraph's managed schema.
 
+<a id="s-BR3ASMVXZ2"></a>
 ### 3.2 Relationships
 
 ```toml
@@ -179,6 +200,7 @@ repository logic rather than configured as relation behavior.
 An explicit managed relation is unique by `(source, predicate, target)`; its
 properties belong to that edge. Repeating the same triple is invalid.
 
+<a id="s-2WZBRN0128"></a>
 ### 3.3 Workflows
 
 ```toml
@@ -198,6 +220,7 @@ The engine exposes generic operations such as:
 transition(entity, target_state)
 ```
 
+<a id="s-BJKN85P0MX"></a>
 ### 3.4 Logic
 
 Simple structure and workflow constraints belong in config.
@@ -227,6 +250,7 @@ the same module, scalar literals and comparisons, conjunction, positive recursio
 and safe stratified negation. Public built-in names are reserved, and repository
 logic cannot address implementation-private stored relations.
 
+<a id="s-KQFW6BJNC1"></a>
 ## 4. Canonical Documents
 
 Markdown remains ordinary Markdown.
@@ -256,6 +280,7 @@ a fenced generated read model containing direct incoming relations, configured
 inverses, and informational backlinks. Generated frontmatter is deterministic,
 disposable, and never an authoritative graph input.
 
+<a id="s-0TZNSBS3HS"></a>
 ## 5. Stable Identity
 
 Identity is independent of filenames, titles, and heading text.
@@ -274,6 +299,7 @@ spec:retry
 
 Moving the file must not change identity.
 
+<a id="s-37AYRK3RZR"></a>
 ### 5.1 Sections
 
 Every heading event emitted by `pulldown-cmark` in an indexed document has a stable
@@ -310,10 +336,12 @@ removed or retargeted in the same safe mutation.
 
 A short Crockford Base32 random token is a likely implementation.
 
+<a id="s-J8Z29XS8AS"></a>
 ## 6. Cross-Document and External References
 
 The indexer processes semantic relationships, ordinary Markdown links, and recognized repository-host shorthand.
 
+<a id="s-01SAQYYWW7"></a>
 ### 6.1 Semantic relationships
 
 ```toml
@@ -322,6 +350,7 @@ type = "implements"
 target = "../architecture.md#s-83JRT4K2P6"
 ```
 
+<a id="s-Z4JNFVJWJ6"></a>
 ### 6.2 Ordinary Markdown links
 
 ```markdown
@@ -334,6 +363,7 @@ to authoritative repository logic.
 
 If a Markdown link occurs within a section, that section is the source node.
 
+<a id="s-9NCGWT4529"></a>
 ### 6.3 Repository-host shorthand
 
 Agents and humans commonly use GitHub, GitLab, and similar shorthand even where the Markdown renderer itself would not autolink it.
@@ -370,6 +400,7 @@ Provider adapters are syntax adapters only. GitHub, GitLab, or other provider co
 
 External references may exist as graph nodes without fetching remote metadata.
 
+<a id="s-ZDNCXK183C"></a>
 ### 6.4 Deterministic resolution
 
 Reference resolution must be deterministic:
@@ -389,6 +420,7 @@ For example, a naked hexadecimal token should only be treated as a commit refere
 
 The indexer must never silently fuzzy-match broken references.
 
+<a id="s-PR1MNF240G"></a>
 ## 7. Internal Model
 
 Conceptually:
@@ -430,6 +462,7 @@ remain available through generic retrieval rather than logic predicates.
 
 Source spans should be preserved for diagnostics and precise mutation.
 
+<a id="s-7BBMBXC9RK"></a>
 ## 8. Indexing
 
 ```text
@@ -466,6 +499,7 @@ Unchanged files are not reparsed. Changed chunks are the only chunks re-embedded
 
 The index records enough metadata to detect staleness after checkout, merge, parser changes, schema changes, or embedding changes.
 
+<a id="s-R9K70THM8E"></a>
 ### 8.1 Worktrees, Checkouts, and Merges
 
 Each Git worktree has its own derived database, mutation lock, recovery journal, and
@@ -480,6 +514,7 @@ Semantic conflicts that Git cannot see, such as a newly formed forbidden cycle, 
 reported as ordinary validation diagnostics. v0 does not install a custom merge
 driver or attempt semantic three-way merging.
 
+<a id="s-FDMHXV5Q4Q"></a>
 ## 9. Search and Retrieval
 
 The target architecture supports structured graph retrieval (`get`, `neighbors`,
@@ -491,6 +526,7 @@ retrieval is post-v0 direction.
 Post-v0 embedding generation should use a provider abstraction rather than bundle a
 large model into the binary.
 
+<a id="s-DAR1R6WHJE"></a>
 ## 10. Repo-Aware CLI
 
 The engine exposes generic primitives through the v0 CLI. Dynamically generated,
@@ -534,10 +570,12 @@ Project-aware `--help` should expose repository-defined commands and description
 
 Humans and agents should normally use named operations rather than write Datalog directly.
 
+<a id="s-Y0PBVH52Q7"></a>
 ## 11. Agent Integration
 
 Agent guidance is part of the product interface.
 
+<a id="s-64KP745XR0"></a>
 ### 11.1 Progressive-disclosure skill package
 
 ```text
@@ -572,6 +610,7 @@ inspect
 → validate
 ```
 
+<a id="s-Q30QTKRZQ6"></a>
 ### 11.2 Generated repository instructions
 
 v0 generates and maintains small tested blocks in configured instruction targets,
@@ -601,6 +640,7 @@ Malformed or ambiguous markers cause refusal rather than guessed repair. Manual 
 inside the managed block are replaced only by an explicit `sync`, which uses the same
 concurrent-change protection as other safe mutations.
 
+<a id="s-DD5NS2HR0R"></a>
 ### 11.3 Tool skill vs repository appendix
 
 The portable skill explains how docgraph works.
@@ -609,12 +649,14 @@ A tiny generated repository appendix describes available entity types, important
 
 Detailed ontology remains dynamically queryable through `describe_project`, `describe_type`, and `describe_relation`.
 
+<a id="s-Y4QFB1ZND8"></a>
 ### 11.4 Tested documentation
 
 Skill examples and generated instructions should be tested against fixture repositories wherever practical.
 
 The skill/config/CLI contract should be versioned so stale checked-in guidance can be detected and refreshed.
 
+<a id="s-B7542FYPRY"></a>
 ## 12. Safe Mutation
 
 Semantic mutation behaves as a recoverable validated transaction:
@@ -670,6 +712,7 @@ rebuilt on the next use.
 
 Substantial mutations should support dry-run impact analysis.
 
+<a id="s-ZEJSC5W295"></a>
 ## 13. Direct File Editing
 
 The tool does not prohibit direct editing.
@@ -685,6 +728,7 @@ Instead:
 Direct managed-field edits are unsupported. Validation enforces resulting invariants,
 not editor provenance.
 
+<a id="s-DHW5KPNDJV"></a>
 ## 14. Development and Repository Engineering
 
 Initial stack:
@@ -727,6 +771,7 @@ remain stable; production uses collision-checked opaque random IDs.
 
 Given the selected IDs, mutation and formatting must be deterministic and idempotent.
 
+<a id="s-0JC6P5MZMR"></a>
 ## 15. Technology Direction
 
 Initial implementation:
@@ -760,6 +805,7 @@ Avoid initially unless justified:
 - ORM
 - hard-coded domain workflows
 
+<a id="s-WZFMWK8K4N"></a>
 ### 15.1 v0 Delivery Scope
 
 v0 must prove the complete managed-semantic loop:
@@ -788,6 +834,7 @@ nested CLI commands, automated section split/merge operations, and semantic diff
 tooling are deferred until after the core loop is proven. v0 exposes generic CLI
 operations and named-query invocation instead.
 
+<a id="s-HESSVR7FJT"></a>
 ## 16. Primary Acceptance Principle
 
 For any semantic mutation represented by the repository model:

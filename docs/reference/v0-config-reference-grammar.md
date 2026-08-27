@@ -1,3 +1,12 @@
++++
+id = "reference:config-grammar"
+type = "reference"
+
+# docgraph:generated:v1:begin
+[docgraph_generated]
+# docgraph:generated:end
++++
+<a id="s-H8DH7THYWV"></a>
 # Draft v0 Repository Configuration and Reference Grammar
 
 **Status:** Draft
@@ -7,12 +16,14 @@ Sections identified as post-v0 are directional extensions retained to show how t
 configuration remains cohesive; they are not v0 conformance requirements. Section
 27 is the authoritative v0 delivery boundary.
 
+<a id="s-JGQNP73FXT"></a>
 ## 1. Goals
 
 The v0 configuration must be declarative, repo-local, human/agent-readable, deterministic, easy to validate, expressive enough for arbitrary workflows, and independent of Rust implementation details.
 
 Configuration defines vocabulary and policy. The engine defines storage, indexing, mutation, and reference semantics.
 
+<a id="s-2W94EGV30C"></a>
 ## 2. Repository Layout
 
 ```text
@@ -35,6 +46,7 @@ repository logic.
 post-v0 extensions. A v0 implementation reports them as unsupported rather than
 silently ignoring them.
 
+<a id="s-BPCW03FYW9"></a>
 ## 3. Project Configuration
 
 ```toml
@@ -71,6 +83,7 @@ properties = "properties"
 
 Canonical defaults should make this unnecessary in most repos.
 
+<a id="s-YRKMTN3JAT"></a>
 ## 4. Entity Types
 
 ```toml
@@ -135,6 +148,7 @@ Every key inside the configured properties table must be declared for the entity
 type; unknown keys are validation errors. Other non-reserved top-level frontmatter is
 preserved but is not treated as a managed entity property.
 
+<a id="s-NS2D6RSF7G"></a>
 ## 5. Entity Identity
 
 Canonical entity references use:
@@ -154,6 +168,7 @@ incident:2026-08-14-api-failure
 
 The complete string is the canonical identity.
 
+<a id="s-0EHC9MBVXE"></a>
 ## 6. Documents
 
 A Markdown document may represent an entity:
@@ -173,6 +188,7 @@ initial workflow state when applicable, and missing section IDs in one recoverab
 mutation. It preserves prose and non-reserved TOML frontmatter and rejects collisions
 with configured managed fields.
 
+<a id="s-D4NA13PJ39"></a>
 ## 7. Section Identity
 
 Every `pulldown-cmark` heading event in an indexed document has an opaque stable ID,
@@ -213,6 +229,7 @@ Canonical section references:
 spec:retry#s-83JRT4K2P6
 ```
 
+<a id="s-AHWFVHQ9RM"></a>
 ## 8. Relation Definitions
 
 ```toml
@@ -235,6 +252,7 @@ directed graph for that relation type to remain acyclic. It defaults to `false`;
 cycles are valid unless the relation explicitly prohibits them. Transitive
 relations are derived by repository logic rather than enabled by a relation flag.
 
+<a id="s-X5CTX0BQRA"></a>
 ## 9. Relation Properties
 
 Relation properties use the same schema:
@@ -266,6 +284,7 @@ properties belong to that edge, and repeating the same triple is invalid. Relati
 properties not declared by the relation type are invalid. Adding or changing a
 property declaration must not require a derived-database schema migration.
 
+<a id="s-Q9K2W13EGT"></a>
 ## 10. Relations in Documents
 
 ```toml
@@ -280,6 +299,7 @@ target = "spec:retry#s-83JRT4K2P6"
 
 Source defaults to the enclosing entity.
 
+<a id="s-4G4Y63GEY2"></a>
 ## 11. Ordinary Markdown Links
 
 ```markdown
@@ -302,6 +322,7 @@ broken_internal_links = "error"
 
 External URL availability is not checked by offline validation.
 
+<a id="s-R9GK98N1SM"></a>
 ## 11.1 Semantic Authority
 
 Managed frontmatter, configured state, and explicit semantic relations are
@@ -318,46 +339,54 @@ not meaning expressed only in prose.
 Generated frontmatter is a materialized read model and is never indexed as an
 authoritative input.
 
+<a id="s-9PQY6BWFME"></a>
 ## 12. Reference Grammar
 
 References normalize into canonical graph targets before indexing.
 
+<a id="s-R5SE5SCQ2C"></a>
 ### 12.1 Current-document section
 
 ```text
 #s-83JRT4K2P6
 ```
 
+<a id="s-MTRMS8RAH8"></a>
 ### 12.2 Relative document
 
 ```text
 ../specs/retry.md
 ```
 
+<a id="s-Y8X9TPJ4D1"></a>
 ### 12.3 Relative document section
 
 ```text
 ../specs/retry.md#s-83JRT4K2P6
 ```
 
+<a id="s-K0GKH8G76R"></a>
 ### 12.4 Canonical entity
 
 ```text
 adr:42
 ```
 
+<a id="s-BDRDVBW5SD"></a>
 ### 12.5 Canonical entity section
 
 ```text
 spec:retry#s-83JRT4K2P6
 ```
 
+<a id="s-S9912GWA98"></a>
 ### 12.6 External URI
 
 ```text
 https://example.com/spec
 ```
 
+<a id="s-5XTVF2Q9XV"></a>
 ### 12.7 Repository-host shorthand (post-v0)
 
 Provider adapters may recognize shorthand commonly produced by humans and agents.
@@ -393,6 +422,7 @@ These are graph identities, not workflow types.
 
 Remote metadata is not required.
 
+<a id="s-6RGFEKP4CT"></a>
 ## 13. Provider Configuration (post-v0)
 
 Provider context may normally be inferred from Git remotes.
@@ -422,6 +452,7 @@ Provider recognition must not require network access.
 
 Provider adapters are built-in reference-normalization mechanisms, not repository workflow plugins.
 
+<a id="s-2WHZNDG0A1"></a>
 ## 14. Reference Resolution
 
 Resolution is deterministic:
@@ -438,6 +469,7 @@ Context-sensitive shorthand must not override an unambiguous canonical repositor
 
 No fuzzy repair occurs automatically.
 
+<a id="s-795WATVEQ1"></a>
 ### 14.1 Commit references
 
 Qualified commit forms may be recognized directly:
@@ -448,12 +480,14 @@ owner/repo@a5c3785
 
 Naked hexadecimal strings are ambiguous. A naked candidate may be recognized as a commit only when the local Git repository confirms that it resolves according to configured policy.
 
+<a id="s-ND5QB9RQ4J"></a>
 ### 14.2 Offline behavior
 
 Reference parsing, normalization, indexing, and validation must function without network access.
 
 Future provider integrations may enrich external nodes, but enrichment is outside the reference grammar and must not be required for core operation.
 
+<a id="s-MTVEFXHGWD"></a>
 ## 15. Workflows
 
 ```toml
@@ -480,10 +514,12 @@ The engine validates transitions against the configured state edges. A transitio
 changes the entity's explicit state; downstream effects are recomputed derived
 facts and query results, not additional canonical mutations.
 
+<a id="s-H897BM59NB"></a>
 ## 16. Declared vs Derived State
 
 Workflow state is explicit. Derived state is computed through repository logic and normally not written to frontmatter.
 
+<a id="s-QVTHMJGF4H"></a>
 ## 17. Logic
 
 `logic.dl` contains repo-specific inference and predicates used by named queries.
@@ -543,6 +579,7 @@ predicate for their item type and emit one fact per item. `relation` and the
 deterministic derivatives configured by the repository, such as inverses. v0 does
 not expose informational Markdown links to repository logic.
 
+<a id="s-9QEQNY5QWN"></a>
 ## 18. Named Queries
 
 ```toml
@@ -584,6 +621,7 @@ docgraph query task_blockers --arg task=task:184
 }
 ```
 
+<a id="s-3B3J65MSQN"></a>
 ## 19. Dynamic Commands (post-v0)
 
 Transition:
@@ -634,6 +672,7 @@ Generated:
 docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 ```
 
+<a id="s-TW0V0THMJD"></a>
 ## 20. Generic CLI Escape Hatches
 
 ```bash
@@ -661,6 +700,7 @@ Property values are parsed against the entity type's declared schema. String val
 are passed directly; other scalar and array values use TOML syntax. Both operations
 support `--dry-run` and the standard structured output envelope.
 
+<a id="s-RVDXZTQY4X"></a>
 ## 21. Introspection
 
 Required in v0:
@@ -676,6 +716,7 @@ Post-v0 dynamic-command introspection adds `describe_command`.
 
 Structured JSON output must also be available.
 
+<a id="s-V5R4RB2AP1"></a>
 ## 22. Mutations
 
 All semantic mutation operations support prospective validation.
@@ -720,6 +761,7 @@ inspect
 → validate
 ```
 
+<a id="s-KNXSZ8RYR4"></a>
 ## 23. Managed Frontmatter
 
 Managed fields include at minimum:
@@ -763,6 +805,7 @@ ordering and preserve origin. The block is ignored as graph input.
 `--dry-run`. `frontmatter check` is read-only. Missing, malformed, or stale blocks
 fail validation. Content outside the block is preserved byte-for-byte.
 
+<a id="s-C8KEVFRV5J"></a>
 ## 24. Config Validation
 
 v0 detects unknown entity types, duplicate definitions, missing workflow targets,
@@ -775,6 +818,7 @@ and their referenced queries and relations.
 
 Diagnostics should include config file and source span.
 
+<a id="s-T1A2GRA1JJ"></a>
 ## 25. Agent Skill Structure
 
 ```text
@@ -793,6 +837,7 @@ skills/docgraph/
 
 The root skill remains small and routes agents to task-specific guides.
 
+<a id="s-XBB55PRA71"></a>
 ## 26. Generated Agent Instructions
 
 Instruction targets are repository-relative and configurable; the v0 defaults are:
@@ -826,6 +871,7 @@ The block tells agents that prose is freely editable, all managed frontmatter ch
 use docgraph operations, generated frontmatter must be synchronized, dependency
 reconstruction must not rely on grep, and relevant changes must be validated.
 
+<a id="s-D6B9JYV06F"></a>
 ## 27. v0 Delivery Scope
 
 v0 includes:
@@ -857,6 +903,7 @@ Deferred until after v0:
 
 The generic CLI and named-query invocation remain available in v0.
 
+<a id="s-PDQ5Q60C5R"></a>
 ## 28. v0 Constraints
 
 - one canonical entity ID syntax
@@ -872,6 +919,7 @@ The generic CLI and named-query invocation remain available in v0.
 - no automatic fuzzy reference repair
 - no silent promotion of informational links or search matches into authoritative semantics
 
+<a id="s-GVPQBPMPBJ"></a>
 ## 29. v0 Success Criterion
 
 A new repository can define a novel ontology, workflow, and inference logic using only configuration, the supported Datalog subset, and Markdown/frontmatter, and obtain normalization, indexing, graph traversal, FTS, validation, inference, impact analysis, safe transition/relation mutation, structured introspection, and generated agent guidance without recompiling docgraph.
