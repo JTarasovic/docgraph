@@ -32,6 +32,7 @@ schema_version = 1
 
 [[docgraph_generated.backlinks]]
 source = "plan:complete-v0#s-RGKKJ07YJ3"
+target = "docs/tasks/audit-v0-success.md"
 
 +++
 <a id="s-CV1YNY6QW7"></a>

@@ -13,16 +13,20 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "issue:managed-metadata-guardrails"
 predicate = "affects"
+target = "decision:cli-managed-metadata"
 
 [[docgraph_generated.incoming]]
 source = "task:expand-dogfood-ontology"
 predicate = "implements"
+target = "decision:cli-managed-metadata"
 
 [[docgraph_generated.inverses]]
+source = "decision:cli-managed-metadata"
 type = "affected_by"
 target = "issue:managed-metadata-guardrails"
 
 [[docgraph_generated.inverses]]
+source = "decision:cli-managed-metadata"
 type = "implemented_by"
 target = "task:expand-dogfood-ontology"
 

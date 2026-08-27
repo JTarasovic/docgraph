@@ -136,43 +136,49 @@ fn projection(
         let Some(source) = node_identity(graph, &relation.source) else {
             continue;
         };
+        let Some(target) = node_identity(graph, &relation.target) else {
+            continue;
+        };
         match relation.origin {
             RelationOrigin::Explicit => {
-                incoming.insert((source.clone(), relation.predicate.clone()));
+                incoming.insert((source.clone(), relation.predicate.clone(), target.clone()));
                 if let Some(inverse) = config
                     .relations
                     .get(&relation.predicate)
                     .and_then(|relation| relation.inverse.as_deref())
                 {
-                    inverses.insert((inverse.to_owned(), source));
+                    inverses.insert((target, inverse.to_owned(), source));
                 }
             }
             RelationOrigin::MarkdownLink => {
-                backlinks.insert(source);
+                backlinks.insert((source, target));
             }
         }
     }
 
     let mut output =
         format!("[docgraph_generated]{newline}schema_version = {SCHEMA_VERSION}{newline}");
-    for (source, predicate) in incoming {
+    for (source, predicate, target) in incoming {
         output.push_str(&format!(
-            "{newline}[[docgraph_generated.incoming]]{newline}source = {}{newline}predicate = {}{newline}",
+            "{newline}[[docgraph_generated.incoming]]{newline}source = {}{newline}predicate = {}{newline}target = {}{newline}",
             toml_string(&source),
-            toml_string(&predicate)
+            toml_string(&predicate),
+            toml_string(&target)
         ));
     }
-    for (inverse, target) in inverses {
+    for (source, inverse, target) in inverses {
         output.push_str(&format!(
-            "{newline}[[docgraph_generated.inverses]]{newline}type = {}{newline}target = {}{newline}",
+            "{newline}[[docgraph_generated.inverses]]{newline}source = {}{newline}type = {}{newline}target = {}{newline}",
+            toml_string(&source),
             toml_string(&inverse),
             toml_string(&target)
         ));
     }
-    for source in backlinks {
+    for (source, target) in backlinks {
         output.push_str(&format!(
-            "{newline}[[docgraph_generated.backlinks]]{newline}source = {}{newline}",
-            toml_string(&source)
+            "{newline}[[docgraph_generated.backlinks]]{newline}source = {}{newline}target = {}{newline}",
+            toml_string(&source),
+            toml_string(&target)
         ));
     }
     output
@@ -248,21 +254,23 @@ fn target_document(graph: &GraphIndex, node: &GraphNode) -> Option<usize> {
 
 fn node_identity(graph: &GraphIndex, node: &GraphNode) -> Option<String> {
     match node {
-        GraphNode::Document(document) => {
-            Some(graph.documents.get(*document)?.path.display().to_string())
-        }
+        GraphNode::Document(document) => Some(portable_path(&graph.documents.get(*document)?.path)),
         GraphNode::Entity(id) | GraphNode::ExternalUri(id) => Some(id.clone()),
         GraphNode::Section(section) => {
             let section = graph.sections.get(*section)?;
             let id = section.id.as_ref()?;
             let document = &graph.documents[section.document];
             Some(document.entity.as_ref().map_or_else(
-                || format!("{}#{}", document.path.display(), id.as_str()),
+                || format!("{}#{}", portable_path(&document.path), id.as_str()),
                 |entity| format!("{entity}#{}", id.as_str()),
             ))
         }
         GraphNode::Unresolved(_) => None,
     }
+}
+
+fn portable_path(path: &std::path::Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn toml_string(value: &str) -> String {
@@ -323,7 +331,7 @@ mod tests {
         assert_eq!(render_generated_item(&projection_item(&expected)), expected);
         assert_eq!(once, twice);
         assert!(once.starts_with("+++\n\nid = \"task:1\""));
-        assert!(once.contains("predicate = \"supports\"\n\n+++\n"));
+        assert!(once.contains("predicate = \"supports\"\ntarget = \"docs/task.md\"\n\n+++\n"));
         assert!(once.contains("owner = \"me\""));
         assert!(once.contains("[docgraph_generated]\nschema_version = 1\n"));
         assert!(!once.contains("# docgraph:generated"));

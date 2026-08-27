@@ -12,24 +12,40 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "plan:close-initial-design-gaps"
 predicate = "implements"
+target = "reference:scenarios#s-N6Z4YKP9M0"
 
 [[docgraph_generated.incoming]]
 source = "task:audit-initial-design-closure"
 predicate = "implements"
+target = "reference:scenarios#s-N6Z4YKP9M0"
 
 [[docgraph_generated.incoming]]
 source = "task:expand-initial-design-conformance"
 predicate = "implements"
+target = "reference:scenarios#s-9P22A3H49K"
+
+[[docgraph_generated.incoming]]
+source = "task:expand-initial-design-conformance"
+predicate = "implements"
+target = "reference:scenarios#s-N6Z4YKP9M0"
 
 [[docgraph_generated.inverses]]
+source = "reference:scenarios#s-9P22A3H49K"
+type = "implemented_by"
+target = "task:expand-initial-design-conformance"
+
+[[docgraph_generated.inverses]]
+source = "reference:scenarios#s-N6Z4YKP9M0"
 type = "implemented_by"
 target = "plan:close-initial-design-gaps"
 
 [[docgraph_generated.inverses]]
+source = "reference:scenarios#s-N6Z4YKP9M0"
 type = "implemented_by"
 target = "task:audit-initial-design-closure"
 
 [[docgraph_generated.inverses]]
+source = "reference:scenarios#s-N6Z4YKP9M0"
 type = "implemented_by"
 target = "task:expand-initial-design-conformance"
 

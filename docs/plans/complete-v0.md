@@ -17,66 +17,82 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "task:audit-v0-success"
 predicate = "implements"
+target = "plan:complete-v0#s-RGKKJ07YJ3"
 
 [[docgraph_generated.incoming]]
 source = "task:audit-v0-success"
 predicate = "part_of"
+target = "plan:complete-v0"
 
 [[docgraph_generated.incoming]]
 source = "task:expand-dogfood-ontology"
 predicate = "implements"
+target = "plan:complete-v0#s-XPNKP8XTZW"
 
 [[docgraph_generated.incoming]]
 source = "task:expand-dogfood-ontology"
 predicate = "part_of"
+target = "plan:complete-v0"
 
 [[docgraph_generated.incoming]]
 source = "task:generate-model-appendix"
 predicate = "implements"
+target = "plan:complete-v0#s-XPG39N6DGV"
 
 [[docgraph_generated.incoming]]
 source = "task:generate-model-appendix"
 predicate = "part_of"
+target = "plan:complete-v0"
 
 [[docgraph_generated.incoming]]
 source = "task:support-section-path-endpoints"
 predicate = "implements"
+target = "plan:complete-v0#s-87BFAA4CNY"
 
 [[docgraph_generated.incoming]]
 source = "task:support-section-path-endpoints"
 predicate = "part_of"
+target = "plan:complete-v0"
 
 [[docgraph_generated.inverses]]
+source = "plan:complete-v0"
 type = "contains"
 target = "task:audit-v0-success"
 
 [[docgraph_generated.inverses]]
+source = "plan:complete-v0"
 type = "contains"
 target = "task:expand-dogfood-ontology"
 
 [[docgraph_generated.inverses]]
+source = "plan:complete-v0"
 type = "contains"
 target = "task:generate-model-appendix"
 
 [[docgraph_generated.inverses]]
+source = "plan:complete-v0"
 type = "contains"
 target = "task:support-section-path-endpoints"
 
 [[docgraph_generated.inverses]]
+source = "plan:complete-v0#s-87BFAA4CNY"
+type = "implemented_by"
+target = "task:support-section-path-endpoints"
+
+[[docgraph_generated.inverses]]
+source = "plan:complete-v0#s-RGKKJ07YJ3"
 type = "implemented_by"
 target = "task:audit-v0-success"
 
 [[docgraph_generated.inverses]]
-type = "implemented_by"
-target = "task:expand-dogfood-ontology"
-
-[[docgraph_generated.inverses]]
+source = "plan:complete-v0#s-XPG39N6DGV"
 type = "implemented_by"
 target = "task:generate-model-appendix"
 
 [[docgraph_generated.inverses]]
+source = "plan:complete-v0#s-XPNKP8XTZW"
 type = "implemented_by"
-target = "task:support-section-path-endpoints"
+target = "task:expand-dogfood-ontology"
 
 +++
 <a id="s-9Q7F6PPPE0"></a>

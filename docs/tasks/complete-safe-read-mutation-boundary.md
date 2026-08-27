@@ -33,13 +33,16 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "task:expand-initial-design-conformance"
 predicate = "depends_on"
+target = "task:complete-safe-read-mutation-boundary"
 
 [[docgraph_generated.inverses]]
+source = "task:complete-safe-read-mutation-boundary"
 type = "required_by"
 target = "task:expand-initial-design-conformance"
 
 [[docgraph_generated.backlinks]]
 source = "plan:close-initial-design-gaps#s-X15NG4P6Y4"
+target = "docs/tasks/complete-safe-read-mutation-boundary.md"
 
 +++
 <a id="s-PH5Z0PBRH8"></a>

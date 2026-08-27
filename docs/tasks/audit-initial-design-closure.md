@@ -36,6 +36,7 @@ schema_version = 1
 
 [[docgraph_generated.backlinks]]
 source = "plan:close-initial-design-gaps#s-Q08ZGYHV8W"
+target = "docs/tasks/audit-initial-design-closure.md"
 
 +++
 <a id="s-QBEPZJESW0"></a>

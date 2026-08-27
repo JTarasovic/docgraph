@@ -2,7 +2,7 @@
 
 id = "task:complete-section-relation-roundtrip"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Complete stable-section relation round trips"
@@ -29,13 +29,16 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "task:expand-initial-design-conformance"
 predicate = "depends_on"
+target = "task:complete-section-relation-roundtrip"
 
 [[docgraph_generated.inverses]]
+source = "task:complete-section-relation-roundtrip"
 type = "required_by"
 target = "task:expand-initial-design-conformance"
 
 [[docgraph_generated.backlinks]]
 source = "plan:close-initial-design-gaps#s-40M5GN7XPN"
+target = "docs/tasks/complete-section-relation-roundtrip.md"
 
 +++
 <a id="s-Q79M28EF01"></a>

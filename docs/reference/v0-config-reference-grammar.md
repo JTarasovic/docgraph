@@ -12,66 +12,92 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "issue:multi-file-adoption-normalize-first"
 predicate = "affects"
+target = "reference:config-grammar#s-V5R4RB2AP1"
 
 [[docgraph_generated.incoming]]
 source = "plan:close-initial-design-gaps"
 predicate = "implements"
+target = "reference:config-grammar#s-P73QA8YDQB"
 
 [[docgraph_generated.incoming]]
 source = "plan:complete-v0"
 predicate = "implements"
+target = "reference:config-grammar#s-D6B9JYV06F"
 
 [[docgraph_generated.incoming]]
 source = "task:audit-initial-design-closure"
 predicate = "implements"
+target = "reference:config-grammar#s-P73QA8YDQB"
 
 [[docgraph_generated.incoming]]
 source = "task:audit-v0-success"
 predicate = "implements"
+target = "reference:config-grammar#s-GVPQBPMPBJ"
 
 [[docgraph_generated.incoming]]
 source = "task:complete-safe-read-mutation-boundary"
 predicate = "implements"
+target = "reference:config-grammar#s-V5R4RB2AP1"
 
 [[docgraph_generated.incoming]]
 source = "task:complete-section-relation-roundtrip"
 predicate = "implements"
+target = "reference:config-grammar#s-KNXSZ8RYR4"
+
+[[docgraph_generated.incoming]]
+source = "task:complete-section-relation-roundtrip"
+predicate = "implements"
+target = "reference:config-grammar#s-Q9K2W13EGT"
 
 [[docgraph_generated.incoming]]
 source = "task:support-section-path-endpoints"
 predicate = "implements"
+target = "reference:config-grammar#s-TW0V0THMJD"
 
 [[docgraph_generated.inverses]]
-type = "affected_by"
-target = "issue:multi-file-adoption-normalize-first"
-
-[[docgraph_generated.inverses]]
-type = "implemented_by"
-target = "plan:close-initial-design-gaps"
-
-[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-D6B9JYV06F"
 type = "implemented_by"
 target = "plan:complete-v0"
 
 [[docgraph_generated.inverses]]
-type = "implemented_by"
-target = "task:audit-initial-design-closure"
-
-[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-GVPQBPMPBJ"
 type = "implemented_by"
 target = "task:audit-v0-success"
 
 [[docgraph_generated.inverses]]
-type = "implemented_by"
-target = "task:complete-safe-read-mutation-boundary"
-
-[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-KNXSZ8RYR4"
 type = "implemented_by"
 target = "task:complete-section-relation-roundtrip"
 
 [[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-P73QA8YDQB"
+type = "implemented_by"
+target = "plan:close-initial-design-gaps"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-P73QA8YDQB"
+type = "implemented_by"
+target = "task:audit-initial-design-closure"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-Q9K2W13EGT"
+type = "implemented_by"
+target = "task:complete-section-relation-roundtrip"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-TW0V0THMJD"
 type = "implemented_by"
 target = "task:support-section-path-endpoints"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-V5R4RB2AP1"
+type = "affected_by"
+target = "issue:multi-file-adoption-normalize-first"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-V5R4RB2AP1"
+type = "implemented_by"
+target = "task:complete-safe-read-mutation-boundary"
 
 +++
 <a id="s-H8DH7THYWV"></a>

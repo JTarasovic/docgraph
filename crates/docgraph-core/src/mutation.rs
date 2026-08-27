@@ -293,8 +293,8 @@ impl MutationService {
                 target,
                 properties,
             } => {
-                let node = unique_entity(&graph, source)?;
-                let path = &graph.documents[node.document].path;
+                let relation_source = relation_mutation_source(&graph, source)?;
+                let path = &graph.documents[relation_source.document].path;
                 let input = contents.get(path).expect("corpus content exists");
                 let edited = edit_document(input, |document| {
                     let generated_position = document
@@ -305,6 +305,9 @@ impl MutationService {
                         relations_mut(document, &self.config.project.frontmatter.relations)?;
                     let mut relation = Table::new();
                     relation.set_position(generated_position.map(|position| position - 1));
+                    if relation_source.explicit {
+                        relation.insert("source", value(source.clone()));
+                    }
                     relation.insert("type", value(predicate.clone()));
                     relation.insert("target", value(target.clone()));
                     for (key, property) in properties {
@@ -320,8 +323,8 @@ impl MutationService {
                 predicate,
                 target,
             } => {
-                let node = unique_entity(&graph, source)?;
-                let path = &graph.documents[node.document].path;
+                let relation_source = relation_mutation_source(&graph, source)?;
+                let path = &graph.documents[relation_source.document].path;
                 let input = contents.get(path).expect("corpus content exists");
                 let edited = edit_document(input, |document| {
                     let relations =
@@ -330,7 +333,11 @@ impl MutationService {
                         .iter()
                         .enumerate()
                         .filter(|(_, relation)| {
-                            relation.get("type").and_then(Item::as_str) == Some(predicate)
+                            let authored_source = relation.get("source").and_then(Item::as_str);
+                            let source_matches = authored_source == Some(source)
+                                || (!relation_source.explicit && authored_source.is_none());
+                            source_matches
+                                && relation.get("type").and_then(Item::as_str) == Some(predicate)
                                 && relation.get("target").and_then(Item::as_str) == Some(target)
                         })
                         .map(|(index, _)| index)
@@ -550,6 +557,61 @@ fn unique_entity<'a>(
             "entity {id:?} is duplicated"
         ))),
     }
+}
+
+struct RelationMutationSource {
+    document: usize,
+    explicit: bool,
+}
+
+fn relation_mutation_source(
+    graph: &GraphIndex,
+    reference: &str,
+) -> Result<RelationMutationSource, MutationError> {
+    let entities: Vec<_> = graph
+        .entities
+        .iter()
+        .filter(|entity| entity.id == reference)
+        .collect();
+    if let [entity] = entities.as_slice() {
+        return Ok(RelationMutationSource {
+            document: entity.document,
+            explicit: false,
+        });
+    }
+    if entities.len() > 1 {
+        return Err(MutationError::InvalidRequest(format!(
+            "entity {reference:?} is duplicated"
+        )));
+    }
+    let sections: Vec<_> = graph
+        .sections
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| stable_section_reference(graph, *index).as_deref() == Some(reference))
+        .collect();
+    match sections.as_slice() {
+        [(_, section)] => Ok(RelationMutationSource {
+            document: section.document,
+            explicit: true,
+        }),
+        [] => Err(MutationError::InvalidRequest(format!(
+            "entity or stable section {reference:?} does not exist"
+        ))),
+        _ => Err(MutationError::InvalidRequest(format!(
+            "stable section {reference:?} is duplicated"
+        ))),
+    }
+}
+
+fn stable_section_reference(graph: &GraphIndex, index: usize) -> Option<String> {
+    let section = graph.sections.get(index)?;
+    let id = section.id.as_ref()?;
+    let document = graph.documents.get(section.document)?;
+    Some(document.entity.as_ref().map_or_else(
+        || format!("{}#{}", document.path.display(), id.as_str()),
+        |entity| format!("{entity}#{}", id.as_str()),
+    ))
 }
 
 fn edit_document(
@@ -916,7 +978,7 @@ mod tests {
             .unwrap();
             fs::write(
                 root.join(".docgraph/relations.toml"),
-                "[relation.blocks]\ndescription = \"Blocks\"\nsource = [\"task\"]\ntarget = [\"task\"]\ninverse = \"blocked_by\"\n[relation.blocked_by]\ndescription = \"Blocked by\"\nsource = [\"task\"]\ntarget = [\"task\"]\ninverse = \"blocks\"\n",
+                "[relation.blocks]\ndescription = \"Blocks\"\nsource = [\"task\"]\ntarget = [\"task\"]\ninverse = \"blocked_by\"\n[relation.blocked_by]\ndescription = \"Blocked by\"\nsource = [\"task\"]\ntarget = [\"task\"]\ninverse = \"blocks\"\n[relation.cites]\ndescription = \"Cites\"\nsource = [\"section\"]\ntarget = [\"section\"]\ninverse = \"cited_by\"\n[relation.cited_by]\ndescription = \"Cited by\"\nsource = [\"section\"]\ntarget = [\"section\"]\ninverse = \"cites\"\n",
             )
             .unwrap();
             fs::write(
@@ -1076,6 +1138,72 @@ mod tests {
             .unwrap();
         let target = fs::read_to_string(fixture.0.join("docs/two.md")).unwrap();
         assert!(target.contains("predicate = \"blocks\""));
+    }
+
+    #[test]
+    fn section_relation_mutation_preserves_both_exact_endpoints() {
+        let fixture = Fixture::new();
+        let second_path = fixture.0.join("docs/two.md");
+        let mut second = fs::read_to_string(&second_path).unwrap();
+        second.push_str("\n<a id=\"s-9H4K2M7Q8R\"></a>\n## Two details\n");
+        fs::write(&second_path, second).unwrap();
+        let service = MutationService::open(&fixture.0).unwrap();
+        let source = "task:1#s-83JRT4K2P6";
+        let first_target = "task:2#s-7K3M9Q2W";
+        let second_target = "task:2#s-9H4K2M7Q8R";
+
+        for target in [first_target, second_target] {
+            service
+                .apply(
+                    &MutationRequest::AddRelation {
+                        source: source.to_owned(),
+                        predicate: "cites".to_owned(),
+                        target: target.to_owned(),
+                        properties: BTreeMap::new(),
+                    },
+                    false,
+                )
+                .unwrap();
+        }
+
+        let authored = fs::read_to_string(fixture.0.join("docs/one.md")).unwrap();
+        let projected = fs::read_to_string(&second_path).unwrap();
+        assert_eq!(
+            authored.matches(&format!("source = \"{source}\"")).count(),
+            2
+        );
+        assert!(authored.contains(&format!("target = \"{first_target}\"")));
+        assert!(authored.contains(&format!("target = \"{second_target}\"")));
+        for target in [first_target, second_target] {
+            assert!(projected.contains(&format!(
+                "source = \"{source}\"\npredicate = \"cites\"\ntarget = \"{target}\""
+            )));
+            assert!(projected.contains(&format!(
+                "source = \"{target}\"\ntype = \"cited_by\"\ntarget = \"{source}\""
+            )));
+        }
+
+        service
+            .apply(
+                &MutationRequest::RemoveRelation {
+                    source: source.to_owned(),
+                    predicate: "cites".to_owned(),
+                    target: first_target.to_owned(),
+                },
+                false,
+            )
+            .unwrap();
+
+        let authored = fs::read_to_string(fixture.0.join("docs/one.md")).unwrap();
+        let projected = fs::read_to_string(second_path).unwrap();
+        assert!(!authored.contains(&format!("target = \"{first_target}\"")));
+        assert!(authored.contains(&format!("target = \"{second_target}\"")));
+        assert!(!projected.contains(&format!(
+            "predicate = \"cites\"\ntarget = \"{first_target}\""
+        )));
+        assert!(projected.contains(&format!(
+            "predicate = \"cites\"\ntarget = \"{second_target}\""
+        )));
     }
 
     #[test]

@@ -24,6 +24,7 @@ schema_version = 1
 
 [[docgraph_generated.backlinks]]
 source = "plan:complete-v0#s-XPNKP8XTZW"
+target = "docs/tasks/expand-dogfood-ontology.md"
 
 +++
 <a id="s-PXSM6K5EZX"></a>

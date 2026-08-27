@@ -25,13 +25,16 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "task:audit-v0-success"
 predicate = "depends_on"
+target = "task:generate-model-appendix"
 
 [[docgraph_generated.inverses]]
+source = "task:generate-model-appendix"
 type = "required_by"
 target = "task:audit-v0-success"
 
 [[docgraph_generated.backlinks]]
 source = "plan:complete-v0#s-XPG39N6DGV"
+target = "docs/tasks/generate-model-appendix.md"
 
 +++
 <a id="s-395T841P69"></a>

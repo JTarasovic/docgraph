@@ -12,42 +12,52 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "plan:close-initial-design-gaps"
 predicate = "implements"
+target = "reference:design#s-DRW3RR84VS"
 
 [[docgraph_generated.incoming]]
 source = "task:audit-initial-design-closure"
 predicate = "implements"
+target = "reference:design#s-DRW3RR84VS"
 
 [[docgraph_generated.incoming]]
 source = "task:complete-safe-read-mutation-boundary"
 predicate = "implements"
+target = "reference:design#s-B7542FYPRY"
 
 [[docgraph_generated.incoming]]
 source = "task:generate-model-appendix"
 predicate = "implements"
+target = "reference:design#s-DD5NS2HR0R"
 
 [[docgraph_generated.incoming]]
 source = "task:implement-derived-index-lifecycle"
 predicate = "implements"
+target = "reference:design#s-7BBMBXC9RK"
 
 [[docgraph_generated.inverses]]
+source = "reference:design#s-7BBMBXC9RK"
 type = "implemented_by"
-target = "plan:close-initial-design-gaps"
+target = "task:implement-derived-index-lifecycle"
 
 [[docgraph_generated.inverses]]
-type = "implemented_by"
-target = "task:audit-initial-design-closure"
-
-[[docgraph_generated.inverses]]
+source = "reference:design#s-B7542FYPRY"
 type = "implemented_by"
 target = "task:complete-safe-read-mutation-boundary"
 
 [[docgraph_generated.inverses]]
+source = "reference:design#s-DD5NS2HR0R"
 type = "implemented_by"
 target = "task:generate-model-appendix"
 
 [[docgraph_generated.inverses]]
+source = "reference:design#s-DRW3RR84VS"
 type = "implemented_by"
-target = "task:implement-derived-index-lifecycle"
+target = "plan:close-initial-design-gaps"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-DRW3RR84VS"
+type = "implemented_by"
+target = "task:audit-initial-design-closure"
 
 +++
 <a id="s-FEFSK4BQTV"></a>

@@ -25,21 +25,26 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "task:complete-safe-read-mutation-boundary"
 predicate = "depends_on"
+target = "task:implement-derived-index-lifecycle"
 
 [[docgraph_generated.incoming]]
 source = "task:expand-initial-design-conformance"
 predicate = "depends_on"
+target = "task:implement-derived-index-lifecycle"
 
 [[docgraph_generated.inverses]]
+source = "task:implement-derived-index-lifecycle"
 type = "required_by"
 target = "task:complete-safe-read-mutation-boundary"
 
 [[docgraph_generated.inverses]]
+source = "task:implement-derived-index-lifecycle"
 type = "required_by"
 target = "task:expand-initial-design-conformance"
 
 [[docgraph_generated.backlinks]]
 source = "plan:close-initial-design-gaps#s-0C1QAG3ZHE"
+target = "docs/tasks/implement-derived-index-lifecycle.md"
 
 +++
 <a id="s-YEX1YPXA6S"></a>

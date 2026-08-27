@@ -25,13 +25,16 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "task:audit-v0-success"
 predicate = "depends_on"
+target = "task:support-section-path-endpoints"
 
 [[docgraph_generated.inverses]]
+source = "task:support-section-path-endpoints"
 type = "required_by"
 target = "task:audit-v0-success"
 
 [[docgraph_generated.backlinks]]
 source = "plan:complete-v0#s-87BFAA4CNY"
+target = "docs/tasks/support-section-path-endpoints.md"
 
 +++
 <a id="s-195M6YNE0Y"></a>

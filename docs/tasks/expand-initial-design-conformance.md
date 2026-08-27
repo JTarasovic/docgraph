@@ -2,7 +2,7 @@
 
 id = "task:expand-initial-design-conformance"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Expand initial-design conformance"
@@ -41,13 +41,16 @@ schema_version = 1
 [[docgraph_generated.incoming]]
 source = "task:audit-initial-design-closure"
 predicate = "depends_on"
+target = "task:expand-initial-design-conformance"
 
 [[docgraph_generated.inverses]]
+source = "task:expand-initial-design-conformance"
 type = "required_by"
 target = "task:audit-initial-design-closure"
 
 [[docgraph_generated.backlinks]]
 source = "plan:close-initial-design-gaps#s-KWVRG8GZN0"
+target = "docs/tasks/expand-initial-design-conformance.md"
 
 +++
 <a id="s-ZACCAH1SWP"></a>
