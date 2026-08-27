@@ -4,9 +4,10 @@ cargo.binstall_only = true
 
 [tools]
 rust = { version = "1.98.0", profile = "minimal", components = ["rustfmt", "clippy"] }
-"cargo:cargo-deny" = "0.20.2"
-"cargo:cargo-machete" = "0.9.2"
-"cargo:cargo-nextest" = "0.9.143"
+cargo-binstall = "1.20.0"
+"cargo:cargo-deny" = { version = "0.20.2", depends = ["cargo-binstall", "rust"] }
+"cargo:cargo-machete" = { version = "0.9.2", depends = ["cargo-binstall", "rust"] }
+"cargo:cargo-nextest" = { version = "0.9.143", depends = ["cargo-binstall", "rust"] }
 
 [tasks.fmt]
 description = "Check Rust formatting"
