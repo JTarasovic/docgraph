@@ -73,11 +73,14 @@ jobs:
 
       - name: Install packaged logic runtime
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $archive = Join-Path $env:RUNNER_TEMP "docgraph-logic-runtime.zip"
-          Invoke-WebRequest `
-            -Uri "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-windows-a1303be3/docgraph-logic-runtime-windows-x86_64-a1303be3.zip" `
-            -OutFile $archive
+          gh release download logic-runtime-windows-a1303be3 `
+            --repo $env:GITHUB_REPOSITORY `
+            --pattern "docgraph-logic-runtime-windows-x86_64-a1303be3.zip" `
+            --output $archive
           $expected = "65880b97ad4c0242e457917afbce6c59aad1ee6fffa6a9490cd31f62117ee267"
           $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
           if ($actual -ne $expected) {
