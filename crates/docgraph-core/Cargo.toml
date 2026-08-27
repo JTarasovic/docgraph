@@ -14,5 +14,6 @@ path = "src/lib.rs"
 blake3.workspace = true
 docgraph-markdown.workspace = true
 ignore.workspace = true
+rusqlite.workspace = true
 serde.workspace = true
 toml_edit.workspace = true

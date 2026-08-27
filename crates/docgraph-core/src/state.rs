@@ -1,4 +1,7 @@
-use crate::{Repository, RepositoryFingerprint, SCHEMA_VERSION};
+use crate::{
+    CanonicalCorpus, DerivedSearchHit, GraphIndex, Repository, RepositoryFingerprint,
+    SCHEMA_VERSION, derived_index,
+};
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -94,6 +97,21 @@ impl DerivedState {
                 path: self.paths.fingerprint.clone(),
             })?;
         if recorded == current {
+            let indexed = derived_index::recorded_fingerprint(&self.paths.index)
+                .map_err(|source| DerivedStateError::Sqlite {
+                    path: self.paths.index.clone(),
+                    source,
+                })?
+                .ok_or_else(|| DerivedStateError::CorruptMetadata {
+                    path: self.paths.index.clone(),
+                })?;
+            if indexed != recorded {
+                return Err(DerivedStateError::CorruptMetadata {
+                    path: self.paths.index.clone(),
+                });
+            }
+        }
+        if recorded == current {
             Ok(IndexStatus::Fresh)
         } else {
             Ok(IndexStatus::Stale { recorded, current })
@@ -113,6 +131,77 @@ impl DerivedState {
             source,
         })
     }
+
+    pub fn refresh(
+        &self,
+        corpus: &CanonicalCorpus,
+        graph: &GraphIndex,
+    ) -> Result<(), DerivedStateError> {
+        fs::create_dir_all(&self.paths.directory).map_err(|source| DerivedStateError::Io {
+            path: self.paths.directory.clone(),
+            source,
+        })?;
+        let temporary = self.paths.index.with_extension("sqlite.next");
+        match fs::remove_file(&temporary) {
+            Ok(()) => {}
+            Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => {
+                return Err(DerivedStateError::Io {
+                    path: temporary,
+                    source,
+                });
+            }
+        }
+        derived_index::build(&temporary, corpus.fingerprint, corpus, graph).map_err(|source| {
+            DerivedStateError::Sqlite {
+                path: temporary.clone(),
+                source,
+            }
+        })?;
+        match fs::remove_file(&self.paths.index) {
+            Ok(()) => {}
+            Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => {
+                return Err(DerivedStateError::Io {
+                    path: self.paths.index.clone(),
+                    source,
+                });
+            }
+        }
+        fs::rename(&temporary, &self.paths.index).map_err(|source| DerivedStateError::Io {
+            path: self.paths.index.clone(),
+            source,
+        })?;
+        self.record(corpus.fingerprint)
+    }
+
+    pub fn ensure_fresh(
+        &self,
+        corpus: &CanonicalCorpus,
+        graph: &GraphIndex,
+    ) -> Result<(), DerivedStateError> {
+        match self.status(corpus.fingerprint) {
+            Ok(IndexStatus::Fresh) => Ok(()),
+            Ok(IndexStatus::Missing | IndexStatus::Stale { .. })
+            | Err(DerivedStateError::CorruptMetadata { .. } | DerivedStateError::Sqlite { .. }) => {
+                self.refresh(corpus, graph)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    pub fn search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<DerivedSearchHit>, DerivedStateError> {
+        derived_index::search(&self.paths.index, query, limit).map_err(|source| {
+            DerivedStateError::Sqlite {
+                path: self.paths.index.clone(),
+                source,
+            }
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -127,9 +216,20 @@ pub enum IndexStatus {
 
 #[derive(Debug)]
 pub enum DerivedStateError {
-    Io { path: PathBuf, source: io::Error },
-    InvalidGitPointer { path: PathBuf },
-    CorruptMetadata { path: PathBuf },
+    Io {
+        path: PathBuf,
+        source: io::Error,
+    },
+    Sqlite {
+        path: PathBuf,
+        source: rusqlite::Error,
+    },
+    InvalidGitPointer {
+        path: PathBuf,
+    },
+    CorruptMetadata {
+        path: PathBuf,
+    },
 }
 
 impl fmt::Display for DerivedStateError {
@@ -142,6 +242,13 @@ impl fmt::Display for DerivedStateError {
                 write!(
                     formatter,
                     "{} is not a valid Git worktree pointer",
+                    path.display()
+                )
+            }
+            Self::Sqlite { path, source } => {
+                write!(
+                    formatter,
+                    "cannot use derived index {}: {source}",
                     path.display()
                 )
             }
@@ -160,6 +267,7 @@ impl Error for DerivedStateError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Io { source, .. } => Some(source),
+            Self::Sqlite { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -250,9 +358,18 @@ mod tests {
         let second = fingerprint('2');
 
         assert_eq!(state.status(first).unwrap(), IndexStatus::Missing);
-        fs::create_dir_all(&state.paths.directory).unwrap();
-        fs::write(&state.paths.index, b"derived index").unwrap();
-        state.record(first).unwrap();
+        let corpus = CanonicalCorpus {
+            files: Vec::new(),
+            fingerprint: first,
+        };
+        let graph = GraphIndex {
+            documents: Vec::new(),
+            entities: Vec::new(),
+            sections: Vec::new(),
+            relations: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        state.refresh(&corpus, &graph).unwrap();
 
         assert_eq!(state.status(first).unwrap(), IndexStatus::Fresh);
         assert_eq!(
@@ -262,5 +379,31 @@ mod tests {
                 current: second
             }
         );
+    }
+
+    #[test]
+    fn replaces_an_old_or_corrupt_index_when_ensuring_freshness() {
+        let temp = TempDirectory::new();
+        let repository = temp.repository("one", &temp.0.join("gitdirs/one"));
+        let state = DerivedState::discover(&repository).unwrap();
+        let current = fingerprint('1');
+        let corpus = CanonicalCorpus {
+            files: Vec::new(),
+            fingerprint: current,
+        };
+        let graph = GraphIndex {
+            documents: Vec::new(),
+            entities: Vec::new(),
+            sections: Vec::new(),
+            relations: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        fs::create_dir_all(&state.paths.directory).unwrap();
+        fs::write(&state.paths.index, b"docgraph-derived-index-v1\n").unwrap();
+        state.record(current).unwrap();
+
+        state.ensure_fresh(&corpus, &graph).unwrap();
+
+        assert_eq!(state.status(current).unwrap(), IndexStatus::Fresh);
     }
 }

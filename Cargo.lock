@@ -216,6 +216,7 @@ dependencies = [
  "blake3",
  "docgraph-markdown",
  "ignore",
+ "rusqlite",
  "serde",
  "toml_edit",
 ]

@@ -5,7 +5,7 @@ type = "plan"
 state = "completed"
 
 [properties]
-title = "Complete the v0 product contract"
+title = "Prove the v0 core slice"
 
 [[relations]]
 type = "implements"
@@ -80,17 +80,17 @@ target = "task:support-section-path-endpoints"
 
 +++
 <a id="s-9Q7F6PPPE0"></a>
-# Complete the v0 product contract
+# Prove the v0 core slice
 
 <a id="s-B2N4PV81M7"></a>
 ## Objective
 
-Finish and verify the v0 behavior defined by the reference corpus while using this repository as a representative docgraph project.
+Prove the narrow v0 success criterion while using this repository as a representative docgraph project.
 
 <a id="s-AQ57NFXKHB"></a>
 ## Scope
 
-Track only concrete gaps against the v0 delivery scope. Post-v0 features remain outside this plan.
+Track the minimum end-to-end slice needed to prove the core loop. Broader initial-design gaps are tracked separately.
 
 <a id="s-3SD16SBDQJ"></a>
 ## Steps

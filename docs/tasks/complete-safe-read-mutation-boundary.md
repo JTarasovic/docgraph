@@ -2,7 +2,7 @@
 
 id = "task:complete-safe-read-mutation-boundary"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Complete the safe read and mutation boundary"

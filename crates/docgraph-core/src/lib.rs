@@ -2,6 +2,7 @@
 
 mod config;
 mod corpus;
+mod derived_index;
 mod generated_frontmatter;
 mod graph;
 mod instructions;
@@ -19,6 +20,7 @@ pub use config::{
     WorkflowConfig,
 };
 pub use corpus::{CanonicalCorpus, CorpusError, CorpusFile, RepositoryFingerprint};
+pub use derived_index::DerivedSearchHit;
 pub use generated_frontmatter::{
     GeneratedBlockError, GeneratedBlockStatus, check_generated_frontmatter,
     sync_generated_frontmatter,
@@ -32,7 +34,7 @@ pub use instructions::{
 };
 pub use mutation::{FileChange, MutationError, MutationPlan, MutationRequest, MutationService};
 pub use repository::{DiscoveryError, Repository};
-pub use retrieval::{GraphTraversal, Neighbor, SearchHit, SearchIndex};
+pub use retrieval::{GraphTraversal, Neighbor};
 pub use state::{DerivedState, DerivedStateError, DerivedStatePaths, IndexStatus};
 pub use validation::{ValidationDiagnostic, ValidationLocation, ValidationReport, Validator};
 

@@ -548,3 +548,35 @@ fn normalization_dry_run_apply_and_reindex_complete_the_fixture_loop() {
     }
     assert!(String::from_utf8_lossy(&fixture.run(&["normalize"]).stdout).contains("no changes"));
 }
+
+#[test]
+fn derived_index_is_sqlite_reused_when_fresh_and_refreshed_when_stale() {
+    let fixture = Fixture::copy("synthetic");
+    let index = fixture.0.join(".docgraph/.state/index.sqlite");
+    let fingerprint = fixture.0.join(".docgraph/.state/fingerprint");
+
+    assert!(fixture.run(&["get", "florp:1"]).status.success());
+    let fresh_index = fs::read(&index).unwrap();
+    let fresh_fingerprint = fs::read_to_string(&fingerprint).unwrap();
+    assert_eq!(&fresh_index[..16], b"SQLite format 3\0");
+
+    assert!(fixture.run(&["get", "florp:1"]).status.success());
+    assert_eq!(fs::read(&index).unwrap(), fresh_index);
+    assert_eq!(fs::read_to_string(&fingerprint).unwrap(), fresh_fingerprint);
+
+    let document = fixture.0.join("docs/florp.md");
+    let mut source = fs::read_to_string(&document).unwrap();
+    source.push_str("\nPersistent-index-refresh-sentinel.\n");
+    fs::write(document, source).unwrap();
+    let search = fixture.run(&["--json", "search", "refresh sentinel"]);
+    assert!(
+        search.status.success(),
+        "{}",
+        String::from_utf8_lossy(&search.stderr)
+    );
+    let search: Value = serde_json::from_slice(&search.stdout).unwrap();
+
+    assert!(!search["rows"].as_array().unwrap().is_empty());
+    assert_ne!(fs::read_to_string(fingerprint).unwrap(), fresh_fingerprint);
+    assert_ne!(fs::read(index).unwrap(), fresh_index);
+}

@@ -124,6 +124,10 @@ impl MutationService {
             .map_err(|error| MutationError::Corpus(error.to_string()))?;
         let plan = self.plan_against(request, &current)?;
         if plan.is_empty() {
+            let graph = GraphIndex::build(&current, &self.config);
+            self.state
+                .ensure_fresh(&current, &graph)
+                .map_err(|error| MutationError::State(error.to_string()))?;
             return Ok(plan);
         }
         for change in &plan.changes {
@@ -161,10 +165,9 @@ impl MutationService {
 
         let refreshed = CanonicalCorpus::load(&self.repository, &self.config)
             .map_err(|error| MutationError::Corpus(error.to_string()))?;
-        fs::write(&self.state.paths.index, b"docgraph-derived-index-v1\n")
-            .map_err(|source| MutationError::io(&self.state.paths.index, source))?;
+        let refreshed_graph = GraphIndex::build(&refreshed, &self.config);
         self.state
-            .record(refreshed.fingerprint)
+            .refresh(&refreshed, &refreshed_graph)
             .map_err(|error| MutationError::State(error.to_string()))?;
         Ok(plan)
     }

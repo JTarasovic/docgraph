@@ -3,7 +3,7 @@ use docgraph_core::{
     CanonicalCorpus, DerivedState, DiagnosticSeverity, GeneratedBlockStatus, GraphIndex, GraphNode,
     GraphTraversal, InstructionService, InstructionStatus, MutationPlan, MutationRequest,
     MutationService, PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository,
-    RepositoryConfig, SearchIndex, Validator, check_generated_frontmatter,
+    RepositoryConfig, Validator, check_generated_frontmatter,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde_json::{Value as JsonValue, json};
@@ -171,6 +171,14 @@ impl Context {
             graph,
         })
     }
+
+    fn ensure_derived(&self) -> Result<DerivedState, CliError> {
+        let state = DerivedState::discover(&self.repository).map_err(CliError::boxed)?;
+        state
+            .ensure_fresh(&self.corpus, &self.graph)
+            .map_err(CliError::boxed)?;
+        Ok(state)
+    }
 }
 
 fn main() -> ExitCode {
@@ -219,17 +227,21 @@ fn run(cli: Cli) -> Result<(), CliError> {
         }
         Command::Get { reference } => {
             let context = Context::load()?;
+            context.ensure_derived()?;
             get(&context, &reference, cli.json)
         }
         Command::Search { query, limit } => {
             let context = Context::load()?;
-            let hits = SearchIndex::build(&context.corpus, &context.graph).search(&query, limit);
+            let hits = context
+                .ensure_derived()?
+                .search(&query, limit)
+                .map_err(CliError::boxed)?;
             if cli.json {
                 let rows: Vec<_> = hits
                     .iter()
                     .map(|hit| {
                         json!({
-                            "node": node_name(&context.graph, &hit.node),
+                            "node": hit.node,
                             "score": hit.score,
                             "snippet": hit.snippet,
                         })
@@ -238,12 +250,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 print_json(json!({ "query": query, "rows": rows }))
             } else {
                 for hit in hits {
-                    println!(
-                        "{:.3}\t{}\t{}",
-                        hit.score,
-                        node_name(&context.graph, &hit.node),
-                        hit.snippet
-                    );
+                    println!("{:.3}\t{}\t{}", hit.score, hit.node, hit.snippet);
                 }
                 Ok(())
             }
@@ -304,6 +311,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
         ),
         Command::Neighbors { entity, all } => {
             let context = Context::load()?;
+            context.ensure_derived()?;
             let node = GraphNode::Entity(entity);
             let origin = (!all).then_some(RelationOrigin::Explicit);
             let neighbors = GraphTraversal::new(&context.graph).neighbors(&node, origin);
@@ -339,6 +347,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
             all,
         } => {
             let context = Context::load()?;
+            context.ensure_derived()?;
             let source = resolve_graph_reference(&context.graph, &source)?;
             let target = resolve_graph_reference(&context.graph, &target)?;
             let path = GraphTraversal::new(&context.graph)
@@ -656,6 +665,7 @@ fn validate(json_output: bool) -> Result<(), CliError> {
 
 fn query(name: &str, raw: &[String], json_output: bool) -> Result<(), CliError> {
     let context = Context::load()?;
+    context.ensure_derived()?;
     let query = context
         .config
         .queries
@@ -966,10 +976,8 @@ fn render_text_patch(path: &std::path::Path, original: &str, intended: &str) -> 
 
 fn refresh_derived(context: &Context) -> Result<(), CliError> {
     let state = DerivedState::discover(&context.repository).map_err(CliError::boxed)?;
-    std::fs::create_dir_all(&state.paths.directory).map_err(CliError::boxed)?;
-    std::fs::write(&state.paths.index, b"docgraph-derived-index-v1\n").map_err(CliError::boxed)?;
     state
-        .record(context.corpus.fingerprint)
+        .refresh(&context.corpus, &context.graph)
         .map_err(CliError::boxed)
 }
 

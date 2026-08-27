@@ -2,7 +2,7 @@
 
 id = "task:implement-derived-index-lifecycle"
 type = "task"
-state = "ready"
+state = "done"
 
 [properties]
 title = "Implement the derived-index lifecycle"
