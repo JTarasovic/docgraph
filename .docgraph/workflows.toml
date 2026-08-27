@@ -56,3 +56,16 @@ description = "The task is complete."
 
 [workflow.task.states.dropped]
 description = "The task will not be completed."
+
+[workflow.issue]
+initial = "open"
+
+[workflow.issue.states.open]
+description = "The issue still needs a disposition."
+transitions = ["resolved", "accepted"]
+
+[workflow.issue.states.resolved]
+description = "The issue has been addressed."
+
+[workflow.issue.states.accepted]
+description = "The issue is understood and intentionally left as-is."

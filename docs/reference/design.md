@@ -10,12 +10,44 @@ role = "design"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "plan:close-initial-design-gaps"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:audit-initial-design-closure"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:complete-safe-read-mutation-boundary"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
 source = "task:generate-model-appendix"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:implement-derived-index-lifecycle"
 predicate = "implements"
 
 [[docgraph_generated.inverses]]
 type = "implemented_by"
+target = "plan:close-initial-design-gaps"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:audit-initial-design-closure"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:complete-safe-read-mutation-boundary"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
 target = "task:generate-model-appendix"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:implement-derived-index-lifecycle"
 
 +++
 <a id="s-FEFSK4BQTV"></a>
@@ -504,12 +536,17 @@ The index contains:
 - inferred facts
 - source locations
 - FTS
-- vector index
+- vector index (post-v0)
 - index metadata
 
-Incremental indexing should use Git blob IDs where available and BLAKE3 otherwise.
+The initial v0 slice builds the normalized graph and FTS in memory from canonical
+inputs for each command. A persistent SQLite derived index, reuse across commands,
+and query-time freshness enforcement remain follow-on implementation work.
 
-Unchanged files are not reparsed. Changed chunks are the only chunks re-embedded.
+Incremental persistent indexing should use Git blob IDs where available and BLAKE3 otherwise.
+
+Unchanged files should not be reparsed. Changed chunks are the only chunks
+re-embedded once post-v0 vector indexing exists.
 
 The index records enough metadata to detect staleness after checkout, merge, parser changes, schema changes, or embedding changes.
 
@@ -536,6 +573,10 @@ The target architecture supports structured graph retrieval (`get`, `neighbors`,
 vector search. Repositories may expose named explanation queries for important
 derived predicates. v0 includes structured retrieval, FTS, and named queries; vector
 retrieval is post-v0 direction.
+
+The v0 CLI exposes `get`, `neighbors`, and `path`; `get` assembles direct context and
+structured output preserves edge direction. Dedicated `incoming`, `outgoing`,
+arbitrary-depth `traverse`, and broader `context` commands remain post-v0 ergonomics.
 
 Post-v0 embedding generation should use a provider abstraction rather than bundle a
 large model into the binary.
@@ -850,6 +891,23 @@ Vector retrieval, embedding providers, repository-host shorthand adapters, gener
 nested CLI commands, automated section split/merge operations, and semantic diff
 tooling are deferred until after the core loop is proven. v0 exposes generic CLI
 operations and named-query invocation instead.
+
+<a id="s-DRW3RR84VS"></a>
+### 15.2 Initial Design Follow-On
+
+This work is tracked by [Close the initial design gaps](../plans/close-initial-design-gaps.md).
+
+The narrow v0 success criterion is proven, but the broader initial design still has
+four cohesive implementation gaps:
+
+- replace the derived-index marker with a persistent per-worktree SQLite graph/FTS index
+- run recovery and freshness handling before reads as well as mutations
+- complete explicit stable-section relation mutation and preserve exact section endpoints in generated projections
+- expand the conformance fixtures and CI so generic workflows, inference, recovery, and the packaged logic runtime are exercised continuously
+
+Document creation/deletion/moves, automated section split/merge/delete, provider
+adapters, vectors, generated domain commands, semantic diff/merge, and expanded
+retrieval convenience commands remain explicitly deferred rather than hidden gaps.
 
 <a id="s-HESSVR7FJT"></a>
 ## 16. Primary Acceptance Principle

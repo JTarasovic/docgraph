@@ -11,8 +11,16 @@ title = "Route managed metadata changes through the CLI"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:managed-metadata-guardrails"
+predicate = "affects"
+
+[[docgraph_generated.incoming]]
 source = "task:expand-dogfood-ontology"
 predicate = "implements"
+
+[[docgraph_generated.inverses]]
+type = "affected_by"
+target = "issue:managed-metadata-guardrails"
 
 [[docgraph_generated.inverses]]
 type = "implemented_by"

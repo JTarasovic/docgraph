@@ -35,3 +35,15 @@ description = "The source requirement or decision is implemented by the target w
 source = ["reference", "decision", "section"]
 target = ["plan", "task"]
 inverse = "implements"
+
+[relation.affects]
+description = "The source issue creates friction or risk for the target."
+source = ["issue"]
+target = ["reference", "decision", "plan", "task", "section"]
+inverse = "affected_by"
+
+[relation.affected_by]
+description = "The source is subject to the target issue."
+source = ["reference", "decision", "plan", "task", "section"]
+target = ["issue"]
+inverse = "affects"

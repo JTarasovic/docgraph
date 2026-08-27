@@ -9,6 +9,30 @@ role = "conformance"
 [docgraph_generated]
 schema_version = 1
 
+[[docgraph_generated.incoming]]
+source = "plan:close-initial-design-gaps"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:audit-initial-design-closure"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:expand-initial-design-conformance"
+predicate = "implements"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "plan:close-initial-design-gaps"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:audit-initial-design-closure"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:expand-initial-design-conformance"
+
 +++
 <a id="s-W2JDJP657B"></a>
 # Draft Scenarios and Conformance Suite
@@ -333,7 +357,8 @@ This must work without Florp-specific or GitHub-workflow-specific Rust code.
 <a id="s-9P22A3H49K"></a>
 ## 15. Cross-Cutting Mutation Tests
 
-Required cases:
+Target cases are listed here. Section 20.2 accounts for the implemented v0 subset,
+the remaining initial-design gaps, and explicitly deferred structural scenarios.
 
 - file rename/move/delete/duplicate ID
 - heading rename, section move/split/merge/delete
@@ -485,6 +510,26 @@ reindex, and generated-frontmatter sync/check loop plus the agent-guidance tests
 remaining fixtures and the tests
 for vectors, repository-host shorthand, generated nested commands, automated section
 split/merge, and semantic diff remain the post-v0 conformance roadmap.
+
+<a id="s-N6Z4YKP9M0"></a>
+### 20.2 Current Coverage and Remaining Gaps
+
+The current fixtures prove parsing, normalization, typed configuration and
+properties, stable sections, explicit and informational relations, workflow
+transitions, validation, FTS, restricted recursive logic, typed named queries, safe
+transition/relation patches, generated frontmatter, and generated agent guidance.
+
+The next conformance increment must add:
+
+- a richer synthetic ontology with multiple workflows, inverse and cyclic relations, section endpoints, and derived readiness/transitive queries
+- persistent-index refresh/staleness and read-before-recovery scenarios
+- concurrent edit, interrupted multi-file recovery, unknown recovery state, and separate-worktree cases
+- exact section-source mutation and section-preserving generated-projection cases
+- runtime-backed logic execution in CI rather than only parser/type tests
+
+File/entity creation, deletion, and moves; automated section split/merge/delete;
+provider shorthand; vectors; dynamic commands; semantic diff; and semantic merge
+remain post-v0 scenarios.
 
 <a id="s-7BT3682S4Q"></a>
 ## 21. Primary Conformance Requirement

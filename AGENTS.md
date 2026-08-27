@@ -19,11 +19,14 @@ This repository uses docgraph.
 
 Entity types:
 - `decision`; workflow `decision` — A recorded architectural or product decision.
+- `issue`; workflow `issue` — An observed defect, friction point, or design risk requiring disposition.
 - `plan`; workflow `plan` — A bounded outcome comprising related work.
 - `reference` — A docgraph product reference document.
 - `task`; workflow `task` — A concrete unit of work.
 
 Relations:
+- `affected_by`: `reference`, `decision`, `plan`, `task`, `section` → `issue`; inverse `affects` — The source is subject to the target issue.
+- `affects`: `issue` → `reference`, `decision`, `plan`, `task`, `section`; inverse `affected_by` — The source issue creates friction or risk for the target.
 - `contains`: `plan` → `task`; inverse `part_of` — The source plan contains the target task.
 - `depends_on`: `task` → `task`; inverse `required_by`; acyclic — The source cannot be completed before the target.
 - `implemented_by`: `reference`, `decision`, `section` → `plan`, `task`; inverse `implements` — The source requirement or decision is implemented by the target work.
@@ -33,6 +36,7 @@ Relations:
 
 Workflows:
 - `decision`; initial `proposed`: `proposed` → `accepted`, `rejected`; `accepted` → `superseded`; `rejected` (terminal); `superseded` (terminal)
+- `issue`; initial `open`: `open` → `resolved`, `accepted`; `accepted` (terminal); `resolved` (terminal)
 - `plan`; initial `proposed`: `proposed` → `active`, `abandoned`; `abandoned` (terminal); `active` → `completed`, `abandoned`; `completed` (terminal)
 - `task`; initial `backlog`: `backlog` → `ready`, `dropped`; `blocked` → `ready`, `dropped`; `done` (terminal); `dropped` (terminal); `in_progress` → `done`, `blocked`, `dropped`; `ready` → `in_progress`, `dropped`
 

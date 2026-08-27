@@ -10,7 +10,19 @@ role = "grammar"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:multi-file-adoption-normalize-first"
+predicate = "affects"
+
+[[docgraph_generated.incoming]]
+source = "plan:close-initial-design-gaps"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
 source = "plan:complete-v0"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:audit-initial-design-closure"
 predicate = "implements"
 
 [[docgraph_generated.incoming]]
@@ -18,8 +30,24 @@ source = "task:audit-v0-success"
 predicate = "implements"
 
 [[docgraph_generated.incoming]]
+source = "task:complete-safe-read-mutation-boundary"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
+source = "task:complete-section-relation-roundtrip"
+predicate = "implements"
+
+[[docgraph_generated.incoming]]
 source = "task:support-section-path-endpoints"
 predicate = "implements"
+
+[[docgraph_generated.inverses]]
+type = "affected_by"
+target = "issue:multi-file-adoption-normalize-first"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "plan:close-initial-design-gaps"
 
 [[docgraph_generated.inverses]]
 type = "implemented_by"
@@ -27,7 +55,19 @@ target = "plan:complete-v0"
 
 [[docgraph_generated.inverses]]
 type = "implemented_by"
+target = "task:audit-initial-design-closure"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
 target = "task:audit-v0-success"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:complete-safe-read-mutation-boundary"
+
+[[docgraph_generated.inverses]]
+type = "implemented_by"
+target = "task:complete-section-relation-roundtrip"
 
 [[docgraph_generated.inverses]]
 type = "implemented_by"
@@ -941,6 +981,23 @@ Deferred until after v0:
 - semantic diff tooling
 
 The generic CLI and named-query invocation remain available in v0.
+
+<a id="s-P73QA8YDQB"></a>
+### 27.1 Implementation Accounting
+
+The completed v0 success slice uses an in-memory graph and FTS rebuilt from canonical
+inputs. The broader initial contract still requires four follow-on increments:
+
+- a real per-worktree SQLite derived index with refresh/rebuild behavior
+- recovery and derived-state freshness checks before read commands
+- CLI mutation of relations whose explicit source is a stable section, plus generated projections that retain the exact section endpoint
+- expanded conformance fixtures and CI coverage, including runtime-backed logic tests on the CI platform
+
+The following remain deferred: vectors and embedding providers, repository-host
+adapters, generated nested commands, entity/document creation/deletion/moves,
+automated section split/merge/delete, semantic diff/merge, and dedicated
+`incoming`/`outgoing`/`traverse`/expanded-`context` commands. Existing `get`,
+`neighbors`, and `path` remain the v0 structured-retrieval surface.
 
 <a id="s-PDQ5Q60C5R"></a>
 ## 28. v0 Constraints

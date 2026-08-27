@@ -29,3 +29,11 @@ workflow = "task"
 [entity.task.property.title]
 type = "string"
 required = true
+
+[entity.issue]
+description = "An observed defect, friction point, or design risk requiring disposition."
+workflow = "issue"
+
+[entity.issue.property.title]
+type = "string"
+required = true
