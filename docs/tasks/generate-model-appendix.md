@@ -1,4 +1,5 @@
 +++
+
 id = "task:generate-model-appendix"
 type = "task"
 state = "ready"
@@ -24,6 +25,7 @@ predicate = "depends_on"
 [[docgraph_generated.inverses]]
 type = "required_by"
 target = "task:audit-v0-success"
+
 +++
 <a id="s-395T841P69"></a>
 # Generate the repository-model appendix

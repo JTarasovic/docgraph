@@ -2,7 +2,9 @@ use crate::{
     CanonicalCorpus, CorpusFile, DerivedState, GraphIndex, Repository, RepositoryConfig,
     RepositoryFingerprint, Validator, sync_generated_frontmatter,
 };
-use docgraph_markdown::{ParsedDocument, StableSectionId, normalize_sections_with_reserved_random};
+use docgraph_markdown::{
+    ParsedDocument, StableSectionId, frame_content, normalize_sections_with_reserved_random,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -551,11 +553,14 @@ fn edit_document(
     })?;
     let mut document = frontmatter.to_mut();
     edit(&mut document)?;
+    let newline = if source.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let rendered = frame_content(&document.to_string(), newline);
     let mut output = source.to_owned();
-    output.replace_range(
-        frontmatter.content_span.bytes.clone(),
-        &document.to_string(),
-    );
+    output.replace_range(frontmatter.content_span.bytes.clone(), &rendered);
     Ok(output)
 }
 
@@ -635,11 +640,14 @@ fn adopt_document(
     }
 
     if let Some(frontmatter) = &parsed.frontmatter {
+        let newline = if source.contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
+        let rendered = frame_content(&document.to_string(), newline);
         let mut output = source.to_owned();
-        output.replace_range(
-            frontmatter.content_span.bytes.clone(),
-            &document.to_string(),
-        );
+        output.replace_range(frontmatter.content_span.bytes.clone(), &rendered);
         Ok(output)
     } else {
         let newline = if source.contains("\r\n") {
@@ -648,6 +656,7 @@ fn adopt_document(
             "\n"
         };
         let frontmatter = document.to_string().replace('\n', newline);
+        let frontmatter = frame_content(&frontmatter, newline);
         Ok(format!("+++{newline}{frontmatter}+++{newline}{source}"))
     }
 }

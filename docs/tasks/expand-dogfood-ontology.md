@@ -1,4 +1,5 @@
 +++
+
 id = "task:expand-dogfood-ontology"
 type = "task"
 state = "done"
@@ -16,6 +17,7 @@ target = "decision:cli-managed-metadata"
 
 [docgraph_generated]
 schema_version = 1
+
 +++
 <a id="s-PXSM6K5EZX"></a>
 # Expand the dogfood ontology

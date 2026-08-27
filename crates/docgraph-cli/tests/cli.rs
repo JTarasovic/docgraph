@@ -369,7 +369,7 @@ fn historical_research_mutation_updates_context_and_query_results() {
     let section: Value = serde_json::from_slice(&section.stdout).unwrap();
     assert_eq!(section["kind"], "section");
     assert_eq!(section["document"], "docs/finding.md");
-    assert_eq!(section["span"]["start_line"], 20);
+    assert_eq!(section["span"]["start_line"], 22);
     assert_eq!(section["span"]["line_count"], 3);
     assert!(
         section["content"]

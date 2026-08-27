@@ -1,4 +1,5 @@
 +++
+
 id = "task:support-section-path-endpoints"
 type = "task"
 state = "ready"
@@ -24,6 +25,7 @@ predicate = "depends_on"
 [[docgraph_generated.inverses]]
 type = "required_by"
 target = "task:audit-v0-success"
+
 +++
 <a id="s-195M6YNE0Y"></a>
 # Support section endpoints in graph paths

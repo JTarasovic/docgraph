@@ -1,4 +1,5 @@
 +++
+
 id = "task:audit-v0-success"
 type = "task"
 state = "backlog"
@@ -24,6 +25,7 @@ target = "task:support-section-path-endpoints"
 
 [docgraph_generated]
 schema_version = 1
+
 +++
 <a id="s-CV1YNY6QW7"></a>
 # Audit the v0 success criterion

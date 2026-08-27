@@ -1,4 +1,5 @@
 +++
+
 id = "decision:git-native-state"
 type = "decision"
 state = "accepted"
@@ -8,6 +9,7 @@ title = "Keep canonical state in Git-native documents"
 
 [docgraph_generated]
 schema_version = 1
+
 +++
 <a id="s-AWWRH5TPT6"></a>
 # Keep canonical state in Git-native documents

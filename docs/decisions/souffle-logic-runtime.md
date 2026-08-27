@@ -1,4 +1,5 @@
 +++
+
 id = "decision:souffle-runtime"
 type = "decision"
 state = "accepted"
@@ -8,6 +9,7 @@ title = "Use Soufflé as the logic runtime"
 
 [docgraph_generated]
 schema_version = 1
+
 +++
 <a id="s-A0N5ZETTD3"></a>
 # Use Soufflé as the logic runtime

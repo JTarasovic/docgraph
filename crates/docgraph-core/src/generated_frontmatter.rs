@@ -1,4 +1,5 @@
 use crate::{CanonicalCorpus, GraphIndex, GraphNode, RelationOrigin, RepositoryConfig};
+use docgraph_markdown::frame_content;
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
@@ -113,6 +114,7 @@ pub fn sync_generated_frontmatter(
         replacement.push_str(&expected);
         replacement
     };
+    let replacement = frame_content(&replacement, newline);
     let mut output = source.to_owned();
     output.replace_range(frontmatter.content_span.bytes.clone(), &replacement);
     Ok(output)
@@ -320,6 +322,8 @@ mod tests {
         let expected = projection(&graph, &config, 0, "\n");
         assert_eq!(render_generated_item(&projection_item(&expected)), expected);
         assert_eq!(once, twice);
+        assert!(once.starts_with("+++\n\nid = \"task:1\""));
+        assert!(once.contains("predicate = \"supports\"\n\n+++\n"));
         assert!(once.contains("owner = \"me\""));
         assert!(once.contains("[docgraph_generated]\nschema_version = 1\n"));
         assert!(!once.contains("# docgraph:generated"));

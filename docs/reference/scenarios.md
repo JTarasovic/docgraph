@@ -1,4 +1,5 @@
 +++
+
 id = "reference:scenarios"
 type = "reference"
 
@@ -7,6 +8,7 @@ role = "conformance"
 
 [docgraph_generated]
 schema_version = 1
+
 +++
 <a id="s-W2JDJP657B"></a>
 # Draft Scenarios and Conformance Suite

@@ -1,4 +1,5 @@
 +++
+
 id = "finding:retry-memory"
 type = "finding"
 
@@ -15,6 +16,7 @@ target = "research:retry-history"
 
 [[docgraph_generated.backlinks]]
 source = "research:retry-history#s-1A2B3C4D5E"
+
 +++
 <a id="s-5D6F7G8H9J"></a>
 # Retry memory finding

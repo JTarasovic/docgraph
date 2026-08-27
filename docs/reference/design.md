@@ -1,4 +1,5 @@
 +++
+
 id = "reference:design"
 type = "reference"
 
@@ -15,6 +16,7 @@ predicate = "implements"
 [[docgraph_generated.inverses]]
 type = "implemented_by"
 target = "task:generate-model-appendix"
+
 +++
 <a id="s-FEFSK4BQTV"></a>
 # Draft Design: Git-Native Document Graph and Workflow Engine
@@ -269,6 +271,7 @@ Structured project state lives in frontmatter. TOML is the leading candidate bec
 
 ```toml
 +++
+
 id = "adr:42"
 type = "adr"
 state = "proposed"
@@ -276,6 +279,7 @@ state = "proposed"
 [[relations]]
 type = "supersedes"
 target = "adr:19"
+
 +++
 ```
 

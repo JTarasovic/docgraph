@@ -108,6 +108,12 @@ pub(crate) fn parse(source: &str) -> Result<(Option<Frontmatter>, usize), Frontm
     })
 }
 
+/// Adds one blank line inside each frontmatter delimiter without changing the TOML body.
+pub fn frame_content(content: &str, newline: &str) -> String {
+    let body = content.trim_matches(['\r', '\n']);
+    format!("{newline}{body}{newline}{newline}")
+}
+
 fn delimiter_end(source: &str, start: usize) -> Option<usize> {
     if source[start..].starts_with("+++\r\n") {
         Some(start + 5)
@@ -189,4 +195,28 @@ fn structural_prefix(line: &str) -> (usize, Vec<Range<usize>>) {
     }
 
     (cursor, list_markers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::frame_content;
+
+    #[test]
+    fn framing_is_idempotent_and_preserves_inner_toml() {
+        let content = "\n\nid = \"task:1\"\n\n[properties]\ntitle = \"One\"\n\n";
+        let framed = frame_content(content, "\n");
+        assert_eq!(
+            framed,
+            "\nid = \"task:1\"\n\n[properties]\ntitle = \"One\"\n\n"
+        );
+        assert_eq!(frame_content(&framed, "\n"), framed);
+    }
+
+    #[test]
+    fn framing_preserves_crlf() {
+        assert_eq!(
+            frame_content("id = \"task:1\"\r\n", "\r\n"),
+            "\r\nid = \"task:1\"\r\n\r\n"
+        );
+    }
 }

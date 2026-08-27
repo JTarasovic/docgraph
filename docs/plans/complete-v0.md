@@ -1,4 +1,5 @@
 +++
+
 id = "plan:complete-v0"
 type = "plan"
 state = "active"
@@ -44,6 +45,7 @@ target = "task:generate-model-appendix"
 [[docgraph_generated.inverses]]
 type = "contains"
 target = "task:support-section-path-endpoints"
+
 +++
 <a id="s-9Q7F6PPPE0"></a>
 # Complete the v0 product contract

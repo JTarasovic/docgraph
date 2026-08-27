@@ -1,4 +1,5 @@
 +++
+
 id = "reference:config-grammar"
 type = "reference"
 
@@ -31,6 +32,7 @@ target = "task:audit-v0-success"
 [[docgraph_generated.inverses]]
 type = "implemented_by"
 target = "task:support-section-path-endpoints"
+
 +++
 <a id="s-H8DH7THYWV"></a>
 # Draft v0 Repository Configuration and Reference Grammar
@@ -161,12 +163,14 @@ Canonical document values live in a reserved table:
 
 ```toml
 +++
+
 id = "task:184"
 type = "task"
 
 [properties]
 title = "Implement retry handling"
 priority = "high"
+
 +++
 ```
 
@@ -201,13 +205,19 @@ A Markdown document may represent an entity:
 
 ```toml
 +++
+
 id = "adr:42"
 type = "adr"
 state = "proposed"
+
 +++
 ```
 
 Path is physical location; entity ID is semantic identity.
+
+Canonical frontmatter has one blank line after the opening delimiter and one before
+the closing delimiter so repository Markdown renderers keep the delimiters separate
+from the TOML metadata.
 
 `docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>]` adds the managed identity,
 initial workflow state when applicable, and missing section IDs in one recoverable

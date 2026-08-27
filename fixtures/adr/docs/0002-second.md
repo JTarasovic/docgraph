@@ -1,4 +1,5 @@
 +++
+
 id = "adr:2"
 type = "adr"
 state = "accepted"
@@ -12,6 +13,7 @@ target = "adr:1"
 
 [docgraph_generated]
 schema_version = 1
+
 +++
 <a id="s-7K3M9Q2W"></a>
 # Use stable section identities

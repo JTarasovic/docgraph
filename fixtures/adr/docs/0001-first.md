@@ -1,4 +1,5 @@
 +++
+
 id = "adr:1"
 type = "adr"
 state = "proposed"
@@ -16,6 +17,7 @@ predicate = "supersedes"
 [[docgraph_generated.inverses]]
 type = "superseded_by"
 target = "adr:2"
+
 +++
 <a id="s-83JRT4K2P6"></a>
 # Use a document graph

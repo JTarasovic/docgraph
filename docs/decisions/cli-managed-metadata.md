@@ -1,4 +1,5 @@
 +++
+
 id = "decision:cli-managed-metadata"
 type = "decision"
 state = "accepted"
@@ -16,6 +17,7 @@ predicate = "implements"
 [[docgraph_generated.inverses]]
 type = "implemented_by"
 target = "task:expand-dogfood-ontology"
+
 +++
 <a id="s-QKJWD5B1Z3"></a>
 # Route managed metadata changes through the CLI
