@@ -49,6 +49,11 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Set or remove a typed entity property.
+    Property {
+        #[command(subcommand)]
+        action: PropertyAction,
+    },
     /// Add an explicit managed relation.
     Relate {
         source: String,
@@ -216,6 +221,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
             dry_run,
             cli.json,
         ),
+        Command::Property { action } => property(action, cli.json),
         Command::Relate {
             source,
             relation,
@@ -451,6 +457,23 @@ fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliE
     }
 }
 
+#[derive(Subcommand)]
+enum PropertyAction {
+    Set {
+        entity: String,
+        property: String,
+        value: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    Unset {
+        entity: String,
+        property: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
 fn relation_context(graph: &GraphIndex, node: &GraphNode) -> Vec<JsonValue> {
     GraphTraversal::new(graph)
         .neighbors(node, None)
@@ -470,6 +493,58 @@ fn mutate(request: MutationRequest, dry_run: bool, json_output: bool) -> Result<
     let service = MutationService::open(".").map_err(CliError::boxed)?;
     let plan = service.apply(&request, dry_run).map_err(CliError::boxed)?;
     print_plan(&plan, dry_run, json_output)
+}
+
+fn property(action: PropertyAction, json_output: bool) -> Result<(), CliError> {
+    let (entity, property, raw_value, dry_run) = match action {
+        PropertyAction::Set {
+            entity,
+            property,
+            value,
+            dry_run,
+        } => (entity, property, Some(value), dry_run),
+        PropertyAction::Unset {
+            entity,
+            property,
+            dry_run,
+        } => (entity, property, None, dry_run),
+    };
+    let context = Context::load()?;
+    let node = context
+        .graph
+        .entities
+        .iter()
+        .find(|candidate| candidate.id == entity)
+        .ok_or_else(|| CliError::message(format!("entity {entity:?} does not exist")))?;
+    let property_config = context
+        .config
+        .entities
+        .get(&node.entity_type)
+        .and_then(|entity| entity.property.get(&property))
+        .ok_or_else(|| {
+            CliError::message(format!(
+                "entity type {:?} has no declared property {property:?}",
+                node.entity_type
+            ))
+        })?;
+    let request = raw_value.map_or_else(
+        || {
+            Ok(MutationRequest::RemoveEntityProperty {
+                entity: entity.clone(),
+                property: property.clone(),
+            })
+        },
+        |raw| {
+            parse_toml_value(&raw, property_config).map(|value| {
+                MutationRequest::SetEntityProperty {
+                    entity: entity.clone(),
+                    property: property.clone(),
+                    value,
+                }
+            })
+        },
+    )?;
+    mutate(request, dry_run, json_output)
 }
 
 fn validate(json_output: bool) -> Result<(), CliError> {

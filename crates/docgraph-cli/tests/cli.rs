@@ -166,6 +166,48 @@ fn configured_logic_runtime_executes_a_typed_query() {
     assert_eq!(scalars["rows"][0]["boolean"], true);
     assert_eq!(scalars["rows"][0]["text"], "left\tright");
 
+    let document = fixture.0.join("docs/florp.md");
+    let before = fs::read_to_string(&document).unwrap();
+    let preview = fixture.run(&["property", "set", "florp:1", "count", "8", "--dry-run"]);
+    assert!(preview.status.success());
+    assert_eq!(fs::read_to_string(&document).unwrap(), before);
+    assert!(
+        fixture
+            .run(&["property", "set", "florp:1", "count", "8"])
+            .status
+            .success()
+    );
+    let get = fixture.run(&["--json", "get", "florp:1"]);
+    let get: Value = serde_json::from_slice(&get.stdout).unwrap();
+    assert_eq!(get["properties"]["count"], 8);
+    assert!(
+        !fixture
+            .run(&["property", "set", "florp:1", "score", "not-a-float"])
+            .status
+            .success()
+    );
+    assert!(
+        fixture
+            .run(&["property", "unset", "florp:1", "labels"])
+            .status
+            .success()
+    );
+    let details = fixture.run(&["--json", "query", "florp_details", "--arg", "florp=florp:1"]);
+    let details: Value = serde_json::from_slice(&details.stdout).unwrap();
+    assert_eq!(details["rows"], serde_json::json!([]));
+    assert!(
+        fixture
+            .run(&[
+                "property",
+                "set",
+                "florp:1",
+                "labels",
+                "[\"odd\", \"novel\"]",
+            ])
+            .status
+            .success()
+    );
+
     let logic_path = fixture.0.join(".docgraph/logic.dl");
     let malformed = fs::read_to_string(&logic_path).unwrap().replace(
         "relation(florp, \"grommits\", target).",
@@ -182,6 +224,12 @@ fn transition_dry_run_then_apply_updates_the_fixture() {
     let fixture = Fixture::copy("adr");
     let path = fixture.0.join("docs/0001-first.md");
     let before = fs::read_to_string(&path).unwrap();
+    let runtime_available = std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_some();
+    if runtime_available {
+        let query = fixture.run(&["--json", "query", "accepted_adrs"]);
+        let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+        assert_eq!(query["rows"], serde_json::json!([{ "adr": "adr:2" }]));
+    }
 
     let preview = fixture.run(&["transition", "adr:1", "accepted", "--dry-run"]);
     assert!(preview.status.success());
@@ -200,6 +248,18 @@ fn transition_dry_run_then_apply_updates_the_fixture() {
             .contains("state = \"accepted\"")
     );
     assert!(fixture.run(&["validate"]).status.success());
+    if runtime_available {
+        let query = fixture.run(&["--json", "query", "accepted_adrs"]);
+        let query: Value = serde_json::from_slice(&query.stdout).unwrap();
+        assert_eq!(query["rows"].as_array().unwrap().len(), 2);
+        assert!(
+            query["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|row| row["adr"] == "adr:1")
+        );
+    }
 }
 
 #[test]

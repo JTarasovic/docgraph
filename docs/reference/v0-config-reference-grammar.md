@@ -636,6 +636,8 @@ docgraph describe
 docgraph get <entity-or-stable-section>
 docgraph search <query>
 docgraph transition <entity> <state>
+docgraph property set <entity> <property> <value>
+docgraph property unset <entity> <property>
 docgraph relate <source> <relation> <target>
 docgraph unrelate <source> <relation> <target>
 docgraph neighbors <entity>
@@ -648,6 +650,10 @@ docgraph instructions check
 docgraph frontmatter sync [--dry-run]
 docgraph frontmatter check
 ```
+
+Property values are parsed against the entity type's declared schema. String values
+are passed directly; other scalar and array values use TOML syntax. Both operations
+support `--dry-run` and the standard structured output envelope.
 
 ## 21. Introspection
 

@@ -29,6 +29,15 @@ pub enum MutationRequest {
         predicate: String,
         target: String,
     },
+    SetEntityProperty {
+        entity: String,
+        property: String,
+        value: toml_edit::Value,
+    },
+    RemoveEntityProperty {
+        entity: String,
+        property: String,
+    },
     Normalize,
     SyncFrontmatter,
 }
@@ -265,6 +274,37 @@ impl MutationService {
                 })?;
                 contents.insert(path.clone(), edited);
             }
+            MutationRequest::SetEntityProperty {
+                entity,
+                property,
+                value,
+            } => {
+                let node = unique_entity(&graph, entity)?;
+                let path = &graph.documents[node.document].path;
+                let input = contents.get(path).expect("corpus content exists");
+                let edited = edit_document(input, |document| {
+                    properties_mut(document, &self.config.project.frontmatter.properties)?
+                        .insert(property, Item::Value(value.clone()));
+                    Ok(())
+                })?;
+                contents.insert(path.clone(), edited);
+            }
+            MutationRequest::RemoveEntityProperty { entity, property } => {
+                let node = unique_entity(&graph, entity)?;
+                let path = &graph.documents[node.document].path;
+                let input = contents.get(path).expect("corpus content exists");
+                let edited = edit_document(input, |document| {
+                    let properties =
+                        properties_mut(document, &self.config.project.frontmatter.properties)?;
+                    if properties.remove(property).is_none() {
+                        return Err(MutationError::InvalidRequest(format!(
+                            "entity {entity:?} has no property {property:?}"
+                        )));
+                    }
+                    Ok(())
+                })?;
+                contents.insert(path.clone(), edited);
+            }
             MutationRequest::Normalize => {
                 let mut reserved: BTreeSet<StableSectionId> = graph
                     .sections
@@ -473,6 +513,27 @@ fn relations_mut<'a>(
             MutationError::InvalidRequest(format!(
                 "managed field {field:?} must be an array of tables"
             ))
+        })
+}
+
+fn properties_mut<'a>(
+    document: &'a mut DocumentMut,
+    field: &str,
+) -> Result<&'a mut Table, MutationError> {
+    if document.get(field).is_none() {
+        let generated_position = document
+            .get("docgraph_generated")
+            .and_then(Item::as_table)
+            .and_then(Table::position);
+        let mut properties = Table::new();
+        properties.set_position(generated_position.map(|position| position - 1));
+        document.insert(field, Item::Table(properties));
+    }
+    document
+        .get_mut(field)
+        .and_then(Item::as_table_mut)
+        .ok_or_else(|| {
+            MutationError::InvalidRequest(format!("managed field {field:?} must be a table"))
         })
 }
 
