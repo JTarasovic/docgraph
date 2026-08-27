@@ -92,7 +92,7 @@ enum Command {
         #[arg(long)]
         all: bool,
     },
-    /// Find the shortest graph path between two entities.
+    /// Find the shortest graph path between canonical entities or stable sections.
     Path {
         source: String,
         target: String,
@@ -339,8 +339,8 @@ fn run(cli: Cli) -> Result<(), CliError> {
             all,
         } => {
             let context = Context::load()?;
-            let source = GraphNode::Entity(source);
-            let target = GraphNode::Entity(target);
+            let source = resolve_graph_reference(&context.graph, &source)?;
+            let target = resolve_graph_reference(&context.graph, &target)?;
             let path = GraphTraversal::new(&context.graph)
                 .shortest_path(&source, &target, (!all).then_some(RelationOrigin::Explicit))
                 .ok_or_else(|| CliError::message("no graph path found"))?;
@@ -423,13 +423,14 @@ fn describe(
 }
 
 fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliError> {
-    let value = if let Some(entity) = context
-        .graph
-        .entities
-        .iter()
-        .find(|entity| entity.id == reference)
-    {
-        let node = GraphNode::Entity(reference.to_owned());
+    let node = resolve_graph_reference(&context.graph, reference)?;
+    let value = if let GraphNode::Entity(id) = &node {
+        let entity = context
+            .graph
+            .entities
+            .iter()
+            .find(|entity| entity.id == *id)
+            .expect("resolved entities originate in the graph");
         let properties: BTreeMap<_, _> = entity
             .properties
             .iter()
@@ -444,14 +445,8 @@ fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliE
             "properties": properties,
             "relations": relation_context(&context.graph, &node),
         })
-    } else if let Some((index, section)) = context
-        .graph
-        .sections
-        .iter()
-        .enumerate()
-        .find(|(index, _)| node_name(&context.graph, &GraphNode::Section(*index)) == reference)
-    {
-        let node = GraphNode::Section(index);
+    } else if let GraphNode::Section(index) = node {
+        let section = &context.graph.sections[index];
         let document = &context.graph.documents[section.document];
         let file = context
             .corpus
@@ -481,9 +476,7 @@ fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliE
             "relations": relation_context(&context.graph, &node),
         })
     } else {
-        return Err(CliError::message(format!(
-            "entity or stable section {reference:?} does not exist"
-        )));
+        unreachable!("canonical graph references resolve only to entities or sections");
     };
     if json_output {
         print_json(value)
@@ -494,6 +487,25 @@ fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliE
         );
         Ok(())
     }
+}
+
+fn resolve_graph_reference(graph: &GraphIndex, reference: &str) -> Result<GraphNode, CliError> {
+    if graph.entities.iter().any(|entity| entity.id == reference) {
+        return Ok(GraphNode::Entity(reference.to_owned()));
+    }
+    graph
+        .sections
+        .iter()
+        .enumerate()
+        .find_map(|(index, _)| {
+            (node_name(graph, &GraphNode::Section(index)) == reference)
+                .then_some(GraphNode::Section(index))
+        })
+        .ok_or_else(|| {
+            CliError::message(format!(
+                "entity or stable section {reference:?} does not exist"
+            ))
+        })
 }
 
 #[derive(Subcommand)]

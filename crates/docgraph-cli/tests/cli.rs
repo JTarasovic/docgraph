@@ -435,6 +435,41 @@ fn historical_research_mutation_updates_context_and_query_results() {
 }
 
 #[test]
+fn graph_paths_accept_entities_and_stable_sections_as_endpoints() {
+    let fixture = Fixture::copy("historical-research");
+    let entity = "research:retry-history";
+    let section = "finding:retry-memory#s-5D6F7G8H9J";
+
+    let forward = fixture.run(&["--json", "path", entity, section]);
+    assert!(
+        forward.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&forward.stdout),
+        String::from_utf8_lossy(&forward.stderr)
+    );
+    let forward: Value = serde_json::from_slice(&forward.stdout).unwrap();
+    assert_eq!(forward["path"], serde_json::json!([entity, section]));
+
+    let reverse = fixture.run(&["--json", "path", section, entity]);
+    assert!(
+        reverse.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&reverse.stdout),
+        String::from_utf8_lossy(&reverse.stderr)
+    );
+    let reverse: Value = serde_json::from_slice(&reverse.stdout).unwrap();
+    assert_eq!(reverse["path"], serde_json::json!([section, entity]));
+
+    let missing = fixture.run(&["path", entity, "finding:retry-memory#s-0000000000"]);
+    assert!(!missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains(
+            "entity or stable section \"finding:retry-memory#s-0000000000\" does not exist"
+        )
+    );
+}
+
+#[test]
 fn v0_fixtures_exercise_exact_graph_search_and_named_query_retrieval() {
     if !logic_runtime_configured() {
         return;

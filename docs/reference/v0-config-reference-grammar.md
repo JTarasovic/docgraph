@@ -722,7 +722,7 @@ docgraph property unset <entity> <property>
 docgraph relate <source> <relation> <target>
 docgraph unrelate <source> <relation> <target>
 docgraph neighbors <entity>
-docgraph path <source> <target>
+docgraph path <entity-or-stable-section> <entity-or-stable-section>
 docgraph normalize
 docgraph validate
 docgraph query <name> --arg <name>=<value> [--arg ...] [--json]

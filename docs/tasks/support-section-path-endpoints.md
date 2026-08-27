@@ -2,7 +2,7 @@
 
 id = "task:support-section-path-endpoints"
 type = "task"
-state = "ready"
+state = "done"
 
 [properties]
 title = "Support section endpoints in graph paths"
