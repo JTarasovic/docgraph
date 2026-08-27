@@ -1,6 +1,6 @@
 use crate::{
     CanonicalCorpus, CorpusFile, DerivedState, GraphIndex, Repository, RepositoryConfig,
-    RepositoryFingerprint, Validator, sync_generated_frontmatter,
+    RepositoryFingerprint, Validator, state::StateLock, sync_generated_frontmatter,
 };
 use docgraph_markdown::{
     ParsedDocument, StableSectionId, frame_content, normalize_sections_with_reserved_random,
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
@@ -115,7 +115,7 @@ impl MutationService {
         }
         fs::create_dir_all(&self.state.paths.directory)
             .map_err(|source| MutationError::io(&self.state.paths.directory, source))?;
-        let _lock = MutationLock::acquire(&self.state.paths.mutation_lock)?;
+        let _lock = acquire_state_lock(&self.state.paths.mutation_lock)?;
         self.recover_if_needed()?;
 
         // Re-plan under the lock. This is the bounded retry for canonical input
@@ -170,6 +170,13 @@ impl MutationService {
             .refresh(&refreshed, &refreshed_graph)
             .map_err(|error| MutationError::State(error.to_string()))?;
         Ok(plan)
+    }
+
+    pub fn recover_pending(&self) -> Result<(), MutationError> {
+        fs::create_dir_all(&self.state.paths.directory)
+            .map_err(|source| MutationError::io(&self.state.paths.directory, source))?;
+        let _lock = acquire_state_lock(&self.state.paths.mutation_lock)?;
+        self.recover_if_needed()
     }
 
     fn plan_against(
@@ -746,29 +753,14 @@ fn replace_file(path: &Path, intended: &str) -> Result<(), MutationError> {
     Ok(())
 }
 
-struct MutationLock(PathBuf);
-
-impl MutationLock {
-    fn acquire(path: &Path) -> Result<Self, MutationError> {
-        OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map_err(|source| {
-                if source.kind() == io::ErrorKind::AlreadyExists {
-                    MutationError::Locked(path.to_path_buf())
-                } else {
-                    MutationError::io(path, source)
-                }
-            })?;
-        Ok(Self(path.to_path_buf()))
-    }
-}
-
-impl Drop for MutationLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
-    }
+fn acquire_state_lock(path: &Path) -> Result<StateLock, MutationError> {
+    StateLock::acquire(path).map_err(|source| {
+        if source.kind() == io::ErrorKind::WouldBlock {
+            MutationError::Locked(path.to_path_buf())
+        } else {
+            MutationError::io(path, source)
+        }
+    })
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1084,6 +1076,113 @@ mod tests {
             .unwrap();
         let target = fs::read_to_string(fixture.0.join("docs/two.md")).unwrap();
         assert!(target.contains("predicate = \"blocks\""));
+    }
+
+    #[test]
+    fn recovery_rolls_forward_an_interrupted_multi_file_mutation() {
+        let fixture = Fixture::new();
+        let service = MutationService::open(&fixture.0).unwrap();
+        let request = MutationRequest::AddRelation {
+            source: "task:1".to_owned(),
+            predicate: "blocks".to_owned(),
+            target: "task:2".to_owned(),
+            properties: BTreeMap::new(),
+        };
+        let plan = service.plan(&request).unwrap();
+        assert!(plan.changes.len() >= 2);
+        fs::create_dir_all(&service.state.paths.directory).unwrap();
+        fs::write(
+            &service.state.paths.recovery_journal,
+            toml_edit::ser::to_string(&Journal::from_plan(&plan)).unwrap(),
+        )
+        .unwrap();
+        let first = &plan.changes[0];
+        fs::write(fixture.0.join(&first.path), &first.intended).unwrap();
+
+        service.recover_pending().unwrap();
+
+        for change in &plan.changes {
+            assert_eq!(
+                fs::read_to_string(fixture.0.join(&change.path)).unwrap(),
+                change.intended
+            );
+        }
+        assert!(!service.state.paths.recovery_journal.exists());
+    }
+
+    #[test]
+    fn recovery_refuses_unknown_file_state_without_overwriting_it() {
+        let fixture = Fixture::new();
+        let service = MutationService::open(&fixture.0).unwrap();
+        let plan = service
+            .plan(&MutationRequest::AddRelation {
+                source: "task:1".to_owned(),
+                predicate: "blocks".to_owned(),
+                target: "task:2".to_owned(),
+                properties: BTreeMap::new(),
+            })
+            .unwrap();
+        fs::create_dir_all(&service.state.paths.directory).unwrap();
+        fs::write(
+            &service.state.paths.recovery_journal,
+            toml_edit::ser::to_string(&Journal::from_plan(&plan)).unwrap(),
+        )
+        .unwrap();
+        let conflict = &plan.changes[0];
+        let manual = format!("{}\nManual concurrent edit.\n", conflict.original);
+        fs::write(fixture.0.join(&conflict.path), &manual).unwrap();
+
+        let error = service.recover_pending().unwrap_err();
+
+        assert!(matches!(error, MutationError::RecoveryConflict(_)));
+        assert_eq!(
+            fs::read_to_string(fixture.0.join(&conflict.path)).unwrap(),
+            manual
+        );
+        assert!(service.state.paths.recovery_journal.exists());
+    }
+
+    #[test]
+    fn advisory_lock_ignores_stale_lock_files_and_rejects_live_owners() {
+        let fixture = Fixture::new();
+        let service = MutationService::open(&fixture.0).unwrap();
+        fs::create_dir_all(&service.state.paths.directory).unwrap();
+        fs::write(&service.state.paths.mutation_lock, "stale owner").unwrap();
+
+        service.recover_pending().unwrap();
+        let _owner = StateLock::acquire(&service.state.paths.mutation_lock).unwrap();
+        let error = service.recover_pending().unwrap_err();
+
+        assert!(matches!(error, MutationError::Locked(_)));
+    }
+
+    #[test]
+    fn failed_index_refresh_leaves_canonical_changes_for_the_next_rebuild() {
+        let fixture = Fixture::new();
+        let service = MutationService::open(&fixture.0).unwrap();
+        fs::create_dir_all(&service.state.paths.directory).unwrap();
+        fs::create_dir_all(&service.state.paths.index).unwrap();
+        let request = MutationRequest::Transition {
+            entity: "task:1".to_owned(),
+            target_state: "done".to_owned(),
+        };
+
+        assert!(service.apply(&request, false).is_err());
+        assert!(
+            fs::read_to_string(fixture.0.join("docs/one.md"))
+                .unwrap()
+                .contains("state = \"done\"")
+        );
+        assert!(!service.state.paths.recovery_journal.exists());
+
+        fs::remove_dir(&service.state.paths.index).unwrap();
+        let corpus = CanonicalCorpus::load(&service.repository, &service.config).unwrap();
+        let graph = GraphIndex::build(&corpus, &service.config);
+        service.state.ensure_fresh(&corpus, &graph).unwrap();
+        assert_eq!(
+            service.state.status(corpus.fingerprint).unwrap(),
+            crate::IndexStatus::Fresh
+        );
     }
 
     #[test]

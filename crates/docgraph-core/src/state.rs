@@ -4,11 +4,34 @@ use crate::{
 };
 use std::error::Error;
 use std::fmt;
-use std::fs;
+use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
 const INDEX_FORMAT_VERSION: u32 = 1;
+
+pub(crate) struct StateLock {
+    file: File,
+}
+
+impl StateLock {
+    pub(crate) fn acquire(path: &Path) -> io::Result<Self> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)?;
+        file.try_lock()?;
+        Ok(Self { file })
+    }
+}
+
+impl Drop for StateLock {
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DerivedStatePaths {

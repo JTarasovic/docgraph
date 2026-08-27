@@ -321,6 +321,49 @@ fn transition_dry_run_then_apply_updates_the_fixture() {
 }
 
 #[test]
+fn read_commands_recover_an_interrupted_mutation_before_loading_the_graph() {
+    let fixture = Fixture::copy("adr");
+    let preview = fixture.run(&["--json", "transition", "adr:1", "accepted", "--dry-run"]);
+    assert!(preview.status.success());
+    let preview: Value = serde_json::from_slice(&preview.stdout).unwrap();
+    let files: Vec<_> = preview["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|change| {
+            serde_json::json!({
+                "path": change["path"],
+                "original": change["original"],
+                "intended": change["intended"],
+            })
+        })
+        .collect();
+    let journal = serde_json::json!({
+        "fingerprint": preview["fingerprint"],
+        "file": files,
+    });
+    let state = fixture.0.join(".docgraph/.state");
+    fs::create_dir_all(&state).unwrap();
+    fs::write(
+        state.join("recovery.toml"),
+        toml_edit::ser::to_string(&journal).unwrap(),
+    )
+    .unwrap();
+
+    let get = fixture.run(&["--json", "get", "adr:1"]);
+    assert!(
+        get.status.success(),
+        "{}",
+        String::from_utf8_lossy(&get.stderr)
+    );
+    let get: Value = serde_json::from_slice(&get.stdout).unwrap();
+
+    assert_eq!(get["state"], "accepted");
+    assert!(!state.join("recovery.toml").exists());
+    assert!(state.join("index.sqlite").exists());
+}
+
+#[test]
 fn generated_agent_guidance_is_checked_and_safely_synchronized() {
     let fixture = Fixture::copy("synthetic");
     assert!(fixture.run(&["instructions", "check"]).status.success());

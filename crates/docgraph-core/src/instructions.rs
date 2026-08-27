@@ -1,7 +1,7 @@
-use crate::{ArgumentMode, DerivedState, Repository, RepositoryConfig};
+use crate::{ArgumentMode, DerivedState, Repository, RepositoryConfig, state::StateLock};
 use std::error::Error;
 use std::fmt;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
@@ -107,7 +107,7 @@ impl<'a> InstructionService<'a> {
 
         fs::create_dir_all(&self.state.paths.directory)
             .map_err(|source| InstructionError::io(&self.state.paths.directory, source))?;
-        let _lock = InstructionLock::acquire(&self.state.paths.mutation_lock)?;
+        let _lock = acquire_state_lock(&self.state.paths.mutation_lock)?;
         for change in &changes {
             let absolute = self.target_path(&change.path)?;
             let current = match fs::read_to_string(&absolute) {
@@ -338,29 +338,14 @@ fn replace_file(path: &Path, intended: &str) -> Result<(), InstructionError> {
     Ok(())
 }
 
-struct InstructionLock(PathBuf);
-
-impl InstructionLock {
-    fn acquire(path: &Path) -> Result<Self, InstructionError> {
-        OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map_err(|source| {
-                if source.kind() == io::ErrorKind::AlreadyExists {
-                    InstructionError::Locked(path.to_path_buf())
-                } else {
-                    InstructionError::io(path, source)
-                }
-            })?;
-        Ok(Self(path.to_path_buf()))
-    }
-}
-
-impl Drop for InstructionLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
-    }
+fn acquire_state_lock(path: &Path) -> Result<StateLock, InstructionError> {
+    StateLock::acquire(path).map_err(|source| {
+        if source.kind() == io::ErrorKind::WouldBlock {
+            InstructionError::Locked(path.to_path_buf())
+        } else {
+            InstructionError::io(path, source)
+        }
+    })
 }
 
 #[derive(Debug)]

@@ -2,7 +2,7 @@
 
 id = "task:complete-section-relation-roundtrip"
 type = "task"
-state = "ready"
+state = "in_progress"
 
 [properties]
 title = "Complete stable-section relation round trips"

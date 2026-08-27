@@ -160,6 +160,10 @@ struct Context {
 
 impl Context {
     fn load() -> Result<Self, CliError> {
+        MutationService::open(".")
+            .map_err(CliError::boxed)?
+            .recover_pending()
+            .map_err(CliError::boxed)?;
         let repository = Repository::discover(".").map_err(CliError::boxed)?;
         let config = RepositoryConfig::load(&repository).map_err(CliError::boxed)?;
         let corpus = CanonicalCorpus::load(&repository, &config).map_err(CliError::boxed)?;
