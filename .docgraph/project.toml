@@ -1,10 +1,11 @@
 schema_version = 1
 
 [project]
-name = "docgraph reference"
+name = "docgraph"
 
 [documents]
-root = "docs/reference"
+root = "docs"
+exclude = ["research/**"]
 
 [agent_instructions]
 targets = ["AGENTS.md"]
