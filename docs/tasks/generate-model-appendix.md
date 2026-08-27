@@ -15,6 +15,10 @@ target = "plan:complete-v0"
 type = "implements"
 target = "reference:design#s-DD5NS2HR0R"
 
+[[relations]]
+type = "implements"
+target = "plan:complete-v0#s-XPG39N6DGV"
+
 [docgraph_generated]
 schema_version = 1
 
@@ -25,6 +29,9 @@ predicate = "depends_on"
 [[docgraph_generated.inverses]]
 type = "required_by"
 target = "task:audit-v0-success"
+
+[[docgraph_generated.backlinks]]
+source = "plan:complete-v0#s-XPG39N6DGV"
 
 +++
 <a id="s-395T841P69"></a>

@@ -15,8 +15,15 @@ target = "plan:complete-v0"
 type = "implements"
 target = "decision:cli-managed-metadata"
 
+[[relations]]
+type = "implements"
+target = "plan:complete-v0#s-XPNKP8XTZW"
+
 [docgraph_generated]
 schema_version = 1
+
+[[docgraph_generated.backlinks]]
+source = "plan:complete-v0#s-XPNKP8XTZW"
 
 +++
 <a id="s-PXSM6K5EZX"></a>

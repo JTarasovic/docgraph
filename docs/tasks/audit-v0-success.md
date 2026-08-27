@@ -23,8 +23,15 @@ target = "reference:config-grammar#s-GVPQBPMPBJ"
 type = "depends_on"
 target = "task:support-section-path-endpoints"
 
+[[relations]]
+type = "implements"
+target = "plan:complete-v0#s-RGKKJ07YJ3"
+
 [docgraph_generated]
 schema_version = 1
+
+[[docgraph_generated.backlinks]]
+source = "plan:complete-v0#s-RGKKJ07YJ3"
 
 +++
 <a id="s-CV1YNY6QW7"></a>
