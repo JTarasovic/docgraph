@@ -1,0 +1,27 @@
+[workflow.florp]
+initial = "queued"
+
+[workflow.florp.states.queued]
+description = "Waiting to become active."
+transitions = ["active"]
+
+[workflow.florp.states.active]
+description = "Currently active."
+transitions = ["queued", "done"]
+
+[workflow.florp.states.done]
+description = "Complete."
+
+[workflow.grommit]
+initial = "idle"
+
+[workflow.grommit.states.idle]
+description = "Not running."
+transitions = ["running"]
+
+[workflow.grommit.states.running]
+description = "Currently running."
+transitions = ["finished"]
+
+[workflow.grommit.states.finished]
+description = "Finished running."

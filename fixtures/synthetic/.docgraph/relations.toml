@@ -2,6 +2,51 @@
 description = "The source grommits an external target."
 source = ["florp"]
 target = ["external"]
+inverse = "grommitted_by"
 
 [relation.grommits.property.confidence]
 type = "float"
+
+[relation.grommitted_by]
+description = "The source external target is grommitted by the target florp."
+source = ["external"]
+target = ["florp"]
+inverse = "grommits"
+
+[relation.precedes]
+description = "The source florp must precede the target."
+source = ["florp"]
+target = ["florp"]
+inverse = "follows"
+acyclic = true
+
+[relation.follows]
+description = "The source florp follows the target."
+source = ["florp"]
+target = ["florp"]
+inverse = "precedes"
+acyclic = true
+
+[relation.echoes]
+description = "The source florp echoes the target; cycles are allowed."
+source = ["florp"]
+target = ["florp"]
+inverse = "echoed_by"
+
+[relation.echoed_by]
+description = "The source florp is echoed by the target."
+source = ["florp"]
+target = ["florp"]
+inverse = "echoes"
+
+[relation.annotates]
+description = "The source section annotates the target section."
+source = ["section"]
+target = ["section"]
+inverse = "annotated_by"
+
+[relation.annotated_by]
+description = "The source section is annotated by the target section."
+source = ["section"]
+target = ["section"]
+inverse = "annotates"

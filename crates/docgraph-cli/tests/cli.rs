@@ -390,7 +390,8 @@ fn generated_agent_guidance_is_checked_and_safely_synchronized() {
     assert!(synchronized.contains("## Docgraph repository model"));
     assert!(synchronized.contains("`florp` — A deliberately unfamiliar entity type."));
     assert!(synchronized.contains("`grommits`: `florp` → `external`"));
-    assert!(synchronized.contains("Workflows:\n- None configured."));
+    assert!(synchronized.contains("- `florp`; initial `queued`"));
+    assert!(synchronized.contains("- `grommit`; initial `idle`"));
     assert!(synchronized.contains("docgraph query grommit_targets --arg florp=<value>"));
     assert!(synchronized.contains("- Maintain: `docgraph validate`"));
     assert!(fixture.run(&["instructions", "check"]).status.success());
@@ -567,6 +568,73 @@ fn v0_fixtures_exercise_exact_graph_search_and_named_query_retrieval() {
         let query: Value = serde_json::from_slice(&query.stdout).unwrap();
         assert!(!query["rows"].as_array().unwrap().is_empty());
     }
+}
+
+#[test]
+fn synthetic_fixture_exercises_generic_workflows_sections_cycles_and_recursive_logic() {
+    if !logic_runtime_configured() {
+        return;
+    }
+    let fixture = Fixture::copy("synthetic");
+
+    assert!(fixture.run(&["validate"]).status.success());
+    assert!(fixture.run(&["frontmatter", "check"]).status.success());
+    assert!(fixture.run(&["instructions", "check"]).status.success());
+    let reachable = fixture.run(&[
+        "--json",
+        "query",
+        "reachable_florps",
+        "--arg",
+        "source=florp:1",
+    ]);
+    assert!(
+        reachable.status.success(),
+        "{}",
+        String::from_utf8_lossy(&reachable.stderr)
+    );
+    let reachable: Value = serde_json::from_slice(&reachable.stdout).unwrap();
+    assert_eq!(
+        reachable["rows"],
+        serde_json::json!([
+            { "target": "florp:2" },
+            { "target": "florp:3" },
+        ])
+    );
+
+    let ready = fixture.run(&["--json", "query", "ready_florps"]);
+    assert!(ready.status.success());
+    let ready: Value = serde_json::from_slice(&ready.stdout).unwrap();
+    assert_eq!(ready["rows"], serde_json::json!([{ "florp": "florp:1" }]));
+
+    let section = fixture.run(&["--json", "get", "florp:1#s-9K8J7H6G5F"]);
+    assert!(section.status.success());
+    let section: Value = serde_json::from_slice(&section.stdout).unwrap();
+    assert!(
+        section["relations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|relation| {
+                relation["direction"] == "outgoing"
+                    && relation["predicate"] == "annotates"
+                    && relation["target"] == "florp:2#s-9D9KQWAJ82"
+            })
+    );
+
+    assert!(
+        fixture
+            .run(&["transition", "grommit:1", "running"])
+            .status
+            .success()
+    );
+    let grommit = fixture.run(&["--json", "get", "grommit:1"]);
+    let grommit: Value = serde_json::from_slice(&grommit.stdout).unwrap();
+    assert_eq!(grommit["state"], "running");
+
+    let cycle = fixture.run(&["relate", "florp:3", "precedes", "florp:1"]);
+    assert!(!cycle.status.success());
+    assert!(String::from_utf8_lossy(&cycle.stderr).contains("cycle"));
+    assert!(fixture.run(&["validate"]).status.success());
 }
 
 #[test]

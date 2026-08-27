@@ -39,9 +39,19 @@ target = "task:complete-section-relation-roundtrip"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:workflow-adoption-initial-state"
+predicate = "affects"
+target = "task:expand-initial-design-conformance"
+
+[[docgraph_generated.incoming]]
 source = "task:audit-initial-design-closure"
 predicate = "depends_on"
 target = "task:expand-initial-design-conformance"
+
+[[docgraph_generated.inverses]]
+source = "task:expand-initial-design-conformance"
+type = "affected_by"
+target = "issue:workflow-adoption-initial-state"
 
 [[docgraph_generated.inverses]]
 source = "task:expand-initial-design-conformance"

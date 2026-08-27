@@ -47,3 +47,18 @@ arguments = [
   { name = "observed", mode = "output", type = "datetime" },
   { name = "label", mode = "output", type = "string" },
 ]
+
+[query.reachable_florps]
+description = "Returns the transitive precedence closure from a florp."
+predicate = "reachable_florp"
+arguments = [
+  { name = "source", mode = "input", type = "entity" },
+  { name = "target", mode = "output", type = "entity" },
+]
+
+[query.ready_florps]
+description = "Returns florps with no incoming precedence edge."
+predicate = "ready_florp"
+arguments = [
+  { name = "florp", mode = "output", type = "entity" },
+]

@@ -2,6 +2,7 @@
 
 id = "florp:1"
 type = "florp"
+state = "queued"
 
 [properties]
 title = "Florp one"
@@ -16,8 +17,31 @@ type = "grommits"
 target = "github:issue:owner/repo:123"
 confidence = 0.75
 
+[[relations]]
+type = "precedes"
+target = "florp:2"
+
+[[relations]]
+type = "echoes"
+target = "florp:2"
+
+[[relations]]
+source = "florp:1#s-9K8J7H6G5F"
+type = "annotates"
+target = "florp:2#s-9D9KQWAJ82"
+
 [docgraph_generated]
 schema_version = 1
+
+[[docgraph_generated.incoming]]
+source = "florp:2"
+predicate = "echoes"
+target = "florp:1"
+
+[[docgraph_generated.inverses]]
+source = "florp:1"
+type = "echoed_by"
+target = "florp:2"
 
 +++
 <a id="s-9K8J7H6G5F"></a>

@@ -1,5 +1,6 @@
 [entity.florp]
 description = "A deliberately unfamiliar entity type."
+workflow = "florp"
 
 [entity.florp.property.title]
 type = "string"
@@ -19,3 +20,11 @@ type = "datetime"
 [entity.florp.property.labels]
 type = "array"
 items = "string"
+
+[entity.grommit]
+description = "A second unfamiliar entity type with an independent workflow."
+workflow = "grommit"
+
+[entity.grommit.property.title]
+type = "string"
+required = true

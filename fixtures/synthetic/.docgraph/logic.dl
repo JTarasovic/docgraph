@@ -3,3 +3,7 @@ grommit_confidence(florp, confidence) :- relation_property_float(florp, "grommit
 florp_details(florp, title, count_value, score, enabled, observed, label) :- entity_property_string(florp, "title", title), entity_property_integer(florp, "count", count_value), entity_property_float(florp, "score", score), entity_property_boolean(florp, "enabled", enabled), entity_property_datetime(florp, "observed", observed), entity_property_string(florp, "labels", label).
 scalar_float(value) :- value = 3.5.
 scalar_values(integer, float, boolean, text) :- integer = 42, scalar_float(float), boolean = 1, text = "left\tright".
+reachable_florp(source, target) :- relation(source, "precedes", target).
+reachable_florp(source, target) :- relation(source, "precedes", middle), reachable_florp(middle, target).
+blocked_florp(florp) :- relation(_, "precedes", florp).
+ready_florp(florp) :- entity_type(florp, "florp"), !blocked_florp(florp).
