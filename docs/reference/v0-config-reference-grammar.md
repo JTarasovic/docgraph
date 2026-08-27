@@ -827,9 +827,11 @@ docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 ```bash
 docgraph describe
 docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>] [--dry-run]
+docgraph adopt --batch <manifest.toml> [--dry-run]
 docgraph get <entity-or-stable-section>
 docgraph search <query>
 docgraph transition <entity> <state>
+docgraph workflow initialize <entity-type> [--dry-run]
 docgraph property set <entity> <property> <value>
 docgraph property unset <entity> <property>
 docgraph relate <source> <relation> <target>
@@ -869,6 +871,11 @@ Structured JSON output must also be available.
 ## 22. Mutations
 
 All semantic mutation operations support prospective validation.
+
+A batch-adoption manifest groups each document's `path`, `id`, `type`, and optional
+`property = ["name=value"]` entries under `[[document]]`. The batch is normalized and
+validated as one candidate corpus. Workflow initialization likewise writes every
+missing initial state for the selected entity type as one mutation.
 
 Mutations use a per-worktree lock and optimistic file-hash checks. The tool prepares
 and validates the complete candidate state before writing and refuses to overwrite

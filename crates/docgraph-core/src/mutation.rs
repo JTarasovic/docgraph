@@ -15,6 +15,14 @@ use std::path::{Path, PathBuf};
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
 #[derive(Clone, Debug)]
+pub struct Adoption {
+    pub path: PathBuf,
+    pub id: String,
+    pub entity_type: String,
+    pub properties: BTreeMap<String, toml_edit::Value>,
+}
+
+#[derive(Clone, Debug)]
 pub enum MutationRequest {
     Adopt {
         path: PathBuf,
@@ -22,9 +30,15 @@ pub enum MutationRequest {
         entity_type: String,
         properties: BTreeMap<String, toml_edit::Value>,
     },
+    AdoptBatch {
+        documents: Vec<Adoption>,
+    },
     Transition {
         entity: String,
         target_state: String,
+    },
+    InitializeWorkflow {
+        entity_type: String,
     },
     AddRelation {
         source: String,
@@ -197,53 +211,34 @@ impl MutationService {
                 entity_type,
                 properties,
             } => {
-                let path = repository_relative_path(self.repository.root(), path)?;
-                let file = corpus
-                    .files
-                    .iter()
-                    .find(|file| file.path == path)
-                    .ok_or_else(|| {
-                        MutationError::InvalidRequest(format!(
-                            "document {:?} is outside the configured corpus or does not exist",
-                            path.display()
-                        ))
-                    })?;
-                if graph.entities.iter().any(|entity| entity.id == *id) {
-                    return Err(MutationError::InvalidRequest(format!(
-                        "entity {id:?} already exists"
-                    )));
-                }
-                let entity_config = self.config.entities.get(entity_type).ok_or_else(|| {
-                    MutationError::InvalidRequest(format!("unknown entity type {entity_type:?}"))
-                })?;
-                let workflow = entity_config
-                    .workflow
-                    .as_deref()
-                    .map(|name| {
-                        self.config.workflows.get(name).ok_or_else(|| {
-                            MutationError::InvalidRequest(format!(
-                                "entity type {entity_type:?} references unknown workflow {name:?}"
-                            ))
-                        })
-                    })
-                    .transpose()?;
-                let source = contents.get(&file.path).expect("corpus content exists");
-                let adopted = adopt_document(
-                    source,
+                adopt_documents(
+                    &self.repository,
                     &self.config,
-                    id,
-                    entity_type,
-                    workflow.map(|workflow| workflow.initial.as_str()),
-                    properties,
+                    corpus,
+                    &graph,
+                    &mut contents,
+                    std::slice::from_ref(&Adoption {
+                        path: path.clone(),
+                        id: id.clone(),
+                        entity_type: entity_type.clone(),
+                        properties: properties.clone(),
+                    }),
                 )?;
-                let reserved: BTreeSet<StableSectionId> = graph
-                    .sections
-                    .iter()
-                    .filter_map(|section| section.id.clone())
-                    .collect();
-                let normalized = normalize_sections_with_reserved_random(&adopted, reserved)
-                    .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
-                contents.insert(file.path.clone(), normalized.content);
+            }
+            MutationRequest::AdoptBatch { documents } => {
+                if documents.is_empty() {
+                    return Err(MutationError::InvalidRequest(
+                        "adoption batch is empty".to_owned(),
+                    ));
+                }
+                adopt_documents(
+                    &self.repository,
+                    &self.config,
+                    corpus,
+                    &graph,
+                    &mut contents,
+                    documents,
+                )?;
             }
             MutationRequest::Transition {
                 entity,
@@ -286,6 +281,35 @@ impl MutationService {
                     Ok(())
                 })?;
                 contents.insert(path.clone(), edited);
+            }
+            MutationRequest::InitializeWorkflow { entity_type } => {
+                let entity_config = self.config.entities.get(entity_type).ok_or_else(|| {
+                    MutationError::InvalidRequest(format!("unknown entity type {entity_type:?}"))
+                })?;
+                let workflow_name = entity_config.workflow.as_deref().ok_or_else(|| {
+                    MutationError::InvalidRequest(format!(
+                        "entity type {entity_type:?} has no workflow"
+                    ))
+                })?;
+                let workflow = self.config.workflows.get(workflow_name).ok_or_else(|| {
+                    MutationError::InvalidRequest(format!(
+                        "workflow {workflow_name:?} does not exist"
+                    ))
+                })?;
+                for node in graph
+                    .entities
+                    .iter()
+                    .filter(|node| node.entity_type == *entity_type && node.state.is_none())
+                {
+                    let path = &graph.documents[node.document].path;
+                    let source = contents.get(path).expect("corpus content exists");
+                    let edited = edit_document(source, |document| {
+                        document[&self.config.project.frontmatter.state] =
+                            value(workflow.initial.clone());
+                        Ok(())
+                    })?;
+                    contents.insert(path.clone(), edited);
+                }
             }
             MutationRequest::AddRelation {
                 source,
@@ -666,6 +690,87 @@ fn repository_relative_path(root: &Path, requested: &Path) -> Result<PathBuf, Mu
         ));
     }
     Ok(normalized)
+}
+
+fn adopt_documents(
+    repository: &Repository,
+    config: &RepositoryConfig,
+    corpus: &CanonicalCorpus,
+    graph: &GraphIndex,
+    contents: &mut BTreeMap<PathBuf, String>,
+    documents: &[Adoption],
+) -> Result<(), MutationError> {
+    let mut ids: BTreeSet<String> = graph
+        .entities
+        .iter()
+        .map(|entity| entity.id.clone())
+        .collect();
+    let mut paths = BTreeSet::new();
+    let mut reserved: BTreeSet<StableSectionId> = graph
+        .sections
+        .iter()
+        .filter_map(|section| section.id.clone())
+        .collect();
+
+    for adoption in documents {
+        let path = repository_relative_path(repository.root(), &adoption.path)?;
+        if !paths.insert(path.clone()) {
+            return Err(MutationError::InvalidRequest(format!(
+                "document {:?} appears more than once in the adoption batch",
+                path.display()
+            )));
+        }
+        if !ids.insert(adoption.id.clone()) {
+            return Err(MutationError::InvalidRequest(format!(
+                "entity {:?} already exists or appears more than once in the adoption batch",
+                adoption.id
+            )));
+        }
+        let file = corpus
+            .files
+            .iter()
+            .find(|file| file.path == path)
+            .ok_or_else(|| {
+                MutationError::InvalidRequest(format!(
+                    "document {:?} is outside the configured corpus or does not exist",
+                    path.display()
+                ))
+            })?;
+        let entity_config = config.entities.get(&adoption.entity_type).ok_or_else(|| {
+            MutationError::InvalidRequest(format!("unknown entity type {:?}", adoption.entity_type))
+        })?;
+        let workflow = entity_config
+            .workflow
+            .as_deref()
+            .map(|name| {
+                config.workflows.get(name).ok_or_else(|| {
+                    MutationError::InvalidRequest(format!(
+                        "entity type {:?} references unknown workflow {name:?}",
+                        adoption.entity_type
+                    ))
+                })
+            })
+            .transpose()?;
+        let source = contents.get(&file.path).expect("corpus content exists");
+        let adopted = adopt_document(
+            source,
+            config,
+            &adoption.id,
+            &adoption.entity_type,
+            workflow.map(|workflow| workflow.initial.as_str()),
+            &adoption.properties,
+        )?;
+        let normalized = normalize_sections_with_reserved_random(&adopted, reserved.clone())
+            .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+        reserved.extend(
+            normalized
+                .inserted
+                .iter()
+                .map(|insertion| insertion.id.clone()),
+        );
+        contents.insert(file.path.clone(), normalized.content);
+    }
+    Ok(())
 }
 
 fn adopt_document(
@@ -1056,6 +1161,88 @@ mod tests {
         assert!(adopted.contains("<a id=\"s-"));
         assert!(adopted.contains("type = \"task\""));
         assert!(adopted.contains("[docgraph_generated]\nschema_version = 1"));
+    }
+
+    #[test]
+    fn workflow_initialize_materializes_all_missing_initial_states_together() {
+        let fixture = Fixture::new();
+        for name in ["one.md", "two.md"] {
+            let path = fixture.0.join("docs").join(name);
+            let source = fs::read_to_string(&path).unwrap();
+            fs::write(&path, source.replace("state = \"open\"\n", "")).unwrap();
+        }
+        let service = MutationService::open(&fixture.0).unwrap();
+        let request = MutationRequest::InitializeWorkflow {
+            entity_type: "task".to_owned(),
+        };
+
+        let preview = service.apply(&request, true).unwrap();
+        assert_eq!(preview.changes.len(), 2);
+        assert!(
+            preview
+                .changes
+                .iter()
+                .all(|change| change.intended.contains("state = \"open\""))
+        );
+        assert!(
+            !fs::read_to_string(fixture.0.join("docs/one.md"))
+                .unwrap()
+                .contains("state = \"open\"")
+        );
+
+        service.apply(&request, false).unwrap();
+        for name in ["one.md", "two.md"] {
+            assert!(
+                fs::read_to_string(fixture.0.join("docs").join(name))
+                    .unwrap()
+                    .contains("state = \"open\"")
+            );
+        }
+        assert!(service.plan(&request).unwrap().is_empty());
+    }
+
+    #[test]
+    fn batch_adoption_normalizes_and_validates_the_complete_candidate() {
+        let fixture = Fixture::new();
+        fs::write(fixture.0.join("docs/three.md"), "# Three\n").unwrap();
+        fs::write(fixture.0.join("docs/four.md"), "# Four\n").unwrap();
+        let service = MutationService::open(&fixture.0).unwrap();
+
+        let single = service.plan(&MutationRequest::Adopt {
+            path: PathBuf::from("docs/three.md"),
+            id: "task:3".to_owned(),
+            entity_type: "task".to_owned(),
+            properties: BTreeMap::new(),
+        });
+        assert!(matches!(
+            single,
+            Err(MutationError::ProspectiveValidation(_))
+        ));
+
+        let request = MutationRequest::AdoptBatch {
+            documents: vec![
+                Adoption {
+                    path: PathBuf::from("docs/three.md"),
+                    id: "task:3".to_owned(),
+                    entity_type: "task".to_owned(),
+                    properties: BTreeMap::new(),
+                },
+                Adoption {
+                    path: PathBuf::from("docs/four.md"),
+                    id: "task:4".to_owned(),
+                    entity_type: "task".to_owned(),
+                    properties: BTreeMap::new(),
+                },
+            ],
+        };
+
+        let plan = service.apply(&request, false).unwrap();
+        assert_eq!(plan.changes.len(), 4);
+        for name in ["three.md", "four.md"] {
+            let adopted = fs::read_to_string(fixture.0.join("docs").join(name)).unwrap();
+            assert!(adopted.contains("type = \"task\""));
+            assert!(adopted.contains("<a id=\"s-"));
+        }
     }
 
     #[test]

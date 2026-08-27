@@ -32,7 +32,9 @@ pub use graph::{
 pub use instructions::{
     InstructionChange, InstructionError, InstructionService, InstructionStatus,
 };
-pub use mutation::{FileChange, MutationError, MutationPlan, MutationRequest, MutationService};
+pub use mutation::{
+    Adoption, FileChange, MutationError, MutationPlan, MutationRequest, MutationService,
+};
 pub use repository::{DiscoveryError, Repository};
 pub use retrieval::{GraphTraversal, Neighbor};
 pub use state::{DerivedState, DerivedStateError, DerivedStatePaths, IndexStatus};

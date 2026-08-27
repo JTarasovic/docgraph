@@ -2,7 +2,7 @@
 
 id = "issue:workflow-adoption-initial-state"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Workflow adoption cannot materialize initial state"
@@ -15,6 +15,14 @@ target = "task:expand-initial-design-conformance"
 type = "affects"
 target = "reference:config-grammar#s-MTVEFXHGWD"
 
+[[relations]]
+type = "affects"
+target = "plan:coherent-corpus-mutations"
+
+[[relations]]
+type = "affects"
+target = "task:initialize-workflow-states"
+
 [docgraph_generated]
 schema_version = 1
 
@@ -25,3 +33,6 @@ schema_version = 1
 When an entity type gains a workflow, existing entities without an authored state become invalid. The CLI can follow a legal transition from the implicit initial state, but it cannot materialize that initial state directly without temporarily changing state or editing managed frontmatter.
 
 This surfaced while expanding the synthetic conformance fixture.
+
+Resolved by `docgraph workflow initialize <entity-type>`, which materializes every
+missing initial state in one validated mutation.

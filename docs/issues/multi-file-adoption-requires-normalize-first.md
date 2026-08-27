@@ -2,7 +2,7 @@
 
 id = "issue:multi-file-adoption-normalize-first"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Multi-file adoption requires normalize first"
@@ -15,6 +15,14 @@ target = "plan:close-initial-design-gaps"
 type = "affects"
 target = "reference:config-grammar#s-V5R4RB2AP1"
 
+[[relations]]
+type = "affects"
+target = "plan:coherent-corpus-mutations"
+
+[[relations]]
+type = "affects"
+target = "task:adopt-linked-document-batches"
+
 [docgraph_generated]
 schema_version = 1
 
@@ -25,3 +33,6 @@ schema_version = 1
 Adopting several linked, previously unmanaged documents one at a time can fail because each adoption validates the prospective corpus while the other new files still lack stable anchors. Running `docgraph normalize` across the batch before adopting each file is safe, but the required two-step sequence is surprising and should either become a first-class batch operation or produce actionable guidance.
 
 This surfaced while creating the [initial-design gap plan](../plans/close-initial-design-gaps.md) and its tasks.
+
+Resolved by `docgraph adopt --batch <manifest.toml>`, which normalizes and adopts the
+declared documents before validating the combined corpus.

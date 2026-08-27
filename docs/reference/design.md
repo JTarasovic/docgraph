@@ -341,6 +341,11 @@ Repositories may map existing metadata conventions onto the normalized model, bu
 preserves unrelated TOML frontmatter and prose, and assigns stable IDs to headings in
 the same recoverable mutation.
 
+`docgraph adopt --batch <manifest.toml>` performs those changes for every declared
+document and validates the combined corpus once. `docgraph workflow initialize
+<entity-type>` materializes a newly configured workflow's initial state across all
+affected entities in the same atomic mutation.
+
 Managed facts are changed through docgraph operations. Each entity document also has
 a reserved generated table containing direct incoming relations, configured
 inverses, and informational backlinks. Generated frontmatter is deterministic,

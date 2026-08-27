@@ -1,12 +1,13 @@
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use docgraph_core::{
-    CanonicalCorpus, CommandConfig, CommandOperation, DerivedState, DiagnosticSeverity,
+    Adoption, CanonicalCorpus, CommandConfig, CommandOperation, DerivedState, DiagnosticSeverity,
     GeneratedBlockStatus, GraphIndex, GraphNode, GraphTraversal, InstructionService,
     InstructionStatus, MutationPlan, MutationRequest, MutationService, PropertyConfig,
     PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig, Validator,
     check_generated_frontmatter,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
+use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -32,13 +33,16 @@ struct Cli {
 enum Command {
     /// Adopt an existing document into the managed graph.
     Adopt {
-        path: PathBuf,
+        path: Option<PathBuf>,
         #[arg(long)]
-        id: String,
+        id: Option<String>,
         #[arg(long = "type")]
-        entity_type: String,
+        entity_type: Option<String>,
         #[arg(long = "property")]
         properties: Vec<String>,
+        /// Adopt all documents declared in a TOML manifest.
+        #[arg(long)]
+        batch: Option<PathBuf>,
         #[arg(long)]
         dry_run: bool,
     },
@@ -62,6 +66,11 @@ enum Command {
         state: String,
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Manage configured workflows.
+    Workflow {
+        #[command(subcommand)]
+        action: WorkflowAction,
     },
     /// Set or remove a typed entity property.
     Property {
@@ -155,6 +164,16 @@ enum FrontmatterAction {
     Check,
 }
 
+#[derive(Subcommand)]
+enum WorkflowAction {
+    /// Materialize the initial state for every uninitialized entity of a type.
+    Initialize {
+        entity_type: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
 struct Context {
     repository: Repository,
     config: RepositoryConfig,
@@ -218,25 +237,38 @@ fn run(cli: Cli) -> Result<(), CliError> {
             id,
             entity_type,
             properties,
+            batch,
             dry_run,
         } => {
             let service = MutationService::open(".").map_err(CliError::boxed)?;
-            let entity =
-                service.config().entities.get(&entity_type).ok_or_else(|| {
+            let request = if let Some(batch) = batch {
+                if path.is_some() || id.is_some() || entity_type.is_some() || !properties.is_empty()
+                {
+                    return Err(CliError::message(
+                        "--batch cannot be combined with a path, --id, --type, or --property",
+                    ));
+                }
+                MutationRequest::AdoptBatch {
+                    documents: read_adoption_manifest(&batch, service.config())?,
+                }
+            } else {
+                let path =
+                    path.ok_or_else(|| CliError::message("adopt requires a path or --batch"))?;
+                let id = id.ok_or_else(|| CliError::message("adopt requires --id"))?;
+                let entity_type =
+                    entity_type.ok_or_else(|| CliError::message("adopt requires --type"))?;
+                let entity = service.config().entities.get(&entity_type).ok_or_else(|| {
                     CliError::message(format!("unknown entity type {entity_type:?}"))
                 })?;
-            let properties = parse_properties(&properties, &entity.property, "entity")?;
-            let plan = service
-                .apply(
-                    &MutationRequest::Adopt {
-                        path,
-                        id,
-                        entity_type,
-                        properties,
-                    },
-                    dry_run,
-                )
-                .map_err(CliError::boxed)?;
+                let properties = parse_properties(&properties, &entity.property, "entity")?;
+                MutationRequest::Adopt {
+                    path,
+                    id,
+                    entity_type,
+                    properties,
+                }
+            };
+            let plan = service.apply(&request, dry_run).map_err(CliError::boxed)?;
             print_plan(&plan, dry_run, cli.json)
         }
         Command::Describe { kind, name } => {
@@ -285,6 +317,16 @@ fn run(cli: Cli) -> Result<(), CliError> {
             dry_run,
             cli.json,
         ),
+        Command::Workflow { action } => match action {
+            WorkflowAction::Initialize {
+                entity_type,
+                dry_run,
+            } => mutate(
+                MutationRequest::InitializeWorkflow { entity_type },
+                dry_run,
+                cli.json,
+            ),
+        },
         Command::Property { action } => property(action, cli.json),
         Command::Relate {
             source,
@@ -389,6 +431,46 @@ fn run(cli: Cli) -> Result<(), CliError> {
         Command::Frontmatter { action } => frontmatter(action, cli.json),
         Command::Custom(arguments) => custom_command(&arguments, cli.json),
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AdoptionManifest {
+    document: Vec<ManifestDocument>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestDocument {
+    path: PathBuf,
+    id: String,
+    #[serde(rename = "type")]
+    entity_type: String,
+    #[serde(default, rename = "property")]
+    properties: Vec<String>,
+}
+
+fn read_adoption_manifest(
+    path: &PathBuf,
+    config: &RepositoryConfig,
+) -> Result<Vec<Adoption>, CliError> {
+    let source = std::fs::read_to_string(path).map_err(CliError::boxed)?;
+    let manifest: AdoptionManifest = toml_edit::de::from_str(&source).map_err(CliError::boxed)?;
+    manifest
+        .document
+        .into_iter()
+        .map(|document| {
+            let entity = config.entities.get(&document.entity_type).ok_or_else(|| {
+                CliError::message(format!("unknown entity type {:?}", document.entity_type))
+            })?;
+            Ok(Adoption {
+                path: document.path,
+                id: document.id,
+                entity_type: document.entity_type,
+                properties: parse_properties(&document.properties, &entity.property, "entity")?,
+            })
+        })
+        .collect()
 }
 
 fn print_root_help() -> Result<(), CliError> {

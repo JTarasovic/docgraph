@@ -119,6 +119,65 @@ fn adopt_previews_then_manages_an_existing_document() {
 }
 
 #[test]
+fn workflow_initialize_materializes_missing_states() {
+    let fixture = Fixture::copy("synthetic");
+    let path = fixture.0.join("docs/florp.md");
+    let source = fs::read_to_string(&path).unwrap();
+    fs::write(&path, source.replace("state = \"queued\"\n", "")).unwrap();
+
+    let result = fixture.run(&["workflow", "initialize", "florp"]);
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        fs::read_to_string(path)
+            .unwrap()
+            .contains("state = \"queued\"")
+    );
+}
+
+#[test]
+fn adopt_batch_manages_multiple_unnormalized_documents() {
+    let fixture = Fixture::copy("synthetic");
+    fs::write(fixture.0.join("docs/batch-one.md"), "# Batch one\n").unwrap();
+    fs::write(fixture.0.join("docs/batch-two.md"), "# Batch two\n").unwrap();
+    fs::write(
+        fixture.0.join("adopt.toml"),
+        "[[document]]\npath = \"docs/batch-one.md\"\nid = \"florp:batch-one\"\ntype = \"florp\"\nproperty = [\"title=Batch one\"]\n\n[[document]]\npath = \"docs/batch-two.md\"\nid = \"florp:batch-two\"\ntype = \"florp\"\nproperty = [\"title=Batch two\"]\n",
+    )
+    .unwrap();
+
+    let preview = fixture.run(&["adopt", "--batch", "adopt.toml", "--dry-run"]);
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    assert!(
+        !fs::read_to_string(fixture.0.join("docs/batch-one.md"))
+            .unwrap()
+            .contains("type = \"florp\"")
+    );
+
+    let result = fixture.run(&["adopt", "--batch", "adopt.toml"]);
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    for name in ["batch-one.md", "batch-two.md"] {
+        let adopted = fs::read_to_string(fixture.0.join("docs").join(name)).unwrap();
+        assert!(adopted.contains("type = \"florp\""));
+        assert!(adopted.contains("state = \"queued\""));
+        assert!(adopted.contains("<a id=\"s-"));
+    }
+}
+
+#[test]
 fn structured_describe_validate_and_unavailable_query_are_stable() {
     let fixture = Fixture::copy("synthetic");
 

@@ -15,6 +15,7 @@ const BUILT_IN_COMMANDS: &[&str] = &[
     "get",
     "search",
     "transition",
+    "workflow",
     "property",
     "relate",
     "unrelate",
