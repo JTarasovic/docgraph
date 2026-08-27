@@ -24,6 +24,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install pinned development tools
@@ -42,10 +43,13 @@ jobs:
           sudo apt-get install --yes /tmp/souffle.deb
 
       - name: Run implementation checks
+        env:
+          DOCGRAPH_CHANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
           mise run fmt
           mise run lint
           cargo nextest run --workspace --all-features --no-tests pass
+          cargo run --quiet --locked -p docgraph-cli -- validate --changes "$DOCGRAPH_CHANGE_BASE"
 
       - name: Check dependencies
         run: |

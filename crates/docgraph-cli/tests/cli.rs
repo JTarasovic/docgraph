@@ -64,6 +64,27 @@ fn logic_runtime_configured() -> bool {
     std::env::var_os("DOCGRAPH_LOGIC_RUNTIME").is_some_and(|value| !value.is_empty())
 }
 
+fn commit_fixture(fixture: &Fixture) {
+    for arguments in [
+        &["init"][..],
+        &["config", "user.email", "docgraph@example.invalid"],
+        &["config", "user.name", "Docgraph Test"],
+        &["add", "."],
+        &["commit", "-m", "fixture"],
+    ] {
+        let output = Command::new("git")
+            .current_dir(&fixture.0)
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {arguments:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
 #[test]
 fn adopt_previews_then_manages_an_existing_document() {
     let fixture = Fixture::copy("synthetic");
@@ -137,6 +158,38 @@ fn workflow_initialize_materializes_missing_states() {
             .unwrap()
             .contains("state = \"queued\"")
     );
+}
+
+#[test]
+fn change_validation_allows_prose_and_rejects_illegal_state_jumps() {
+    let fixture = Fixture::copy("synthetic");
+    let path = fixture.0.join("docs/florp.md");
+    let initial = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        initial.replace("state = \"queued\"", "state = \"done\""),
+    )
+    .unwrap();
+    commit_fixture(&fixture);
+    let original = fs::read_to_string(&path).unwrap();
+    fs::write(&path, format!("{original}\nAdditional prose.\n")).unwrap();
+
+    let prose = fixture.run(&["validate", "--changes", "HEAD"]);
+    assert!(
+        prose.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&prose.stdout),
+        String::from_utf8_lossy(&prose.stderr)
+    );
+
+    fs::write(
+        &path,
+        original.replace("state = \"done\"", "state = \"queued\""),
+    )
+    .unwrap();
+    let illegal = fixture.run(&["validate", "--changes", "HEAD"]);
+    assert!(!illegal.status.success());
+    assert!(String::from_utf8_lossy(&illegal.stdout).contains("unsupported-workflow-state-change"));
 }
 
 #[test]

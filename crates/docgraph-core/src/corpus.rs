@@ -7,6 +7,7 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 const FINGERPRINT_DOMAIN: &[u8] = b"docgraph-canonical-inputs-v1\0";
 const PARSER_REVISION: u32 = 1;
@@ -38,6 +39,88 @@ impl CanonicalCorpus {
         Self::load_incremental(repository, config, Some(previous))
     }
 
+    pub fn load_at_git_ref(
+        repository: &Repository,
+        config: &RepositoryConfig,
+        reference: &str,
+    ) -> Result<Self, CorpusError> {
+        let output = Command::new("git")
+            .current_dir(repository.root())
+            .args(["ls-tree", "-r", "-z", "--name-only", reference, "--"])
+            .arg(&config.project.documents.root)
+            .output()
+            .map_err(CorpusError::GitIo)?;
+        if !output.status.success() {
+            return Err(CorpusError::Git(
+                String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+            ));
+        }
+        let overrides = document_overrides(repository, config)?;
+        let root = &config.project.documents.root;
+        let mut contents = Vec::new();
+        for raw in output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|raw| !raw.is_empty())
+        {
+            let text = std::str::from_utf8(raw).map_err(|_| {
+                CorpusError::Git("Git returned a non-UTF-8 document path".to_owned())
+            })?;
+            let path = PathBuf::from(text);
+            let relative = path.strip_prefix(root).map_err(|_| {
+                CorpusError::Git(format!(
+                    "Git returned a path outside the document root: {text}"
+                ))
+            })?;
+            if !overrides.matched(relative, false).is_whitelist() {
+                continue;
+            }
+            let object = format!("{reference}:{text}");
+            let content = Command::new("git")
+                .current_dir(repository.root())
+                .args(["show", &object])
+                .output()
+                .map_err(CorpusError::GitIo)?;
+            if !content.status.success() {
+                return Err(CorpusError::Git(
+                    String::from_utf8_lossy(&content.stderr).trim().to_owned(),
+                ));
+            }
+            contents.push((
+                path,
+                String::from_utf8(content.stdout).map_err(|_| {
+                    CorpusError::Git(format!(
+                        "document {text:?} is not valid UTF-8 at {reference}"
+                    ))
+                })?,
+            ));
+        }
+        Self::from_contents(repository, contents)
+    }
+
+    pub fn from_contents(
+        repository: &Repository,
+        mut contents: Vec<(PathBuf, String)>,
+    ) -> Result<Self, CorpusError> {
+        contents.sort_by(|left, right| left.0.cmp(&right.0));
+        let mut files = Vec::with_capacity(contents.len());
+        for (path, content) in contents {
+            let document =
+                ParsedDocument::parse(&content).map_err(|source| CorpusError::Markdown {
+                    path: repository.root().join(&path),
+                    source,
+                })?;
+            files.push(CorpusFile {
+                path,
+                content_hash: *blake3::hash(content.as_bytes()).as_bytes(),
+                content,
+                document,
+            });
+        }
+        let fingerprint = fingerprint(repository, &files)?;
+        Ok(Self { files, fingerprint })
+    }
+
     fn load_incremental(
         repository: &Repository,
         config: &RepositoryConfig,
@@ -55,28 +138,7 @@ impl CanonicalCorpus {
             return Err(CorpusError::NotDirectory { path: docs_root });
         }
 
-        let mut overrides = OverrideBuilder::new(&docs_root);
-        for include in &config.project.documents.include {
-            overrides
-                .add(include)
-                .map_err(|source| CorpusError::Pattern {
-                    pattern: include.clone(),
-                    source,
-                })?;
-        }
-        for exclude in &config.project.documents.exclude {
-            let pattern = format!("!{exclude}");
-            overrides
-                .add(&pattern)
-                .map_err(|source| CorpusError::Pattern {
-                    pattern: exclude.clone(),
-                    source,
-                })?;
-        }
-        let overrides = overrides.build().map_err(|source| CorpusError::Pattern {
-            pattern: "<combined document patterns>".to_owned(),
-            source,
-        })?;
+        let overrides = document_overrides(repository, config)?;
 
         let mut paths = Vec::new();
         if !config.project.documents.include.is_empty() {
@@ -179,6 +241,8 @@ pub enum CorpusError {
         path: PathBuf,
         source: FrontmatterError,
     },
+    Git(String),
+    GitIo(io::Error),
 }
 
 impl fmt::Display for CorpusError {
@@ -206,6 +270,8 @@ impl fmt::Display for CorpusError {
             Self::Markdown { path, source } => {
                 write!(formatter, "cannot parse {}: {source}", path.display())
             }
+            Self::Git(message) => write!(formatter, "cannot read Git corpus: {message}"),
+            Self::GitIo(source) => write!(formatter, "cannot execute Git: {source}"),
         }
     }
 }
@@ -214,11 +280,41 @@ impl Error for CorpusError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Io { source, .. } => Some(source),
+            Self::GitIo(source) => Some(source),
             Self::Pattern { source, .. } | Self::Walk(source) => Some(source),
             Self::Markdown { source, .. } => Some(source),
-            Self::OutsideRepository { .. } | Self::NotDirectory { .. } => None,
+            Self::OutsideRepository { .. } | Self::NotDirectory { .. } | Self::Git(_) => None,
         }
     }
+}
+
+fn document_overrides(
+    repository: &Repository,
+    config: &RepositoryConfig,
+) -> Result<ignore::overrides::Override, CorpusError> {
+    let docs_root = repository.root().join(&config.project.documents.root);
+    let mut overrides = OverrideBuilder::new(&docs_root);
+    for include in &config.project.documents.include {
+        overrides
+            .add(include)
+            .map_err(|source| CorpusError::Pattern {
+                pattern: include.clone(),
+                source,
+            })?;
+    }
+    for exclude in &config.project.documents.exclude {
+        let pattern = format!("!{exclude}");
+        overrides
+            .add(&pattern)
+            .map_err(|source| CorpusError::Pattern {
+                pattern: exclude.clone(),
+                source,
+            })?;
+    }
+    overrides.build().map_err(|source| CorpusError::Pattern {
+        pattern: "<combined document patterns>".to_owned(),
+        source,
+    })
 }
 
 fn fingerprint(

@@ -351,6 +351,11 @@ a reserved generated table containing direct incoming relations, configured
 inverses, and informational backlinks. Generated frontmatter is deterministic,
 disposable, and never an authoritative graph input.
 
+Change validation compares the current corpus to a Git base and rejects managed
+changes that cannot be expressed as supported operations. It validates outcomes,
+not CLI provenance, so prose remains unrestricted and equivalent safe edits remain
+valid.
+
 <a id="s-0TZNSBS3HS"></a>
 ## 5. Stable Identity
 

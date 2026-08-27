@@ -839,7 +839,7 @@ docgraph unrelate <source> <relation> <target>
 docgraph neighbors <entity>
 docgraph path <entity-or-stable-section> <entity-or-stable-section>
 docgraph normalize
-docgraph validate
+docgraph validate [--changes <git-ref>]
 docgraph query <name> --arg <name>=<value> [--arg ...] [--json]
 docgraph instructions sync [--dry-run]
 docgraph instructions check
@@ -876,6 +876,11 @@ A batch-adoption manifest groups each document's `path`, `id`, `type`, and optio
 `property = ["name=value"]` entries under `[[document]]`. The batch is normalized and
 validated as one candidate corpus. Workflow initialization likewise writes every
 missing initial state for the selected entity type as one mutation.
+
+`docgraph validate --changes <git-ref>` compares that base corpus with the current
+corpus. It accepts changes equivalent to supported mutations, including a sequence
+of configured workflow transitions, while rejecting unsupported identity, state,
+and surviving-section-ID changes. Ordinary prose changes are unrestricted.
 
 Mutations use a per-worktree lock and optimistic file-hash checks. The tool prepares
 and validates the complete candidate state before writing and refuses to overwrite

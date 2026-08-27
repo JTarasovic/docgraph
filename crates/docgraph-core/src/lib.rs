@@ -1,5 +1,6 @@
 //! Core domain model and repository services for docgraph.
 
+mod changes;
 mod config;
 mod corpus;
 mod derived_index;
@@ -42,3 +43,4 @@ pub use validation::{ValidationDiagnostic, ValidationLocation, ValidationReport,
 
 /// Repository schema implemented by this pre-release workspace.
 pub const SCHEMA_VERSION: u32 = 1;
+pub use changes::{ChangeDiagnostic, ManagedChange, ManagedChangeReport, ManagedChangeValidator};

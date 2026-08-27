@@ -2,9 +2,9 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use docgraph_core::{
     Adoption, CanonicalCorpus, CommandConfig, CommandOperation, DerivedState, DiagnosticSeverity,
     GeneratedBlockStatus, GraphIndex, GraphNode, GraphTraversal, InstructionService,
-    InstructionStatus, MutationPlan, MutationRequest, MutationService, PropertyConfig,
-    PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig, Validator,
-    check_generated_frontmatter,
+    InstructionStatus, ManagedChangeValidator, MutationPlan, MutationRequest, MutationService,
+    PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig,
+    Validator, check_generated_frontmatter,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -116,7 +116,11 @@ enum Command {
         dry_run: bool,
     },
     /// Validate configuration, logic, and the complete canonical corpus.
-    Validate,
+    Validate {
+        /// Reject managed changes not equivalent to supported operations since REF.
+        #[arg(long, value_name = "REF")]
+        changes: Option<String>,
+    },
     /// Execute a typed named query.
     Query {
         name: String,
@@ -425,7 +429,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
             }
         }
         Command::Normalize { dry_run } => mutate(MutationRequest::Normalize, dry_run, cli.json),
-        Command::Validate => validate(cli.json),
+        Command::Validate { changes } => validate(changes.as_deref(), cli.json),
         Command::Query { name, arguments } => query(&name, &arguments, cli.json),
         Command::Instructions { action } => instructions(action, cli.json),
         Command::Frontmatter { action } => frontmatter(action, cli.json),
@@ -952,7 +956,7 @@ fn property(action: PropertyAction, json_output: bool) -> Result<(), CliError> {
     mutate(request, dry_run, json_output)
 }
 
-fn validate(json_output: bool) -> Result<(), CliError> {
+fn validate(changes: Option<&str>, json_output: bool) -> Result<(), CliError> {
     let context = Context::load()?;
     let report = Validator::validate_corpus(
         &context.repository,
@@ -977,6 +981,24 @@ fn validate(json_output: bool) -> Result<(), CliError> {
             })
         })
         .collect();
+    let change_report = changes
+        .map(|reference| {
+            CanonicalCorpus::load_at_git_ref(&context.repository, &context.config, reference).map(
+                |base| ManagedChangeValidator::validate(&base, &context.corpus, &context.config),
+            )
+        })
+        .transpose()
+        .map_err(CliError::boxed)?;
+    if let Some(report) = &change_report {
+        diagnostics.extend(report.diagnostics.iter().map(|diagnostic| {
+            json!({
+                "severity": "error",
+                "code": diagnostic.code,
+                "message": diagnostic.message,
+                "path": json_path(&diagnostic.path),
+            })
+        }));
+    }
     if let Some(error) = &logic_error {
         diagnostics.push(json!({
             "severity": "error",
@@ -985,7 +1007,11 @@ fn validate(json_output: bool) -> Result<(), CliError> {
             "path": json_path(&context.repository.config_dir().join("logic.dl")),
         }));
     }
-    let valid = report.is_valid() && logic_error.is_none();
+    let valid = report.is_valid()
+        && logic_error.is_none()
+        && change_report
+            .as_ref()
+            .is_none_or(|report| report.is_valid());
     if json_output {
         print_json(json!({ "valid": valid, "diagnostics": diagnostics }))?;
     } else if diagnostics.is_empty() {

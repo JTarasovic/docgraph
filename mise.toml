@@ -25,7 +25,11 @@ run = "cargo nextest run --workspace --all-features --locked --no-tests pass"
 
 [tasks.check]
 description = "Run the default local checks"
-depends = ["fmt", "lint", "test"]
+depends = ["fmt", "lint", "test", "managed-changes"]
+
+[tasks.managed-changes]
+description = "Reject unsupported managed metadata changes"
+run = "cargo run --quiet --locked -p docgraph-cli -- validate --changes HEAD"
 
 [tasks.deny]
 description = "Check dependency policy"
