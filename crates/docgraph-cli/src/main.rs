@@ -34,8 +34,8 @@ enum Command {
         kind: Option<DescribeKind>,
         name: Option<String>,
     },
-    /// Retrieve an entity and its direct graph context.
-    Get { entity: String },
+    /// Retrieve an entity or stable section and its direct graph context.
+    Get { reference: String },
     /// Full-text search indexed documents and sections.
     Search {
         query: String,
@@ -173,9 +173,9 @@ fn run(cli: Cli) -> Result<(), CliError> {
             let context = Context::load()?;
             describe(&context.config, kind, name.as_deref(), cli.json)
         }
-        Command::Get { entity } => {
+        Command::Get { reference } => {
             let context = Context::load()?;
-            get(&context, &entity, cli.json)
+            get(&context, &reference, cli.json)
         }
         Command::Search { query, limit } => {
             let context = Context::load()?;
@@ -327,7 +327,7 @@ fn describe(
     let value = match (kind, name) {
         (None, None) => json!({
             "project": config.project.name,
-            "documents_root": config.project.documents.root,
+            "documents_root": json_path(&config.project.documents.root),
             "entity_types": config.entities.keys().collect::<Vec<_>>(),
             "relations": config.relations.keys().collect::<Vec<_>>(),
             "workflows": config.workflows.keys().collect::<Vec<_>>(),
@@ -377,39 +377,69 @@ fn describe(
     }
 }
 
-fn get(context: &Context, id: &str, json_output: bool) -> Result<(), CliError> {
-    let entity = context
+fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliError> {
+    let value = if let Some(entity) = context
         .graph
         .entities
         .iter()
-        .find(|entity| entity.id == id)
-        .ok_or_else(|| CliError::message(format!("entity {id:?} does not exist")))?;
-    let node = GraphNode::Entity(id.to_owned());
-    let relations: Vec<_> = GraphTraversal::new(&context.graph)
-        .neighbors(&node, None)
-        .into_iter()
-        .map(|neighbor| {
-            json!({
-                "direction": if neighbor.outgoing { "outgoing" } else { "incoming" },
-                "predicate": neighbor.relation.predicate,
-                "target": node_name(&context.graph, neighbor.node),
-                "origin": origin_name(neighbor.relation.origin),
-            })
+        .find(|entity| entity.id == reference)
+    {
+        let node = GraphNode::Entity(reference.to_owned());
+        let properties: BTreeMap<_, _> = entity
+            .properties
+            .iter()
+            .map(|(key, value)| (key, toml_value_json(value)))
+            .collect();
+        json!({
+            "kind": "entity",
+            "id": entity.id,
+            "type": entity.entity_type,
+            "state": entity.state,
+            "document": json_path(&context.graph.documents[entity.document].path),
+            "properties": properties,
+            "relations": relation_context(&context.graph, &node),
         })
-        .collect();
-    let properties: BTreeMap<_, _> = entity
-        .properties
+    } else if let Some((index, section)) = context
+        .graph
+        .sections
         .iter()
-        .map(|(key, value)| (key, toml_value_json(value)))
-        .collect();
-    let value = json!({
-        "id": entity.id,
-        "type": entity.entity_type,
-        "state": entity.state,
-        "document": context.graph.documents[entity.document].path,
-        "properties": properties,
-        "relations": relations,
-    });
+        .enumerate()
+        .find(|(index, _)| node_name(&context.graph, &GraphNode::Section(*index)) == reference)
+    {
+        let node = GraphNode::Section(index);
+        let document = &context.graph.documents[section.document];
+        let file = context
+            .corpus
+            .files
+            .iter()
+            .find(|file| file.path == document.path)
+            .expect("graph documents originate in the corpus");
+        let line_count = section.location.span.line_count();
+        let end_line = section
+            .location
+            .span
+            .start_line
+            .saturating_add(line_count.saturating_sub(1));
+        json!({
+            "kind": "section",
+            "id": reference,
+            "heading": section.heading,
+            "level": section.level,
+            "document": json_path(&document.path),
+            "parent": section.parent.map(|parent| node_name(&context.graph, &GraphNode::Section(parent))),
+            "span": {
+                "start_line": section.location.span.start_line,
+                "end_line": end_line,
+                "line_count": line_count,
+            },
+            "content": &file.content[section.location.span.bytes.clone()],
+            "relations": relation_context(&context.graph, &node),
+        })
+    } else {
+        return Err(CliError::message(format!(
+            "entity or stable section {reference:?} does not exist"
+        )));
+    };
     if json_output {
         print_json(value)
     } else {
@@ -419,6 +449,21 @@ fn get(context: &Context, id: &str, json_output: bool) -> Result<(), CliError> {
         );
         Ok(())
     }
+}
+
+fn relation_context(graph: &GraphIndex, node: &GraphNode) -> Vec<JsonValue> {
+    GraphTraversal::new(graph)
+        .neighbors(node, None)
+        .into_iter()
+        .map(|neighbor| {
+            json!({
+                "direction": if neighbor.outgoing { "outgoing" } else { "incoming" },
+                "predicate": neighbor.relation.predicate,
+                "target": node_name(graph, neighbor.node),
+                "origin": origin_name(neighbor.relation.origin),
+            })
+        })
+        .collect()
 }
 
 fn mutate(request: MutationRequest, dry_run: bool, json_output: bool) -> Result<(), CliError> {
@@ -446,7 +491,7 @@ fn validate(json_output: bool) -> Result<(), CliError> {
                 "severity": severity_name(diagnostic.severity),
                 "code": diagnostic.code,
                 "message": diagnostic.message,
-                "path": diagnostic.location.path,
+                "path": json_path(&diagnostic.location.path),
                 "line": diagnostic.location.span.as_ref().map(|span| span.start_line),
                 "column": diagnostic.location.span.as_ref().map(|span| span.start_column),
             })
@@ -457,7 +502,7 @@ fn validate(json_output: bool) -> Result<(), CliError> {
             "severity": "error",
             "code": "invalid-repository-logic",
             "message": error.to_string(),
-            "path": context.repository.config_dir().join("logic.dl"),
+            "path": json_path(&context.repository.config_dir().join("logic.dl")),
         }));
     }
     let valid = report.is_valid() && logic_error.is_none();
@@ -554,7 +599,7 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
                 print_json(json!({
                     "dry_run": dry_run,
                     "changes": changes.iter().map(|change| json!({
-                        "path": change.path,
+                        "path": json_path(&change.path),
                         "original": change.original,
                         "intended": change.intended,
                     })).collect::<Vec<_>>()
@@ -584,7 +629,7 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
                 .all(|(_, status)| *status == InstructionStatus::Current);
             if json_output {
                 print_json(
-                    json!({ "current": current, "targets": statuses.iter().map(|(path, status)| json!({ "path": path, "status": format!("{status:?}").to_lowercase() })).collect::<Vec<_>>() }),
+                    json!({ "current": current, "targets": statuses.iter().map(|(path, status)| json!({ "path": json_path(path), "status": format!("{status:?}").to_lowercase() })).collect::<Vec<_>>() }),
                 )?;
             } else {
                 for (path, status) in statuses {
@@ -632,7 +677,7 @@ fn frontmatter(action: FrontmatterAction, json_output: bool) -> Result<(), CliEr
                 .all(|(_, status)| matches!(status, Ok(GeneratedBlockStatus::Current)));
             if json_output {
                 print_json(
-                    json!({ "current": current, "documents": statuses.iter().map(|(path, status)| json!({ "path": path, "status": match status { Ok(status) => format!("{status:?}").to_lowercase(), Err(_) => "malformed".to_owned() } })).collect::<Vec<_>>() }),
+                    json!({ "current": current, "documents": statuses.iter().map(|(path, status)| json!({ "path": json_path(path), "status": match status { Ok(status) => format!("{status:?}").to_lowercase(), Err(_) => "malformed".to_owned() } })).collect::<Vec<_>>() }),
                 )?;
             } else {
                 for (path, status) in statuses {
@@ -747,7 +792,7 @@ fn print_plan(plan: &MutationPlan, dry_run: bool, json_output: bool) -> Result<(
         return print_json(json!({
             "dry_run": dry_run,
             "fingerprint": plan.fingerprint.to_string(),
-            "changes": plan.changes.iter().map(|change| json!({ "path": change.path, "original": change.original, "intended": change.intended })).collect::<Vec<_>>(),
+            "changes": plan.changes.iter().map(|change| json!({ "path": json_path(&change.path), "original": change.original, "intended": change.intended })).collect::<Vec<_>>(),
         }));
     }
     if plan.changes.is_empty() {
@@ -803,7 +848,7 @@ fn refresh_derived(context: &Context) -> Result<(), CliError> {
 
 fn node_name(graph: &GraphIndex, node: &GraphNode) -> String {
     match node {
-        GraphNode::Document(index) => graph.documents[*index].path.display().to_string(),
+        GraphNode::Document(index) => json_path(&graph.documents[*index].path),
         GraphNode::Entity(id) | GraphNode::ExternalUri(id) | GraphNode::Unresolved(id) => {
             id.clone()
         }
@@ -811,16 +856,20 @@ fn node_name(graph: &GraphIndex, node: &GraphNode) -> String {
             let section = &graph.sections[*index];
             let document = &graph.documents[section.document];
             section.id.as_ref().map_or_else(
-                || format!("{}#<missing>", document.path.display()),
+                || format!("{}#<missing>", json_path(&document.path)),
                 |id| {
                     document.entity.as_ref().map_or_else(
-                        || format!("{}#{}", document.path.display(), id.as_str()),
+                        || format!("{}#{}", json_path(&document.path), id.as_str()),
                         |entity| format!("{entity}#{}", id.as_str()),
                     )
                 },
             )
         }
     }
+}
+
+fn json_path(path: &std::path::Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn origin_name(origin: RelationOrigin) -> &'static str {

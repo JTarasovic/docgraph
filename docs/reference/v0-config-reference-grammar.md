@@ -633,7 +633,7 @@ docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 
 ```bash
 docgraph describe
-docgraph get <entity>
+docgraph get <entity-or-stable-section>
 docgraph search <query>
 docgraph transition <entity> <state>
 docgraph relate <source> <relation> <target>

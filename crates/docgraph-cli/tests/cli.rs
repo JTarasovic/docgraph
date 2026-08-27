@@ -246,6 +246,29 @@ fn historical_research_mutation_updates_context_and_query_results() {
     let query: Value = serde_json::from_slice(&query.stdout).unwrap();
     assert_eq!(query["rows"][0]["finding"], target);
 
+    let section = fixture.run(&["--json", "get", target]);
+    assert!(section.status.success());
+    let section: Value = serde_json::from_slice(&section.stdout).unwrap();
+    assert_eq!(section["kind"], "section");
+    assert_eq!(section["document"], "docs/finding.md");
+    assert_eq!(section["span"]["start_line"], 21);
+    assert_eq!(section["span"]["line_count"], 3);
+    assert!(
+        section["content"]
+            .as_str()
+            .unwrap()
+            .contains("retry policy was introduced")
+    );
+    assert!(
+        section["relations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|relation| {
+                relation["predicate"] == "supports" && relation["origin"] == "explicit"
+            })
+    );
+
     let preview = fixture.run(&[
         "unrelate",
         "research:retry-history",
@@ -339,4 +362,25 @@ fn v0_fixtures_exercise_exact_graph_search_and_named_query_retrieval() {
         let query: Value = serde_json::from_slice(&query.stdout).unwrap();
         assert!(!query["rows"].as_array().unwrap().is_empty());
     }
+}
+
+#[test]
+fn normalization_dry_run_apply_and_reindex_complete_the_fixture_loop() {
+    let fixture = Fixture::copy("synthetic");
+    let document = fixture.0.join("docs/florp.md");
+    let mut source = fs::read_to_string(&document).unwrap();
+    source.push_str("\n## A newly authored section\n\nUnnormalized prose.\n");
+    fs::write(&document, &source).unwrap();
+
+    let preview = fixture.run(&["normalize", "--dry-run"]);
+    assert!(preview.status.success());
+    assert!(String::from_utf8_lossy(&preview.stdout).contains("+<a id=\"s-"));
+    assert_eq!(fs::read_to_string(&document).unwrap(), source);
+
+    assert!(fixture.run(&["normalize"]).status.success());
+    let normalized = fs::read_to_string(&document).unwrap();
+    assert_eq!(normalized.matches("<a id=\"s-").count(), 2);
+    assert!(fixture.run(&["frontmatter", "check"]).status.success());
+    assert!(fixture.run(&["validate"]).status.success());
+    assert!(String::from_utf8_lossy(&fixture.run(&["normalize"]).stdout).contains("no changes"));
 }
