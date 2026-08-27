@@ -7,9 +7,9 @@
   `a1303be3c0166400dee3d1f36f0d96abe03e6901`, VS 2026/MSVC, bundled CMake and
   Ninja, local winflexbison 2.5.25, and vcpkg
   `cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3` with static SQLite 3.53.2.
-- The minimal 64-bit Release build enables only SQLite and produces a 8,979,456
-  byte `souffle.exe` (SHA-256
-  `2281e553c2f1cfe0b512dcfa8117a563f32ec336761e4885a5bf370a6e87c263`). Its
+- The minimal 64-bit Release build enables only SQLite and produces an 8,532,480
+  byte companion executable (SHA-256
+  `769468c7d3e55ed4842d5ee57c42bb742c3a4fda07d8d375cc7d38056280b50b`). Its
   only PE imports are `KERNEL32.dll` and `SHELL32.dll`; SQLite and the MSVC CRT
   are statically linked.
 - `souffle --version` reports a 64-bit SQLite-enabled runtime. A recursive
@@ -36,13 +36,13 @@ symbols. The spike does not yet prove full typed, native end-to-end execution.
 
 ## Result
 
-Native Windows is feasible and is not an architectural blocker for v0. The lack
-of an upstream Windows release artifact means docgraph must own a pinned source
-build and release artifact rather than download one. Package it as the opaque
-`docgraph-logic-runtime` companion with provenance and licence notices. The generic
-`DOCGRAPH_LOGIC_RUNTIME` override is for development and tests. The source pin above
-is a known-good upstream commit, not a final product-version choice; maintain an
-explicit revision policy before release.
+Native Windows is feasible and is not an architectural blocker for v0. Because
+upstream does not publish a Windows artifact, docgraph publishes the pinned build as
+the opaque `docgraph-logic-runtime` companion with provenance and licence notices.
+Windows CI downloads and verifies that package, then runs the end-to-end suite
+without rebuilding Soufflé. The generic `DOCGRAPH_LOGIC_RUNTIME` override is for
+development and tests. The source pin above is a known-good upstream commit, not a
+final product-version choice; maintain an explicit revision policy before release.
 
 Compared with Mnestic, Souffle removes the Rust graph-engine dependency but adds
 an external native runtime and release pipeline. Compared with Z3, it is a

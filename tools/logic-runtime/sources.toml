@@ -15,6 +15,10 @@ sha256 = "8d324b62be33604b2c45ad1dd34ab93d722534448f55a16ca7292de32b6ac135"
 
 [artifact.windows-x86_64]
 name = "docgraph-logic-runtime.exe"
+release = "logic-runtime-windows-a1303be3"
+url = "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-windows-a1303be3/docgraph-logic-runtime-windows-x86_64-a1303be3.zip"
+archive_sha256 = "65880b97ad4c0242e457917afbce6c59aad1ee6fffa6a9490cd31f62117ee267"
+binary_sha256 = "769468c7d3e55ed4842d5ee57c42bb742c3a4fda07d8d375cc7d38056280b50b"
 features = ["64-bit-domain", "sqlite", "static-crt"]
 
 [artifact.linux-x86_64]

@@ -51,3 +51,41 @@ jobs:
         run: |
           mise run machete
           mise run deny
+
+  windows-e2e:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      DOCGRAPH_LOGIC_RUNTIME: ${{ github.workspace }}\target\logic-runtime\windows-x86_64\docgraph-logic-runtime.exe
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned development tools
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Install packaged logic runtime
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "docgraph-logic-runtime.zip"
+          Invoke-WebRequest `
+            -Uri "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-windows-a1303be3/docgraph-logic-runtime-windows-x86_64-a1303be3.zip" `
+            -OutFile $archive
+          $expected = "65880b97ad4c0242e457917afbce6c59aad1ee6fffa6a9490cd31f62117ee267"
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "Logic runtime checksum mismatch: expected $expected, got $actual"
+          }
+          $destination = Split-Path -Parent $env:DOCGRAPH_LOGIC_RUNTIME
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination
+
+      - name: Run Windows end-to-end tests
+        run: cargo nextest run --workspace --all-features --locked --no-tests pass

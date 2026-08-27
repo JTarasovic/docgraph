@@ -535,8 +535,9 @@ configuration and properties, multiple workflows, stable sections, exact section
 relations, inverse projections, allowed and rejected cycles, persistent FTS,
 restricted recursive logic, derived readiness, typed named queries, safe mutation
 and recovery, worktree isolation, generated frontmatter, and generated agent
-guidance. Runtime-backed logic tests run on Windows locally and from a checksummed
-Linux package in CI.
+guidance. Runtime-backed logic tests run in Linux and Windows CI from checksummed
+packages; the Windows suite consumes the pinned companion release rather than
+rebuilding Soufflé.
 
 Covered follow-on cases include:
 
