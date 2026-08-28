@@ -19,6 +19,11 @@ target = "reference:config-grammar#s-3B3J65MSQN"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:next-hides-promotable-backlog-tasks"
+predicate = "affects"
+target = "plan:project-aware-commands"
+
+[[docgraph_generated.incoming]]
 source = "task:dogfood-project-next"
 predicate = "implements"
 target = "plan:project-aware-commands#s-9MNKBYJ002"
@@ -37,6 +42,11 @@ target = "plan:project-aware-commands#s-4703EK4457"
 source = "task:implement-repository-commands"
 predicate = "part_of"
 target = "plan:project-aware-commands"
+
+[[docgraph_generated.inverses]]
+source = "plan:project-aware-commands"
+type = "affected_by"
+target = "issue:next-hides-promotable-backlog-tasks"
 
 [[docgraph_generated.inverses]]
 source = "plan:project-aware-commands"

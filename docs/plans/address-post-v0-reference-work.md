@@ -23,6 +23,11 @@ target = "reference:scenarios#s-N6Z4YKP9M0"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:next-hides-promotable-backlog-tasks"
+predicate = "affects"
+target = "plan:address-post-v0-reference-work"
+
+[[docgraph_generated.incoming]]
 source = "task:add-provider-reference-adapters"
 predicate = "implements"
 target = "plan:address-post-v0-reference-work#s-GD85CN51TD"
@@ -101,6 +106,11 @@ target = "plan:address-post-v0-reference-work#s-K6ZPQ3E59H"
 source = "task:reconcile-post-v0-reference-accounting"
 predicate = "part_of"
 target = "plan:address-post-v0-reference-work"
+
+[[docgraph_generated.inverses]]
+source = "plan:address-post-v0-reference-work"
+type = "affected_by"
+target = "issue:next-hides-promotable-backlog-tasks"
 
 [[docgraph_generated.inverses]]
 source = "plan:address-post-v0-reference-work"
