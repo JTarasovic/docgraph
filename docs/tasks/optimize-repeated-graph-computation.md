@@ -27,6 +27,10 @@ target = "task:add-provider-reference-adapters"
 type = "depends_on"
 target = "task:add-vector-retrieval"
 
+[[relations]]
+type = "depends_on"
+target = "task:index-searchable-markdown-content"
+
 [docgraph_generated]
 schema_version = 1
 

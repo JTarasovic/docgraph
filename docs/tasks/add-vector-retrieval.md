@@ -23,9 +23,19 @@ target = "task:complete-structured-retrieval-surface"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "task:index-searchable-markdown-content"
+predicate = "depends_on"
+target = "task:add-vector-retrieval"
+
+[[docgraph_generated.incoming]]
 source = "task:optimize-repeated-graph-computation"
 predicate = "depends_on"
 target = "task:add-vector-retrieval"
+
+[[docgraph_generated.inverses]]
+source = "task:add-vector-retrieval"
+type = "required_by"
+target = "task:index-searchable-markdown-content"
 
 [[docgraph_generated.inverses]]
 source = "task:add-vector-retrieval"

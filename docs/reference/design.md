@@ -10,6 +10,11 @@ role = "design"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:search-index-includes-structured-frontmatter"
+predicate = "affects"
+target = "reference:design#s-FDMHXV5Q4Q"
+
+[[docgraph_generated.incoming]]
 source = "plan:address-post-v0-reference-work"
 predicate = "implements"
 target = "reference:design#s-DRW3RR84VS"
@@ -43,6 +48,11 @@ target = "reference:design#s-DD5NS2HR0R"
 source = "task:implement-derived-index-lifecycle"
 predicate = "implements"
 target = "reference:design#s-7BBMBXC9RK"
+
+[[docgraph_generated.incoming]]
+source = "task:index-searchable-markdown-content"
+predicate = "implements"
+target = "reference:design#s-FDMHXV5Q4Q"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-7BBMBXC9RK"
@@ -78,6 +88,16 @@ target = "plan:close-initial-design-gaps"
 source = "reference:design#s-DRW3RR84VS"
 type = "implemented_by"
 target = "task:audit-initial-design-closure"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-FDMHXV5Q4Q"
+type = "affected_by"
+target = "issue:search-index-includes-structured-frontmatter"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-FDMHXV5Q4Q"
+type = "implemented_by"
+target = "task:index-searchable-markdown-content"
 
 [[docgraph_generated.backlinks]]
 source = "reference:config-grammar#s-P73QA8YDQB"

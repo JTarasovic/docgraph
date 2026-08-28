@@ -88,6 +88,16 @@ predicate = "part_of"
 target = "plan:address-post-v0-reference-work"
 
 [[docgraph_generated.incoming]]
+source = "task:index-searchable-markdown-content"
+predicate = "implements"
+target = "plan:address-post-v0-reference-work#s-86JXA5Y7AV"
+
+[[docgraph_generated.incoming]]
+source = "task:index-searchable-markdown-content"
+predicate = "part_of"
+target = "plan:address-post-v0-reference-work"
+
+[[docgraph_generated.incoming]]
 source = "task:optimize-repeated-graph-computation"
 predicate = "implements"
 target = "plan:address-post-v0-reference-work#s-18CTD41F5E"
@@ -145,6 +155,11 @@ target = "task:implement-stable-section-lifecycle"
 [[docgraph_generated.inverses]]
 source = "plan:address-post-v0-reference-work"
 type = "contains"
+target = "task:index-searchable-markdown-content"
+
+[[docgraph_generated.inverses]]
+source = "plan:address-post-v0-reference-work"
+type = "contains"
 target = "task:optimize-repeated-graph-computation"
 
 [[docgraph_generated.inverses]]
@@ -156,6 +171,11 @@ target = "task:reconcile-post-v0-reference-accounting"
 source = "plan:address-post-v0-reference-work#s-18CTD41F5E"
 type = "implemented_by"
 target = "task:optimize-repeated-graph-computation"
+
+[[docgraph_generated.inverses]]
+source = "plan:address-post-v0-reference-work#s-86JXA5Y7AV"
+type = "implemented_by"
+target = "task:index-searchable-markdown-content"
 
 [[docgraph_generated.inverses]]
 source = "plan:address-post-v0-reference-work#s-9FHDT151FB"
@@ -243,6 +263,11 @@ Normalize configured repository-host shorthand without requiring network access 
 ### Add pluggable vector retrieval
 
 Introduce embedding-provider configuration, changed-chunk indexing, and semantic retrieval without coupling the core binary to one model or service.
+
+<a id="s-86JXA5Y7AV"></a>
+### Index searchable Markdown content
+
+Build full-text and vector input from the Markdown body rather than raw managed frontmatter, while preserving headings, prose, and useful code content.
 
 <a id="s-18CTD41F5E"></a>
 ### Measure and optimize repeated computation
