@@ -510,6 +510,26 @@ Adapters share an offline normalization interface. A future, separate external-e
 source capability may enrich those nodes from a forge as disposable derived data;
 remote issue or change content does not become canonical repository Markdown.
 
+<a id="s-WCDD32CNPK"></a>
+### 6.3.1 Derived external reference data
+
+A future external-entity source may resolve a canonical external identity into a
+provider-neutral record containing its kind, title, body, state, author, timestamps,
+URL, and provider-defined attributes. Implementations may expose read, search, and
+mutation capabilities independently; reference normalization must not depend on any
+of them.
+
+Fetched records belong in the per-worktree derived store with provider, identity,
+fetch time, and freshness metadata. They may contribute to `get`, `context`, search,
+and vector retrieval, but must be labeled as derived so callers can distinguish them
+from repository-authored facts. Provider state must not satisfy repository workflows
+or validation rules unless repository logic explicitly maps it.
+
+Missing credentials, unavailable networks, unsupported capabilities, stale cache
+entries, and deleted remote objects must degrade to the canonical external identity.
+The repository graph remains valid and usable offline, and deleting the derived
+store loses no authored information.
+
 <a id="s-ZDNCXK183C"></a>
 ### 6.4 Deterministic resolution
 
