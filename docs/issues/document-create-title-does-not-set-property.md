@@ -2,7 +2,7 @@
 
 id = "issue:document-create-title-does-not-set-property"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Document create title does not set the title property"
@@ -30,3 +30,9 @@ tests hide the defect by supplying both values.
 
 Make `--title` populate `properties.title`, reject a conflicting explicit title
 property, and update the tests to exercise the documented invocation.
+
+<a id="s-6AFTAYBJ72"></a>
+## Resolution
+
+Document creation now derives a declared `title` property from `--title`, rejects
+conflicting values, and tests the documented invocation without redundant options.

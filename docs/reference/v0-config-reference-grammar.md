@@ -878,6 +878,10 @@ Property values are parsed against the entity type's declared schema. String val
 are passed directly; other scalar and array values use TOML syntax. Both operations
 support `--dry-run` and the standard structured output envelope.
 
+When an entity type declares a `title` property, `document create --title` populates
+it as well as the document heading. A conflicting explicit title property is
+rejected.
+
 Section split uses a one-based source line inside the selected section and inserts a
 same-level heading there. The original ID remains on the original heading. Merge
 accepts only an immediately following sibling, retires that sibling's ID and heading,

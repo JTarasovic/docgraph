@@ -155,8 +155,6 @@ fn document_commands_create_move_and_safely_delete() {
         "florp",
         "--title",
         "Created florp",
-        "--property",
-        "title=Created florp",
         "--dry-run",
     ]);
     assert!(
@@ -177,8 +175,6 @@ fn document_commands_create_move_and_safely_delete() {
         "florp",
         "--title",
         "Created florp",
-        "--property",
-        "title=Created florp",
     ]);
     assert!(
         create.status.success(),
@@ -186,7 +182,29 @@ fn document_commands_create_move_and_safely_delete() {
         String::from_utf8_lossy(&create.stderr)
     );
     assert!(created.exists());
-    assert!(fs::read_to_string(&created).unwrap().contains("<a id=\"s-"));
+    let created_source = fs::read_to_string(&created).unwrap();
+    assert!(created_source.contains("<a id=\"s-"));
+    assert!(created_source.contains("title = \"Created florp\""));
+
+    let conflicting = fixture.run(&[
+        "document",
+        "create",
+        "docs/conflicting.md",
+        "--id",
+        "florp:conflicting",
+        "--type",
+        "florp",
+        "--title",
+        "Heading title",
+        "--property",
+        "title=Metadata title",
+    ]);
+    assert!(!conflicting.status.success());
+    assert!(
+        String::from_utf8_lossy(&conflicting.stderr)
+            .contains("--title conflicts with --property title=")
+    );
+    assert!(!fixture.0.join("docs/conflicting.md").exists());
 
     let move_document = fixture.run(&[
         "document",

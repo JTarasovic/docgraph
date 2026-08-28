@@ -1138,6 +1138,18 @@ fn create_document(
     let entity = config.entities.get(entity_type).ok_or_else(|| {
         MutationError::InvalidRequest(format!("unknown entity type {entity_type:?}"))
     })?;
+    let mut properties = properties.clone();
+    if entity.property.contains_key("title") {
+        let title_value = toml_edit::Value::from(title.trim());
+        if let Some(property_value) = properties.get("title")
+            && property_value.as_str() != Some(title.trim())
+        {
+            return Err(MutationError::InvalidRequest(format!(
+                "--title conflicts with --property title={property_value}"
+            )));
+        }
+        properties.insert("title".to_owned(), title_value);
+    }
     let workflow = entity
         .workflow
         .as_deref()
@@ -1156,7 +1168,7 @@ fn create_document(
         id,
         entity_type,
         workflow.map(|workflow| workflow.initial.as_str()),
-        properties,
+        &properties,
     )?;
     let reserved: BTreeSet<StableSectionId> = graph
         .sections
