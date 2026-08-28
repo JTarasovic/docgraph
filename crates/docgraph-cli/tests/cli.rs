@@ -569,6 +569,81 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
 }
 
 #[test]
+fn directional_traversal_and_expanded_context_are_structured() {
+    let fixture = Fixture::copy("synthetic");
+
+    let incoming = fixture.run(&["--json", "incoming", "florp:1"]);
+    assert!(incoming.status.success());
+    let incoming: Value = serde_json::from_slice(&incoming.stdout).unwrap();
+    assert!(
+        incoming["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| { row["direction"] == "incoming" && row["origin"] == "explicit" })
+    );
+    assert!(
+        incoming["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["node"] == "florp:2")
+    );
+
+    let outgoing = fixture.run(&["--json", "outgoing", "florp:1"]);
+    assert!(outgoing.status.success());
+    let outgoing: Value = serde_json::from_slice(&outgoing.stdout).unwrap();
+    assert!(
+        outgoing["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| { row["direction"] == "outgoing" && row["origin"] == "explicit" })
+    );
+
+    let section = fixture.run(&["--json", "outgoing", "florp:1#s-9K8J7H6G5F"]);
+    assert!(section.status.success());
+    let section: Value = serde_json::from_slice(&section.stdout).unwrap();
+    assert_eq!(section["rows"][0]["node"], "florp:2#s-9D9KQWAJ82");
+
+    let traverse = fixture.run(&[
+        "--json",
+        "traverse",
+        "florp:1",
+        "--direction",
+        "outgoing",
+        "--depth",
+        "2",
+    ]);
+    assert!(traverse.status.success());
+    let traverse: Value = serde_json::from_slice(&traverse.stdout).unwrap();
+    assert!(
+        traverse["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["node"] == "florp:3" && row["depth"] == 2)
+    );
+
+    let context = fixture.run(&["--json", "context", "florp:1", "--depth", "1"]);
+    assert!(context.status.success());
+    let context: Value = serde_json::from_slice(&context.stdout).unwrap();
+    assert_eq!(context["reference"], "florp:1");
+    assert_eq!(context["nodes"][0]["depth"], 0);
+    assert_eq!(
+        context["nodes"][0]["node"]["properties"]["title"],
+        "Florp one"
+    );
+    assert!(
+        context["relations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|relation| relation["origin"] == "explicit")
+    );
+}
+
+#[test]
 fn configured_logic_runtime_executes_a_typed_query() {
     if !logic_runtime_configured() {
         return;

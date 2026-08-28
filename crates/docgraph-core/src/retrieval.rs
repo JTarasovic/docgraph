@@ -8,6 +8,22 @@ pub struct Neighbor<'a> {
     pub outgoing: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TraversalDirection {
+    Incoming,
+    Outgoing,
+    Both,
+}
+
+#[derive(Clone, Debug)]
+pub struct TraversalStep<'a> {
+    pub node: GraphNode,
+    pub from: GraphNode,
+    pub relation: &'a Relation,
+    pub outgoing: bool,
+    pub depth: usize,
+}
+
 pub struct GraphTraversal<'a> {
     graph: &'a GraphIndex,
 }
@@ -78,6 +94,45 @@ impl<'a> GraphTraversal<'a> {
         }
         None
     }
+
+    pub fn traverse(
+        &self,
+        source: &GraphNode,
+        direction: TraversalDirection,
+        max_depth: usize,
+        origin: Option<RelationOrigin>,
+    ) -> Vec<TraversalStep<'a>> {
+        let mut pending = VecDeque::from([(source.clone(), 0)]);
+        let mut visited = HashSet::from([source.clone()]);
+        let mut steps = Vec::new();
+        while let Some((node, depth)) = pending.pop_front() {
+            if depth == max_depth {
+                continue;
+            }
+            for neighbor in self
+                .neighbors(&node, origin)
+                .into_iter()
+                .filter(|neighbor| {
+                    matches!(direction, TraversalDirection::Both)
+                        || (neighbor.outgoing && matches!(direction, TraversalDirection::Outgoing))
+                        || (!neighbor.outgoing && matches!(direction, TraversalDirection::Incoming))
+                })
+            {
+                if visited.insert(neighbor.node.clone()) {
+                    let next_depth = depth + 1;
+                    pending.push_back((neighbor.node.clone(), next_depth));
+                    steps.push(TraversalStep {
+                        node: neighbor.node.clone(),
+                        from: node.clone(),
+                        relation: neighbor.relation,
+                        outgoing: neighbor.outgoing,
+                        depth: next_depth,
+                    });
+                }
+            }
+        }
+        steps
+    }
 }
 
 #[cfg(test)]
@@ -134,5 +189,53 @@ mod tests {
         );
 
         assert_eq!(path.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn traversal_respects_direction_and_depth() {
+        let mut graph = fixture();
+        let location = graph.sections[0].location.clone();
+        graph.relations.extend([
+            Relation {
+                source: GraphNode::Entity("spec:retry".to_owned()),
+                predicate: "depends_on".to_owned(),
+                target: GraphNode::Entity("spec:clock".to_owned()),
+                properties: Default::default(),
+                origin: RelationOrigin::Explicit,
+                location: location.clone(),
+            },
+            Relation {
+                source: GraphNode::Entity("spec:clock".to_owned()),
+                predicate: "depends_on".to_owned(),
+                target: GraphNode::Entity("spec:database".to_owned()),
+                properties: Default::default(),
+                origin: RelationOrigin::Explicit,
+                location,
+            },
+        ]);
+        let traversal = GraphTraversal::new(&graph);
+
+        let outgoing = traversal.traverse(
+            &GraphNode::Entity("spec:retry".to_owned()),
+            TraversalDirection::Outgoing,
+            2,
+            Some(RelationOrigin::Explicit),
+        );
+        assert_eq!(outgoing.len(), 2);
+        assert_eq!(outgoing[0].depth, 1);
+        assert_eq!(outgoing[1].depth, 2);
+        assert_eq!(
+            outgoing[1].node,
+            GraphNode::Entity("spec:database".to_owned())
+        );
+
+        let incoming = traversal.traverse(
+            &GraphNode::Entity("spec:clock".to_owned()),
+            TraversalDirection::Incoming,
+            1,
+            Some(RelationOrigin::Explicit),
+        );
+        assert_eq!(incoming.len(), 1);
+        assert_eq!(incoming[0].node, GraphNode::Entity("spec:retry".to_owned()));
     }
 }

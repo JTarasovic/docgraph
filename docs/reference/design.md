@@ -635,9 +635,10 @@ vector search. Repositories may expose named explanation queries for important
 derived predicates. v0 includes structured retrieval, FTS, and named queries; vector
 retrieval is post-v0 direction.
 
-The v0 CLI exposes `get`, `neighbors`, and `path`; `get` assembles direct context and
-structured output preserves edge direction. Dedicated `incoming`, `outgoing`,
-arbitrary-depth `traverse`, and broader `context` commands remain post-v0 ergonomics.
+The CLI exposes `get`, `neighbors`, `incoming`, `outgoing`, `traverse`, `path`, and
+`context`. Structured output preserves edge direction and origin. Traversal is
+directional and depth-bounded; context assembles detailed nodes and the relations
+among them. Informational Markdown edges remain opt-in.
 
 Post-v0 embedding generation should use a provider abstraction rather than bundle a
 large model into the binary.

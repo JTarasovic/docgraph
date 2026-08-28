@@ -4,13 +4,13 @@ use docgraph_core::{
     GeneratedBlockStatus, GraphIndex, GraphNode, GraphTraversal, InstructionService,
     InstructionStatus, ManagedChangeValidator, MutationPlan, MutationRequest, MutationService,
     PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig,
-    SemanticChange, SemanticChangeReviewer, SemanticSection, Validator,
+    SemanticChange, SemanticChangeReviewer, SemanticSection, TraversalDirection, Validator,
     check_generated_frontmatter,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
@@ -108,7 +108,41 @@ enum Command {
     },
     /// List adjacent nodes and edge origins.
     Neighbors {
-        entity: String,
+        reference: String,
+        /// Include informational Markdown links.
+        #[arg(long)]
+        all: bool,
+    },
+    /// List direct incoming relations.
+    Incoming {
+        reference: String,
+        /// Include informational Markdown links.
+        #[arg(long)]
+        all: bool,
+    },
+    /// List direct outgoing relations.
+    Outgoing {
+        reference: String,
+        /// Include informational Markdown links.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Traverse the graph to a bounded arbitrary depth.
+    Traverse {
+        reference: String,
+        #[arg(long, value_enum, default_value_t = TraversalDirectionArg::Both)]
+        direction: TraversalDirectionArg,
+        #[arg(long, default_value_t = 1)]
+        depth: usize,
+        /// Include informational Markdown links.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Assemble node details and relations around a graph reference.
+    Context {
+        reference: String,
+        #[arg(long, default_value_t = 1)]
+        depth: usize,
         /// Include informational Markdown links.
         #[arg(long)]
         all: bool,
@@ -164,6 +198,23 @@ enum DescribeKind {
     Workflow,
     Query,
     Command,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum TraversalDirectionArg {
+    Incoming,
+    Outgoing,
+    Both,
+}
+
+impl From<TraversalDirectionArg> for TraversalDirection {
+    fn from(direction: TraversalDirectionArg) -> Self {
+        match direction {
+            TraversalDirectionArg::Incoming => Self::Incoming,
+            TraversalDirectionArg::Outgoing => Self::Outgoing,
+            TraversalDirectionArg::Both => Self::Both,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -521,37 +572,51 @@ fn run(cli: Cli) -> Result<(), CliError> {
             dry_run,
             cli.json,
         ),
-        Command::Neighbors { entity, all } => {
+        Command::Neighbors { reference, all } => {
             let context = Context::load()?;
             context.ensure_derived()?;
-            let node = GraphNode::Entity(entity);
-            let origin = (!all).then_some(RelationOrigin::Explicit);
-            let neighbors = GraphTraversal::new(&context.graph).neighbors(&node, origin);
-            if cli.json {
-                let rows: Vec<_> = neighbors
-                    .iter()
-                    .map(|neighbor| {
-                        json!({
-                            "node": node_name(&context.graph, neighbor.node),
-                            "predicate": neighbor.relation.predicate,
-                            "direction": if neighbor.outgoing { "outgoing" } else { "incoming" },
-                            "origin": origin_name(neighbor.relation.origin),
-                        })
-                    })
-                    .collect();
-                print_json(json!({ "rows": rows }))
-            } else {
-                for neighbor in neighbors {
-                    println!(
-                        "{}\t{}\t{}\t{}",
-                        if neighbor.outgoing { "->" } else { "<-" },
-                        neighbor.relation.predicate,
-                        node_name(&context.graph, neighbor.node),
-                        origin_name(neighbor.relation.origin)
-                    );
-                }
-                Ok(())
-            }
+            direct_relations(&context, &reference, None, all, cli.json)
+        }
+        Command::Incoming { reference, all } => {
+            let context = Context::load()?;
+            context.ensure_derived()?;
+            direct_relations(
+                &context,
+                &reference,
+                Some(TraversalDirection::Incoming),
+                all,
+                cli.json,
+            )
+        }
+        Command::Outgoing { reference, all } => {
+            let context = Context::load()?;
+            context.ensure_derived()?;
+            direct_relations(
+                &context,
+                &reference,
+                Some(TraversalDirection::Outgoing),
+                all,
+                cli.json,
+            )
+        }
+        Command::Traverse {
+            reference,
+            direction,
+            depth,
+            all,
+        } => {
+            let context = Context::load()?;
+            context.ensure_derived()?;
+            traverse(&context, &reference, direction.into(), depth, all, cli.json)
+        }
+        Command::Context {
+            reference,
+            depth,
+            all,
+        } => {
+            let context = Context::load()?;
+            context.ensure_derived()?;
+            expanded_context(&context, &reference, depth, all, cli.json)
         }
         Command::Path {
             source,
@@ -931,7 +996,20 @@ fn describe(
 
 fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliError> {
     let node = resolve_graph_reference(&context.graph, reference)?;
-    let value = if let GraphNode::Entity(id) = &node {
+    let value = node_context_value(context, &node);
+    if json_output {
+        print_json(value)
+    } else {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&value).map_err(CliError::boxed)?
+        );
+        Ok(())
+    }
+}
+
+fn node_context_value(context: &Context, node: &GraphNode) -> JsonValue {
+    if let GraphNode::Entity(id) = node {
         let entity = context
             .graph
             .entities
@@ -950,9 +1028,9 @@ fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliE
             "state": entity.state,
             "document": json_path(&context.graph.documents[entity.document].path),
             "properties": properties,
-            "relations": relation_context(&context.graph, &node),
+            "relations": relation_context(&context.graph, node),
         })
-    } else if let GraphNode::Section(index) = node {
+    } else if let GraphNode::Section(index) = *node {
         let section = &context.graph.sections[index];
         let document = &context.graph.documents[section.document];
         let file = context
@@ -969,7 +1047,7 @@ fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliE
             .saturating_add(line_count.saturating_sub(1));
         json!({
             "kind": "section",
-            "id": reference,
+            "id": node_name(&context.graph, node),
             "heading": section.heading,
             "level": section.level,
             "document": json_path(&document.path),
@@ -980,19 +1058,21 @@ fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliE
                 "line_count": line_count,
             },
             "content": &file.content[section.location.span.bytes.clone()],
-            "relations": relation_context(&context.graph, &node),
+            "relations": relation_context(&context.graph, node),
         })
+    } else if let GraphNode::Document(index) = *node {
+        json!({
+            "kind": "document",
+            "id": node_name(&context.graph, node),
+            "document": json_path(&context.graph.documents[index].path),
+            "relations": relation_context(&context.graph, node),
+        })
+    } else if matches!(node, GraphNode::ExternalUri(_)) {
+        json!({ "kind": "external", "id": node_name(&context.graph, node) })
+    } else if matches!(node, GraphNode::Unresolved(_)) {
+        json!({ "kind": "unresolved", "id": node_name(&context.graph, node) })
     } else {
-        unreachable!("canonical graph references resolve only to entities or sections");
-    };
-    if json_output {
-        print_json(value)
-    } else {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&value).map_err(CliError::boxed)?
-        );
-        Ok(())
+        unreachable!("all graph node kinds are covered")
     }
 }
 
@@ -1045,6 +1125,176 @@ fn relation_context(graph: &GraphIndex, node: &GraphNode) -> Vec<JsonValue> {
             })
         })
         .collect()
+}
+
+fn direct_relations(
+    context: &Context,
+    reference: &str,
+    direction: Option<TraversalDirection>,
+    all: bool,
+    json_output: bool,
+) -> Result<(), CliError> {
+    let node = resolve_graph_reference(&context.graph, reference)?;
+    let neighbors: Vec<_> = GraphTraversal::new(&context.graph)
+        .neighbors(&node, (!all).then_some(RelationOrigin::Explicit))
+        .into_iter()
+        .filter(|neighbor| match direction {
+            Some(TraversalDirection::Incoming) => !neighbor.outgoing,
+            Some(TraversalDirection::Outgoing) => neighbor.outgoing,
+            Some(TraversalDirection::Both) | None => true,
+        })
+        .collect();
+    if json_output {
+        let rows: Vec<_> = neighbors
+            .iter()
+            .map(|neighbor| {
+                json!({
+                    "node": node_name(&context.graph, neighbor.node),
+                    "predicate": neighbor.relation.predicate,
+                    "direction": if neighbor.outgoing { "outgoing" } else { "incoming" },
+                    "origin": origin_name(neighbor.relation.origin),
+                })
+            })
+            .collect();
+        print_json(json!({ "reference": node_name(&context.graph, &node), "rows": rows }))
+    } else {
+        for neighbor in neighbors {
+            println!(
+                "{}\t{}\t{}\t{}",
+                if neighbor.outgoing { "->" } else { "<-" },
+                neighbor.relation.predicate,
+                node_name(&context.graph, neighbor.node),
+                origin_name(neighbor.relation.origin)
+            );
+        }
+        Ok(())
+    }
+}
+
+fn traverse(
+    context: &Context,
+    reference: &str,
+    direction: TraversalDirection,
+    depth: usize,
+    all: bool,
+    json_output: bool,
+) -> Result<(), CliError> {
+    let node = resolve_graph_reference(&context.graph, reference)?;
+    let steps = GraphTraversal::new(&context.graph).traverse(
+        &node,
+        direction,
+        depth,
+        (!all).then_some(RelationOrigin::Explicit),
+    );
+    if json_output {
+        let rows: Vec<_> = steps
+            .iter()
+            .map(|step| {
+                json!({
+                    "node": node_name(&context.graph, &step.node),
+                    "depth": step.depth,
+                    "from": node_name(&context.graph, &step.from),
+                    "predicate": step.relation.predicate,
+                    "direction": if step.outgoing { "outgoing" } else { "incoming" },
+                    "origin": origin_name(step.relation.origin),
+                })
+            })
+            .collect();
+        print_json(json!({
+            "reference": node_name(&context.graph, &node),
+            "direction": traversal_direction_name(direction),
+            "depth": depth,
+            "rows": rows,
+        }))
+    } else {
+        for step in steps {
+            println!(
+                "{}\t{}\t{}\t{}\t{}\t{}",
+                step.depth,
+                node_name(&context.graph, &step.from),
+                if step.outgoing { "->" } else { "<-" },
+                step.relation.predicate,
+                node_name(&context.graph, &step.node),
+                origin_name(step.relation.origin)
+            );
+        }
+        Ok(())
+    }
+}
+
+fn expanded_context(
+    context: &Context,
+    reference: &str,
+    depth: usize,
+    all: bool,
+    json_output: bool,
+) -> Result<(), CliError> {
+    let root = resolve_graph_reference(&context.graph, reference)?;
+    let steps = GraphTraversal::new(&context.graph).traverse(
+        &root,
+        TraversalDirection::Both,
+        depth,
+        (!all).then_some(RelationOrigin::Explicit),
+    );
+    let mut selected = HashSet::from([root.clone()]);
+    selected.extend(steps.iter().map(|step| step.node.clone()));
+    let mut nodes = vec![json!({
+        "depth": 0,
+        "node": node_context_value(context, &root),
+    })];
+    nodes.extend(steps.iter().map(|step| {
+        json!({
+            "depth": step.depth,
+            "node": node_context_value(context, &step.node),
+        })
+    }));
+    let relations: Vec<_> = context
+        .graph
+        .relations
+        .iter()
+        .filter(|relation| {
+            (all || relation.origin == RelationOrigin::Explicit)
+                && selected.contains(&relation.source)
+                && selected.contains(&relation.target)
+        })
+        .map(|relation| {
+            let properties: BTreeMap<_, _> = relation
+                .properties
+                .iter()
+                .map(|(key, value)| (key, toml_value_json(value)))
+                .collect();
+            json!({
+                "source": node_name(&context.graph, &relation.source),
+                "predicate": relation.predicate,
+                "target": node_name(&context.graph, &relation.target),
+                "origin": origin_name(relation.origin),
+                "properties": properties,
+            })
+        })
+        .collect();
+    let value = json!({
+        "reference": node_name(&context.graph, &root),
+        "depth": depth,
+        "nodes": nodes,
+        "relations": relations,
+    });
+    if json_output {
+        print_json(value)
+    } else {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&value).map_err(CliError::boxed)?
+        );
+        Ok(())
+    }
+}
+
+fn traversal_direction_name(direction: TraversalDirection) -> &'static str {
+    match direction {
+        TraversalDirection::Incoming => "incoming",
+        TraversalDirection::Outgoing => "outgoing",
+        TraversalDirection::Both => "both",
+    }
 }
 
 fn mutate(request: MutationRequest, dry_run: bool, json_output: bool) -> Result<(), CliError> {

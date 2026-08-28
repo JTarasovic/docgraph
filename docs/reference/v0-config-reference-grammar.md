@@ -862,7 +862,11 @@ docgraph property set <entity> <property> <value>
 docgraph property unset <entity> <property>
 docgraph relate <source> <relation> <target>
 docgraph unrelate <source> <relation> <target>
-docgraph neighbors <entity>
+docgraph neighbors <entity-or-stable-section> [--all]
+docgraph incoming <entity-or-stable-section> [--all]
+docgraph outgoing <entity-or-stable-section> [--all]
+docgraph traverse <entity-or-stable-section> [--direction incoming|outgoing|both] [--depth <count>] [--all]
+docgraph context <entity-or-stable-section> [--depth <count>] [--all]
 docgraph path <entity-or-stable-section> <entity-or-stable-section>
 docgraph normalize
 docgraph validate [--changes <git-ref>]
@@ -881,6 +885,11 @@ support `--dry-run` and the standard structured output envelope.
 When an entity type declares a `title` property, `document create --title` populates
 it as well as the document heading. A conflicting explicit title property is
 rejected.
+
+Directional retrieval defaults to explicit managed relations. `--all` also includes
+informational Markdown links. `traverse` reports breadth-first discovery steps up to
+the requested depth; `context` returns detailed nodes and every included relation
+among the selected nodes.
 
 Section split uses a one-based source line inside the selected section and inserts a
 same-level heading there. The original ID remains on the original heading. Merge

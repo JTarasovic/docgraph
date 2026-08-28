@@ -2,7 +2,7 @@
 
 id = "task:complete-structured-retrieval-surface"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Complete the structured retrieval surface"
@@ -37,3 +37,10 @@ target = "task:add-vector-retrieval"
 # Complete the structured retrieval surface
 
 Add dedicated incoming, outgoing, arbitrary-depth traversal, and expanded context commands over the existing indexed graph.
+
+<a id="s-EVY3R6A8C9"></a>
+## Result
+
+Implemented dedicated `incoming` and `outgoing` reads, depth-bounded directional
+`traverse`, and expanded `context` for entities and stable sections. All commands
+default to managed relations and include informational Markdown edges with `--all`.

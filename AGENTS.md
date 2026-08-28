@@ -47,7 +47,7 @@ Repository commands:
 - `docgraph next` — Show project-level candidates for what to do next.
 
 Common operations:
-- Inspect: `docgraph describe`, `docgraph review`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.
+- Inspect: `docgraph describe`, `docgraph review`, `docgraph get`, `docgraph search`, `docgraph neighbors`, `docgraph incoming`, `docgraph outgoing`, `docgraph traverse`, `docgraph context`, and `docgraph path`.
 - Mutate: `docgraph document`, `docgraph section`, `docgraph transition`, `docgraph property`, `docgraph relate`, `docgraph unrelate`, and `docgraph normalize`.
 - Maintain: `docgraph validate`, `docgraph frontmatter`, and `docgraph instructions`.
 <!-- docgraph:agent-instructions:end -->

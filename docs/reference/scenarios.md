@@ -559,9 +559,9 @@ Covered follow-on cases include:
 - recoverable document creation, identity-preserving moves with relative-link rewriting, deletion, and inbound-reference refusal
 - recoverable stable-section split, adjacent-sibling merge, subtree deletion, and durable-reference refusal
 - text and JSON review of granular entity, workflow, property, section, and relation changes between Git states
+- direct incoming and outgoing retrieval, bounded directional traversal, and expanded context with opt-in informational edges
 
-Provider shorthand; vectors; directional traversal and expanded context;
-cross-command parse caching; and
+Provider shorthand; vectors; cross-command parse caching; and
 persistent inferred-fact materialization remain post-v0 scenarios. Semantic merge
 machinery is deliberately omitted unless concrete failures show that Git,
 whole-corpus validation, and semantic review are insufficient. The authoritative accounting is

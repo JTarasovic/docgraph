@@ -37,7 +37,7 @@ pub use mutation::{
     Adoption, FileChange, MutationError, MutationPlan, MutationRequest, MutationService,
 };
 pub use repository::{DiscoveryError, Repository};
-pub use retrieval::{GraphTraversal, Neighbor};
+pub use retrieval::{GraphTraversal, Neighbor, TraversalDirection, TraversalStep};
 pub use state::{DerivedState, DerivedStateError, DerivedStatePaths, IndexStatus};
 pub use validation::{ValidationDiagnostic, ValidationLocation, ValidationReport, Validator};
 
