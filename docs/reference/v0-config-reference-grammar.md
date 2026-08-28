@@ -856,6 +856,7 @@ docgraph neighbors <entity>
 docgraph path <entity-or-stable-section> <entity-or-stable-section>
 docgraph normalize
 docgraph validate [--changes <git-ref>]
+docgraph review <git-ref> [--json]
 docgraph query <name> --arg <name>=<value> [--arg ...] [--json]
 docgraph instructions sync [--dry-run]
 docgraph instructions check
@@ -913,6 +914,13 @@ managed relation or Markdown link remains.
 corpus. It accepts changes equivalent to supported mutations, including a sequence
 of configured workflow transitions, while rejecting unsupported identity, state,
 and surviving-section-ID changes. Ordinary prose changes are unrestricted.
+
+`docgraph review <git-ref>` reports graph-level changes between that Git corpus and
+the current worktree. Text and JSON output distinguish entity additions, removals,
+moves, and type changes; workflow states; individual properties; stable-section
+additions, removals, and structural changes; and added or removed managed and
+Markdown-link relations. Generated projections and prose-only edits do not appear.
+The report includes managed-change diagnostics but does not replace validation.
 
 Mutations use a per-worktree lock and optimistic file-hash checks. The tool prepares
 and validates the complete candidate state before writing and refuses to overwrite
@@ -1095,7 +1103,6 @@ Outside the v0 delivery boundary:
 - vector retrieval and embedding providers
 - repository-host shorthand adapters
 - generated nested CLI commands from `commands.toml`
-- semantic diff tooling
 
 The generic CLI and named-query invocation remain available in v0.
 Repository-defined nested commands and `describe_command` were delivered as follow-on
@@ -1113,9 +1120,9 @@ The initial success slice was followed by four completed contract increments:
 
 Repository-defined nested commands and command introspection are now implemented. The
 authoritative remaining-work list is [Design section 15.2](./design.md#s-DRW3RR84VS):
-semantic change review, dedicated directional
-traversal and expanded context, repository-host shorthand adapters, vectors and
-embedding providers, and measurement-gated caching or inferred-fact materialization.
+dedicated directional traversal and expanded context, repository-host shorthand
+adapters, vectors and embedding providers, and measurement-gated caching or
+inferred-fact materialization.
 Existing `get`, `neighbors`, and `path` remain the current structured-retrieval
 surface. Semantic merge machinery is not planned without evidence that Git plus
 whole-corpus validation and semantic review are insufficient.

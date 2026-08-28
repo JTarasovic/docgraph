@@ -10,3 +10,4 @@ path, ID, type, and optional `property = ["name=value"]` list.
 
 Run `docgraph validate --changes <git-ref>` before committing. It permits prose and
 supported semantic mutations but rejects unsupported managed metadata changes.
+Use `docgraph review <git-ref>` alongside it when the semantic impact needs review.

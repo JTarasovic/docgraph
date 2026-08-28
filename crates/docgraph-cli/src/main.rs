@@ -4,7 +4,8 @@ use docgraph_core::{
     GeneratedBlockStatus, GraphIndex, GraphNode, GraphTraversal, InstructionService,
     InstructionStatus, ManagedChangeValidator, MutationPlan, MutationRequest, MutationService,
     PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig,
-    Validator, check_generated_frontmatter,
+    SemanticChange, SemanticChangeReviewer, SemanticSection, Validator,
+    check_generated_frontmatter,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -130,6 +131,11 @@ enum Command {
         /// Reject managed changes not equivalent to supported operations since REF.
         #[arg(long, value_name = "REF")]
         changes: Option<String>,
+    },
+    /// Review graph-level changes from a Git state to the current worktree.
+    Review {
+        #[arg(value_name = "REF")]
+        reference: String,
     },
     /// Execute a typed named query.
     Query {
@@ -572,6 +578,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
         }
         Command::Normalize { dry_run } => mutate(MutationRequest::Normalize, dry_run, cli.json),
         Command::Validate { changes } => validate(changes.as_deref(), cli.json),
+        Command::Review { reference } => review(&reference, cli.json),
         Command::Query { name, arguments } => query(&name, &arguments, cli.json),
         Command::Instructions { action } => instructions(action, cli.json),
         Command::Frontmatter { action } => frontmatter(action, cli.json),
@@ -1096,6 +1103,139 @@ fn property(action: PropertyAction, json_output: bool) -> Result<(), CliError> {
         },
     )?;
     mutate(request, dry_run, json_output)
+}
+
+fn review(reference: &str, json_output: bool) -> Result<(), CliError> {
+    let context = Context::load()?;
+    let base = CanonicalCorpus::load_at_git_ref(&context.repository, &context.config, reference)
+        .map_err(CliError::boxed)?;
+    let report = SemanticChangeReviewer::review(&base, &context.corpus, &context.config);
+    if json_output {
+        return print_json(json!({
+            "base": reference,
+            "valid": report.is_valid(),
+            "changes": report.changes,
+            "diagnostics": report.diagnostics.iter().map(|diagnostic| json!({
+                "code": diagnostic.code,
+                "message": diagnostic.message,
+                "path": json_path(&diagnostic.path),
+            })).collect::<Vec<_>>(),
+        }));
+    }
+    if report.changes.is_empty() {
+        println!("no semantic changes from {reference}");
+    } else {
+        println!("semantic changes from {reference}:");
+        for change in &report.changes {
+            println!("{}", semantic_change_summary(change));
+        }
+    }
+    for diagnostic in &report.diagnostics {
+        println!(
+            "! {}: {}: {}",
+            diagnostic.path.display(),
+            diagnostic.code,
+            diagnostic.message
+        );
+    }
+    Ok(())
+}
+
+fn semantic_change_summary(change: &SemanticChange) -> String {
+    match change {
+        SemanticChange::EntityAdded {
+            entity,
+            entity_type,
+            path,
+        } => format!("+ entity {entity} ({entity_type}) at {path}"),
+        SemanticChange::EntityRemoved {
+            entity,
+            entity_type,
+            path,
+        } => format!("- entity {entity} ({entity_type}) at {path}"),
+        SemanticChange::EntityMoved {
+            entity,
+            before,
+            after,
+        } => format!("~ entity {entity} moved {before} -> {after}"),
+        SemanticChange::EntityTypeChanged {
+            entity,
+            before,
+            after,
+        } => format!("~ entity {entity} type {before} -> {after}"),
+        SemanticChange::WorkflowStateChanged {
+            entity,
+            before,
+            after,
+        } => format!(
+            "~ workflow {entity} {} -> {}",
+            optional_value(before.as_deref()),
+            optional_value(after.as_deref())
+        ),
+        SemanticChange::PropertyChanged {
+            entity,
+            property,
+            before,
+            after,
+        } => format!(
+            "~ property {entity}.{property} {} -> {}",
+            optional_value(before.as_deref()),
+            optional_value(after.as_deref())
+        ),
+        SemanticChange::SectionAdded { section, after } => {
+            format!("+ section {section} {}", semantic_section_summary(after))
+        }
+        SemanticChange::SectionRemoved { section, before } => {
+            format!("- section {section} {}", semantic_section_summary(before))
+        }
+        SemanticChange::SectionChanged {
+            section,
+            before,
+            after,
+        } => format!(
+            "~ section {section} {} -> {}",
+            semantic_section_summary(before),
+            semantic_section_summary(after)
+        ),
+        SemanticChange::RelationAdded { relation } => format!(
+            "+ relation {} --{}--> {} [{}]{}",
+            relation.source,
+            relation.predicate,
+            relation.target,
+            relation.origin,
+            relation_properties(&relation.properties)
+        ),
+        SemanticChange::RelationRemoved { relation } => format!(
+            "- relation {} --{}--> {} [{}]{}",
+            relation.source,
+            relation.predicate,
+            relation.target,
+            relation.origin,
+            relation_properties(&relation.properties)
+        ),
+    }
+}
+
+fn semantic_section_summary(section: &SemanticSection) -> String {
+    format!(
+        "{:?} (document {}, level {}, parent {})",
+        section.heading,
+        section.document,
+        section.level,
+        section.parent.as_deref().unwrap_or("none")
+    )
+}
+
+fn relation_properties(properties: &BTreeMap<String, String>) -> String {
+    if properties.is_empty() {
+        String::new()
+    } else {
+        format!(" {properties:?}")
+    }
+}
+
+fn optional_value(value: Option<&str>) -> &str {
+    value.unwrap_or("(unset)")
 }
 
 fn validate(changes: Option<&str>, json_output: bool) -> Result<(), CliError> {

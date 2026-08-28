@@ -43,7 +43,7 @@ Repository commands:
 - `docgraph florp targets` — List targets grommitted by a florp.
 
 Common operations:
-- Inspect: `docgraph describe`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.
+- Inspect: `docgraph describe`, `docgraph review`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.
 - Mutate: `docgraph document`, `docgraph section`, `docgraph transition`, `docgraph property`, `docgraph relate`, `docgraph unrelate`, and `docgraph normalize`.
 - Maintain: `docgraph validate`, `docgraph frontmatter`, and `docgraph instructions`.
 <!-- docgraph:agent-instructions:end -->

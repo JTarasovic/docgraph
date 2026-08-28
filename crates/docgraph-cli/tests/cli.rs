@@ -399,6 +399,74 @@ fn change_validation_allows_prose_and_rejects_illegal_state_jumps() {
 }
 
 #[test]
+fn semantic_review_reports_text_and_structured_graph_changes() {
+    let fixture = Fixture::copy("synthetic");
+    commit_fixture(&fixture);
+
+    assert!(
+        fixture
+            .run(&["transition", "florp:2", "active"])
+            .status
+            .success()
+    );
+    assert!(
+        fixture
+            .run(&["property", "set", "florp:1", "count", "8"])
+            .status
+            .success()
+    );
+    assert!(
+        fixture
+            .run(&[
+                "relate",
+                "florp:1",
+                "grommits",
+                "https://example.com/review",
+            ])
+            .status
+            .success()
+    );
+    let document = fixture.0.join("docs/florp.md");
+    let source = fs::read_to_string(&document).unwrap();
+    fs::write(
+        &document,
+        source.replace("# Florp one", "# Renamed florp one"),
+    )
+    .unwrap();
+
+    let structured = fixture.run(&["--json", "review", "HEAD"]);
+    assert!(
+        structured.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&structured.stdout),
+        String::from_utf8_lossy(&structured.stderr)
+    );
+    let structured: Value = serde_json::from_slice(&structured.stdout).unwrap();
+    assert_eq!(structured["base"], "HEAD");
+    assert_eq!(structured["valid"], true);
+    let changes = structured["changes"].as_array().unwrap();
+    for kind in [
+        "workflow_state_changed",
+        "property_changed",
+        "section_changed",
+        "relation_added",
+    ] {
+        assert!(
+            changes.iter().any(|change| change["kind"] == kind),
+            "{kind}"
+        );
+    }
+
+    let text = fixture.run(&["review", "HEAD"]);
+    assert!(text.status.success());
+    let text = String::from_utf8_lossy(&text.stdout);
+    assert!(text.contains("semantic changes from HEAD"));
+    assert!(text.contains("~ workflow florp:2 queued -> active"));
+    assert!(text.contains("~ property florp:1.count 7 -> 8"));
+    assert!(text.contains("+ relation florp:1 --grommits--> https://example.com/review"));
+}
+
+#[test]
 fn adopt_batch_manages_multiple_unnormalized_documents() {
     let fixture = Fixture::copy("synthetic");
     fs::write(fixture.0.join("docs/batch-one.md"), "# Batch one\n").unwrap();

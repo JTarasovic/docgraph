@@ -238,7 +238,7 @@ impl<'a> InstructionService<'a> {
 
         output.push_str("\nCommon operations:\n");
         output.push_str(
-            "- Inspect: `docgraph describe`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.\n",
+            "- Inspect: `docgraph describe`, `docgraph review`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.\n",
         );
         output.push_str(
             "- Mutate: `docgraph document`, `docgraph section`, `docgraph transition`, `docgraph property`, `docgraph relate`, `docgraph unrelate`, and `docgraph normalize`.\n",

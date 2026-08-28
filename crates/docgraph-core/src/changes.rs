@@ -1,4 +1,5 @@
 use crate::{CanonicalCorpus, GraphIndex, GraphNode, RelationOrigin, RepositoryConfig};
+use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
@@ -29,6 +30,112 @@ pub struct ManagedChangeReport {
 impl ManagedChangeReport {
     pub fn is_valid(&self) -> bool {
         self.diagnostics.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SemanticSection {
+    pub document: String,
+    pub heading: String,
+    pub level: u8,
+    pub parent: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+pub struct SemanticRelation {
+    pub source: String,
+    pub predicate: String,
+    pub target: String,
+    pub properties: BTreeMap<String, String>,
+    pub origin: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SemanticChange {
+    EntityAdded {
+        entity: String,
+        entity_type: String,
+        path: String,
+    },
+    EntityRemoved {
+        entity: String,
+        entity_type: String,
+        path: String,
+    },
+    EntityMoved {
+        entity: String,
+        before: String,
+        after: String,
+    },
+    EntityTypeChanged {
+        entity: String,
+        before: String,
+        after: String,
+    },
+    WorkflowStateChanged {
+        entity: String,
+        before: Option<String>,
+        after: Option<String>,
+    },
+    PropertyChanged {
+        entity: String,
+        property: String,
+        before: Option<String>,
+        after: Option<String>,
+    },
+    SectionAdded {
+        section: String,
+        after: SemanticSection,
+    },
+    SectionRemoved {
+        section: String,
+        before: SemanticSection,
+    },
+    SectionChanged {
+        section: String,
+        before: SemanticSection,
+        after: SemanticSection,
+    },
+    RelationAdded {
+        relation: SemanticRelation,
+    },
+    RelationRemoved {
+        relation: SemanticRelation,
+    },
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SemanticChangeReport {
+    pub changes: Vec<SemanticChange>,
+    pub diagnostics: Vec<ChangeDiagnostic>,
+}
+
+impl SemanticChangeReport {
+    pub fn is_valid(&self) -> bool {
+        self.diagnostics.is_empty()
+    }
+}
+
+pub struct SemanticChangeReviewer;
+
+impl SemanticChangeReviewer {
+    pub fn review(
+        base: &CanonicalCorpus,
+        candidate: &CanonicalCorpus,
+        config: &RepositoryConfig,
+    ) -> SemanticChangeReport {
+        let base_graph = GraphIndex::build(base, config);
+        let candidate_graph = GraphIndex::build(candidate, config);
+        let diagnostics = ManagedChangeValidator::validate(base, candidate, config).diagnostics;
+        let mut changes = Vec::new();
+        review_entities(&base_graph, &candidate_graph, &mut changes);
+        review_sections(&base_graph, &candidate_graph, &mut changes);
+        review_relations(&base_graph, &candidate_graph, &mut changes);
+        SemanticChangeReport {
+            changes,
+            diagnostics,
+        }
     }
 }
 
@@ -149,6 +256,194 @@ impl ManagedChangeValidator {
     }
 }
 
+fn review_entities(base: &GraphIndex, candidate: &GraphIndex, changes: &mut Vec<SemanticChange>) {
+    let base_entities: BTreeMap<_, _> = base
+        .entities
+        .iter()
+        .map(|entity| (entity.id.as_str(), entity))
+        .collect();
+    let candidate_entities: BTreeMap<_, _> = candidate
+        .entities
+        .iter()
+        .map(|entity| (entity.id.as_str(), entity))
+        .collect();
+    for (id, entity) in &base_entities {
+        let path = path_reference(&base.documents[entity.document].path);
+        let Some(after) = candidate_entities.get(id) else {
+            changes.push(SemanticChange::EntityRemoved {
+                entity: (*id).to_owned(),
+                entity_type: entity.entity_type.clone(),
+                path,
+            });
+            continue;
+        };
+        let after_path = path_reference(&candidate.documents[after.document].path);
+        if path != after_path {
+            changes.push(SemanticChange::EntityMoved {
+                entity: (*id).to_owned(),
+                before: path,
+                after: after_path,
+            });
+        }
+        if entity.entity_type != after.entity_type {
+            changes.push(SemanticChange::EntityTypeChanged {
+                entity: (*id).to_owned(),
+                before: entity.entity_type.clone(),
+                after: after.entity_type.clone(),
+            });
+        }
+        if entity.state != after.state {
+            changes.push(SemanticChange::WorkflowStateChanged {
+                entity: (*id).to_owned(),
+                before: entity.state.clone(),
+                after: after.state.clone(),
+            });
+        }
+        let property_names: BTreeSet<_> = entity
+            .properties
+            .keys()
+            .chain(after.properties.keys())
+            .collect();
+        for property in property_names {
+            let before = entity.properties.get(property).map(semantic_value);
+            let after = after.properties.get(property).map(semantic_value);
+            if before != after {
+                changes.push(SemanticChange::PropertyChanged {
+                    entity: (*id).to_owned(),
+                    property: property.clone(),
+                    before,
+                    after,
+                });
+            }
+        }
+    }
+    for (id, entity) in candidate_entities {
+        if !base_entities.contains_key(id) {
+            changes.push(SemanticChange::EntityAdded {
+                entity: id.to_owned(),
+                entity_type: entity.entity_type.clone(),
+                path: path_reference(&candidate.documents[entity.document].path),
+            });
+        }
+    }
+}
+
+fn review_sections(base: &GraphIndex, candidate: &GraphIndex, changes: &mut Vec<SemanticChange>) {
+    let base_sections = semantic_sections(base);
+    let candidate_sections = semantic_sections(candidate);
+    for (id, before) in &base_sections {
+        match candidate_sections.get(id) {
+            None => changes.push(SemanticChange::SectionRemoved {
+                section: id.clone(),
+                before: before.clone(),
+            }),
+            Some(after) if before != after => changes.push(SemanticChange::SectionChanged {
+                section: id.clone(),
+                before: before.clone(),
+                after: after.clone(),
+            }),
+            Some(_) => {}
+        }
+    }
+    for (id, after) in candidate_sections {
+        if !base_sections.contains_key(&id) {
+            changes.push(SemanticChange::SectionAdded { section: id, after });
+        }
+    }
+}
+
+fn semantic_sections(graph: &GraphIndex) -> BTreeMap<String, SemanticSection> {
+    graph
+        .sections
+        .iter()
+        .enumerate()
+        .filter_map(|(index, section)| {
+            let reference = section_reference(graph, index)?;
+            Some((
+                reference,
+                SemanticSection {
+                    document: document_reference(graph, section.document),
+                    heading: section.heading.clone(),
+                    level: section.level,
+                    parent: section
+                        .parent
+                        .and_then(|parent| section_reference(graph, parent)),
+                },
+            ))
+        })
+        .collect()
+}
+
+fn review_relations(base: &GraphIndex, candidate: &GraphIndex, changes: &mut Vec<SemanticChange>) {
+    let base_relations = semantic_relations(base);
+    let candidate_relations = semantic_relations(candidate);
+    for relation in base_relations.difference(&candidate_relations) {
+        changes.push(SemanticChange::RelationRemoved {
+            relation: relation.clone(),
+        });
+    }
+    for relation in candidate_relations.difference(&base_relations) {
+        changes.push(SemanticChange::RelationAdded {
+            relation: relation.clone(),
+        });
+    }
+}
+
+fn semantic_relations(graph: &GraphIndex) -> BTreeSet<SemanticRelation> {
+    graph
+        .relations
+        .iter()
+        .map(|relation| SemanticRelation {
+            source: semantic_node_reference(graph, &relation.source),
+            predicate: relation.predicate.clone(),
+            target: semantic_node_reference(graph, &relation.target),
+            properties: relation
+                .properties
+                .iter()
+                .map(|(name, value)| (name.clone(), semantic_value(value)))
+                .collect(),
+            origin: match relation.origin {
+                RelationOrigin::Explicit => "managed",
+                RelationOrigin::MarkdownLink => "markdown",
+            }
+            .to_owned(),
+        })
+        .collect()
+}
+
+fn semantic_node_reference(graph: &GraphIndex, node: &GraphNode) -> String {
+    match node {
+        GraphNode::Document(document) => document_reference(graph, *document),
+        GraphNode::Entity(entity) => entity.clone(),
+        GraphNode::Section(section) => {
+            section_reference(graph, *section).unwrap_or_else(|| format!("section-index:{section}"))
+        }
+        GraphNode::ExternalUri(uri) => uri.clone(),
+        GraphNode::Unresolved(reference) => reference.clone(),
+    }
+}
+
+fn document_reference(graph: &GraphIndex, document: usize) -> String {
+    graph.documents[document]
+        .entity
+        .clone()
+        .unwrap_or_else(|| path_reference(&graph.documents[document].path))
+}
+
+fn path_reference(path: &std::path::Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn section_reference(graph: &GraphIndex, section: usize) -> Option<String> {
+    let section = graph.sections.get(section)?;
+    let id = section.id.as_ref()?;
+    Some(format!(
+        "{}#{}",
+        document_reference(graph, section.document),
+        id.as_str()
+    ))
+}
+
 fn unresolved_explicit_relations(graph: &GraphIndex) -> BTreeMap<String, PathBuf> {
     graph
         .relations
@@ -229,8 +524,33 @@ fn explicit_relations(graph: &GraphIndex) -> BTreeSet<String> {
 fn property_key(properties: &BTreeMap<String, toml_edit::Value>) -> Vec<(String, String)> {
     properties
         .iter()
-        .map(|(name, value)| (name.clone(), value.to_string()))
+        .map(|(name, value)| (name.clone(), semantic_value(value)))
         .collect()
+}
+
+fn semantic_value(value: &toml_edit::Value) -> String {
+    if let Some(value) = value.as_str() {
+        format!("{value:?}")
+    } else if let Some(value) = value.as_integer() {
+        value.to_string()
+    } else if let Some(value) = value.as_float() {
+        value.to_string()
+    } else if let Some(value) = value.as_bool() {
+        value.to_string()
+    } else if let Some(value) = value.as_datetime() {
+        value.to_string()
+    } else if let Some(value) = value.as_array() {
+        format!(
+            "[{}]",
+            value
+                .iter()
+                .map(semantic_value)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    } else {
+        value.to_string()
+    }
 }
 
 fn node_key(graph: &GraphIndex, node: &GraphNode) -> String {
@@ -423,5 +743,67 @@ mod tests {
                 .iter()
                 .any(|diagnostic| diagnostic.code == "unsupported-section-id-change")
         );
+    }
+
+    #[test]
+    fn semantic_review_reports_granular_graph_changes() {
+        let fixture = Fixture::new();
+        let base = CanonicalCorpus::from_contents(
+            &fixture.1,
+            vec![(
+                PathBuf::from("docs/task.md"),
+                "+++\nid = \"task:1\"\ntype = \"task\"\nstate = \"open\"\n[properties]\npriority = \"low\"\n+++\n<a id=\"s-83JRT4K2P6\"></a>\n# Old heading\n"
+                    .to_owned(),
+            )],
+        )
+        .unwrap();
+        let candidate = CanonicalCorpus::from_contents(
+            &fixture.1,
+            vec![(
+                PathBuf::from("docs/moved.md"),
+                "+++\nid = \"task:1\"\ntype = \"task\"\nstate = \"review\"\n[properties]\npriority = \"high\"\n[[relations]]\ntype = \"blocks\"\ntarget = \"task:1\"\n+++\n<a id=\"s-83JRT4K2P6\"></a>\n# New heading\n\n<a id=\"s-7K3M9Q2W0\"></a>\n## Added section\n"
+                    .to_owned(),
+            )],
+        )
+        .unwrap();
+
+        let report = SemanticChangeReviewer::review(&base, &candidate, &fixture.2);
+
+        assert!(report.is_valid());
+        assert!(report.changes.iter().any(|change| matches!(
+            change,
+            SemanticChange::EntityMoved { entity, .. } if entity == "task:1"
+        )));
+        assert!(report.changes.iter().any(|change| matches!(
+            change,
+            SemanticChange::WorkflowStateChanged { before, after, .. }
+                if before.as_deref() == Some("open") && after.as_deref() == Some("review")
+        )));
+        assert!(report.changes.iter().any(|change| matches!(
+            change,
+            SemanticChange::PropertyChanged { property, before, after, .. }
+                if property == "priority"
+                    && before.as_deref() == Some("\"low\"")
+                    && after.as_deref() == Some("\"high\"")
+        )));
+        assert!(report.changes.iter().any(|change| matches!(
+            change,
+            SemanticChange::SectionChanged { section, before, after }
+                if section == "task:1#s-83JRT4K2P6"
+                    && before.heading == "Old heading"
+                    && after.heading == "New heading"
+        )));
+        assert!(report.changes.iter().any(|change| matches!(
+            change,
+            SemanticChange::SectionAdded { section, .. }
+                if section == "task:1#s-7K3M9Q2W0"
+        )));
+        assert!(report.changes.iter().any(|change| matches!(
+            change,
+            SemanticChange::RelationAdded { relation }
+                if relation.source == "task:1"
+                    && relation.predicate == "blocks"
+                    && relation.target == "task:1"
+        )));
     }
 }

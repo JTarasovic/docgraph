@@ -43,4 +43,7 @@ pub use validation::{ValidationDiagnostic, ValidationLocation, ValidationReport,
 
 /// Repository schema implemented by this pre-release workspace.
 pub const SCHEMA_VERSION: u32 = 1;
-pub use changes::{ChangeDiagnostic, ManagedChange, ManagedChangeReport, ManagedChangeValidator};
+pub use changes::{
+    ChangeDiagnostic, ManagedChange, ManagedChangeReport, ManagedChangeValidator, SemanticChange,
+    SemanticChangeReport, SemanticChangeReviewer, SemanticRelation, SemanticSection,
+};

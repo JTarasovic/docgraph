@@ -958,8 +958,8 @@ workflow from prose.
 Vector retrieval, embedding providers, repository-host shorthand adapters, generated
 nested CLI commands, automated section split/merge operations, and semantic diff
 tooling were outside the v0 delivery boundary. Repository-defined commands, command
-introspection, and stable-section lifecycle operations have since been delivered as
-follow-on work.
+introspection, stable-section lifecycle operations, and semantic change review have
+since been delivered as follow-on work.
 
 <a id="s-DRW3RR84VS"></a>
 ### 15.2 Initial Design Follow-On
@@ -976,7 +976,6 @@ gaps tracked by the follow-on plan are now closed:
 
 This section is the authoritative accounting of the remaining initial-reference work:
 
-- semantic change review
 - dedicated directional traversal and expanded context commands
 - repository-host shorthand adapters
 - vector retrieval and embedding providers
