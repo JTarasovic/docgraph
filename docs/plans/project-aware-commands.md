@@ -98,4 +98,4 @@ The repository can run `docgraph next` and optionally filter by plan, command co
 <a id="s-7KFVRXQC54"></a>
 ## Result
 
-Implemented. `commands.toml` supports query, transition, and relation commands with nested paths and project-aware help. This repository’s `next` command reports in-progress and ready work across active plans, proposed plans, and open issues; `--plan` narrows the candidate set without claiming an unsupported priority order.
+Implemented. `commands.toml` supports query, transition, and relation commands with nested paths and project-aware help. This repository’s `next` command reports in-progress, ready, and dependency-ready backlog work across active plans, proposed plans, and open issues; `--plan` narrows the candidate set without claiming an unsupported priority order.

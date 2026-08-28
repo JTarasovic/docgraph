@@ -2,7 +2,7 @@
 
 id = "issue:next-hides-promotable-backlog-tasks"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Next hides promotable backlog tasks"
@@ -29,3 +29,9 @@ the concrete work that can be promoted and makes the plan appear exhausted.
 Update the repository's `next_work` logic to return dependency-ready backlog tasks
 with a reason such as `ready to promote`. Keep backlog inventory and prioritization
 out of scope until they are needed.
+
+<a id="s-FYZ8ZBK6KJ"></a>
+## Resolution
+
+`next_work` now returns dependency-ready backlog tasks as `ready to promote` and
+suppresses the opaque active-plan fallback when such tasks exist.
