@@ -10,6 +10,11 @@ role = "grammar"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:document-create-title-does-not-set-property"
+predicate = "affects"
+target = "reference:config-grammar"
+
+[[docgraph_generated.incoming]]
 source = "issue:multi-file-adoption-normalize-first"
 predicate = "affects"
 target = "reference:config-grammar#s-V5R4RB2AP1"
@@ -73,6 +78,11 @@ target = "reference:config-grammar#s-Q9K2W13EGT"
 source = "task:support-section-path-endpoints"
 predicate = "implements"
 target = "reference:config-grammar#s-TW0V0THMJD"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar"
+type = "affected_by"
+target = "issue:document-create-title-does-not-set-property"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-3B3J65MSQN"

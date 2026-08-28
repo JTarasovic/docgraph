@@ -23,6 +23,11 @@ target = "task:reconcile-post-v0-reference-accounting"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:document-create-title-does-not-set-property"
+predicate = "affects"
+target = "task:implement-managed-document-lifecycle"
+
+[[docgraph_generated.incoming]]
 source = "task:add-semantic-change-review"
 predicate = "depends_on"
 target = "task:implement-managed-document-lifecycle"
@@ -31,6 +36,11 @@ target = "task:implement-managed-document-lifecycle"
 source = "task:implement-stable-section-lifecycle"
 predicate = "depends_on"
 target = "task:implement-managed-document-lifecycle"
+
+[[docgraph_generated.inverses]]
+source = "task:implement-managed-document-lifecycle"
+type = "affected_by"
+target = "issue:document-create-title-does-not-set-property"
 
 [[docgraph_generated.inverses]]
 source = "task:implement-managed-document-lifecycle"
