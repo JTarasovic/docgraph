@@ -89,7 +89,7 @@ The suite must collectively exercise:
 - validation
 - Git behavior
 - explainability
-- dynamically generated commands (post-v0)
+- dynamically generated commands
 
 These should become executable end-to-end fixture repositories.
 
@@ -439,9 +439,9 @@ ill-typed inputs, predicate-arity mismatch, ill-typed predicate results, declare
 output-column order, and the stable JSON result envelope.
 
 <a id="s-SRJWV4WZ2T"></a>
-## 17. Dynamic CLI Tests (post-v0)
+## 17. Dynamic CLI Tests
 
-Fixture configuration should define named commands and prove the binary generates them without domain-specific code.
+Fixture configuration defines named commands and proves the binary generates them without domain-specific code.
 
 Tests: hierarchy, arguments, help text, read-only queries, transitions, relation mutations, JSON output, invalid command config.
 
@@ -533,9 +533,8 @@ Golden tests verify exact patches, structured output, graph facts, and diagnosti
 v0 requires the ADR, historical-research, and synthetic fixtures. Together they must
 exercise the complete parse, normalize, index, infer, query, mutate, validate, write,
 reindex, and generated-frontmatter sync/check loop plus the agent-guidance tests. The
-remaining fixtures and the tests
-for vectors, repository-host shorthand, generated nested commands, automated section
-split/merge, and semantic diff remain the post-v0 conformance roadmap.
+remaining fixtures and the tests for vectors, repository-host shorthand, automated
+section split/merge, and semantic diff remain the post-v0 conformance roadmap.
 
 <a id="s-N6Z4YKP9M0"></a>
 ### 20.2 Current Coverage and Remaining Gaps
@@ -556,10 +555,15 @@ Covered follow-on cases include:
 - concurrent edit, interrupted multi-file recovery, unknown recovery state, and separate-worktree cases
 - exact section-source mutation and section-preserving generated-projection cases
 - runtime-backed logic execution in CI rather than only parser/type tests
+- nested repository-defined queries and mutations, project-aware help, command configuration validation, and command introspection
 
 File/entity creation, deletion, and moves; automated section split/merge/delete;
-provider shorthand; vectors; dynamic commands; semantic diff/merge; cross-command
-parse caching; and persistent inferred-fact materialization remain post-v0 scenarios.
+provider shorthand; vectors; semantic change review; directional traversal and
+expanded context; cross-command parse caching; and persistent inferred-fact
+materialization remain post-v0 scenarios. Semantic merge machinery is deliberately
+omitted unless concrete failures show that Git, whole-corpus validation, and semantic
+review are insufficient. The authoritative accounting is
+[Design section 15.2](./design.md#s-DRW3RR84VS).
 
 <a id="s-7BT3682S4Q"></a>
 ## 21. Primary Conformance Requirement

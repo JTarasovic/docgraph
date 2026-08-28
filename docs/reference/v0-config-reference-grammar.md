@@ -873,7 +873,7 @@ describe_relation
 describe_workflow
 ```
 
-Post-v0 dynamic-command introspection adds `describe_command`.
+Command introspection includes `describe_command`.
 
 Structured JSON output must also be available.
 
@@ -1067,7 +1067,7 @@ Agent instructions are a required product interface in v0, not release packaging
 They must direct agents to inspect the model, use docgraph for managed semantics, run
 dry-runs for substantial mutations, and validate the result.
 
-Deferred until after v0:
+Outside the v0 delivery boundary:
 
 - vector retrieval and embedding providers
 - repository-host shorthand adapters
@@ -1076,6 +1076,8 @@ Deferred until after v0:
 - semantic diff tooling
 
 The generic CLI and named-query invocation remain available in v0.
+Repository-defined nested commands and `describe_command` were delivered as follow-on
+work.
 
 <a id="s-P73QA8YDQB"></a>
 ### 27.1 Implementation Accounting
@@ -1087,12 +1089,14 @@ The initial success slice was followed by four completed contract increments:
 - CLI mutation of relations whose explicit source is a stable section, plus generated projections that retain the exact section endpoint
 - expanded conformance fixtures and CI coverage, including runtime-backed logic tests on the CI platform
 
-The following remain deferred: cross-command parse caching, persistent inferred-fact
-materialization, vectors and embedding providers, repository-host
-adapters, generated nested commands, entity/document creation/deletion/moves,
-automated section split/merge/delete, semantic diff/merge, and dedicated
-`incoming`/`outgoing`/`traverse`/expanded-`context` commands. Existing `get`,
-`neighbors`, and `path` remain the v0 structured-retrieval surface.
+Repository-defined nested commands and command introspection are now implemented. The
+authoritative remaining-work list is [Design section 15.2](./design.md#s-DRW3RR84VS):
+managed document and section lifecycle operations, semantic change review, dedicated
+directional traversal and expanded context, repository-host shorthand adapters,
+vectors and embedding providers, and measurement-gated caching or inferred-fact
+materialization. Existing `get`, `neighbors`, and `path` remain the current
+structured-retrieval surface. Semantic merge machinery is not planned without
+evidence that Git plus whole-corpus validation and semantic review are insufficient.
 
 <a id="s-PDQ5Q60C5R"></a>
 ## 28. v0 Constraints

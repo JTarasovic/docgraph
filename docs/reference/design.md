@@ -79,6 +79,14 @@ source = "reference:design#s-DRW3RR84VS"
 type = "implemented_by"
 target = "task:audit-initial-design-closure"
 
+[[docgraph_generated.backlinks]]
+source = "reference:config-grammar#s-P73QA8YDQB"
+target = "reference:design#s-DRW3RR84VS"
+
+[[docgraph_generated.backlinks]]
+source = "reference:scenarios#s-N6Z4YKP9M0"
+target = "reference:design#s-DRW3RR84VS"
+
 +++
 <a id="s-FEFSK4BQTV"></a>
 # Draft Design: Git-Native Document Graph and Workflow Engine
@@ -218,8 +226,8 @@ A repository defines its ontology and policy:
 
 The exact file layout may evolve.
 
-`commands.toml` is part of the post-v0 direction; v0 uses the generic CLI and named
-queries.
+`commands.toml` configures repository-defined commands over named queries and generic
+mutations. It was delivered after the v0 core loop.
 
 <a id="s-Z44JC2K1TN"></a>
 ### 3.1 Entity types
@@ -661,7 +669,7 @@ docgraph task blockers task:184
 docgraph task ready
 ```
 
-Project-aware `--help` should expose repository-defined commands and descriptions.
+Project-aware `--help` exposes repository-defined commands and descriptions.
 Dot-separated command names form nested command paths. Query commands expose named
 query inputs as long options; an input with a configured default is optional. When
 `entity_type` is set, the first query input is instead the positional source entity.
@@ -935,8 +943,8 @@ workflow from prose.
 
 Vector retrieval, embedding providers, repository-host shorthand adapters, generated
 nested CLI commands, automated section split/merge operations, and semantic diff
-tooling are deferred until after the core loop is proven. v0 exposes generic CLI
-operations and named-query invocation instead.
+tooling were outside the v0 delivery boundary. Repository-defined commands and their
+introspection have since been delivered as follow-on work.
 
 <a id="s-DRW3RR84VS"></a>
 ### 15.2 Initial Design Follow-On
@@ -951,10 +959,19 @@ gaps tracked by the follow-on plan are now closed:
 - stable-section relation mutation and projections retain exact endpoints
 - conformance covers generic workflows, recursion, cycles, recovery, worktrees, and the packaged runtime in CI
 
-Document creation/deletion/moves, automated section split/merge/delete, provider
-adapters, vectors, generated domain commands, semantic diff/merge, expanded
-retrieval convenience commands, cross-command parse caching, and persistent inferred
-fact materialization remain explicitly deferred rather than hidden gaps.
+This section is the authoritative accounting of the remaining initial-reference work:
+
+- managed document/entity creation, deletion, and moves
+- automated stable-section split, merge, and delete operations
+- semantic change review
+- dedicated directional traversal and expanded context commands
+- repository-host shorthand adapters
+- vector retrieval and embedding providers
+- measurement-gated cross-command parse caching and persistent inferred-fact materialization
+
+Semantic merge machinery is deliberately omitted. Git remains the merge mechanism and
+docgraph validates the complete result; that decision should be revisited only with
+concrete merge failures that validation and semantic review do not address.
 
 <a id="s-HESSVR7FJT"></a>
 ## 16. Primary Acceptance Principle
