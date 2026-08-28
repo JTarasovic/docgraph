@@ -230,6 +230,122 @@ fn document_commands_create_move_and_safely_delete() {
 }
 
 #[test]
+fn section_commands_split_merge_and_delete() {
+    let fixture = Fixture::copy("synthetic");
+    let document = fixture.0.join("docs/sections.md");
+    let create = fixture.run(&[
+        "document",
+        "create",
+        "docs/sections.md",
+        "--id",
+        "florp:sections",
+        "--type",
+        "florp",
+        "--title",
+        "Section lifecycle",
+        "--property",
+        "title=Section lifecycle",
+    ]);
+    assert!(
+        create.status.success(),
+        "{}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let mut source = fs::read_to_string(&document).unwrap();
+    let root_id = source
+        .split("<a id=\"")
+        .nth(1)
+        .unwrap()
+        .split('\"')
+        .next()
+        .unwrap()
+        .to_owned();
+    source.push_str("\nAlpha body.\n\nBeta body.\n");
+    fs::write(&document, &source).unwrap();
+    let beta_line = source[..source.find("Beta body.").unwrap()]
+        .matches('\n')
+        .count()
+        + 1;
+    let beta_line = beta_line.to_string();
+    let root = format!("florp:sections#{root_id}");
+
+    let split = fixture.run(&[
+        "section",
+        "split",
+        &root,
+        "--at-line",
+        &beta_line,
+        "--title",
+        "Beta",
+    ]);
+    assert!(
+        split.status.success(),
+        "{}",
+        String::from_utf8_lossy(&split.stderr)
+    );
+    let split_source = fs::read_to_string(&document).unwrap();
+    let new_id = split_source
+        .split("<a id=\"")
+        .skip(1)
+        .filter_map(|tail| tail.split('\"').next())
+        .find(|id| *id != root_id)
+        .unwrap()
+        .to_owned();
+    let new_section = format!("florp:sections#{new_id}");
+    assert!(split_source.contains("# Beta"));
+
+    let merge = fixture.run(&["section", "merge", &new_section, "--into", &root]);
+    assert!(
+        merge.status.success(),
+        "{}",
+        String::from_utf8_lossy(&merge.stderr)
+    );
+    let merged = fs::read_to_string(&document).unwrap();
+    assert!(!merged.contains(&new_id));
+    assert!(merged.contains("Beta body."));
+
+    let beta_line = (merged[..merged.find("Beta body.").unwrap()]
+        .matches('\n')
+        .count()
+        + 1)
+    .to_string();
+    assert!(
+        fixture
+            .run(&[
+                "section",
+                "split",
+                &root,
+                "--at-line",
+                &beta_line,
+                "--title",
+                "Disposable",
+            ])
+            .status
+            .success()
+    );
+    let split_source = fs::read_to_string(&document).unwrap();
+    let disposable_id = split_source
+        .split("<a id=\"")
+        .skip(1)
+        .filter_map(|tail| tail.split('\"').next())
+        .find(|id| *id != root_id)
+        .unwrap();
+    let disposable = format!("florp:sections#{disposable_id}");
+    assert!(
+        fixture
+            .run(&["section", "delete", &disposable])
+            .status
+            .success()
+    );
+    assert!(
+        !fs::read_to_string(&document)
+            .unwrap()
+            .contains("Beta body.")
+    );
+    assert!(fixture.run(&["validate"]).status.success());
+}
+
+#[test]
 fn workflow_initialize_materializes_missing_states() {
     let fixture = Fixture::copy("synthetic");
     let path = fixture.0.join("docs/florp.md");

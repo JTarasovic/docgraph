@@ -533,8 +533,8 @@ Golden tests verify exact patches, structured output, graph facts, and diagnosti
 v0 requires the ADR, historical-research, and synthetic fixtures. Together they must
 exercise the complete parse, normalize, index, infer, query, mutate, validate, write,
 reindex, and generated-frontmatter sync/check loop plus the agent-guidance tests. The
-remaining fixtures and the tests for vectors, repository-host shorthand, automated
-section split/merge, and semantic diff remain the post-v0 conformance roadmap.
+remaining fixtures and the tests for vectors, repository-host shorthand, and semantic
+diff remain the post-v0 conformance roadmap.
 
 <a id="s-N6Z4YKP9M0"></a>
 ### 20.2 Current Coverage and Remaining Gaps
@@ -557,9 +557,10 @@ Covered follow-on cases include:
 - runtime-backed logic execution in CI rather than only parser/type tests
 - nested repository-defined queries and mutations, project-aware help, command configuration validation, and command introspection
 - recoverable document creation, identity-preserving moves with relative-link rewriting, deletion, and inbound-reference refusal
+- recoverable stable-section split, adjacent-sibling merge, subtree deletion, and durable-reference refusal
 
-Automated section split/merge/delete; provider shorthand; vectors; semantic change
-review; directional traversal and expanded context; cross-command parse caching; and
+Provider shorthand; vectors; semantic change review; directional traversal and
+expanded context; cross-command parse caching; and
 persistent inferred-fact materialization remain post-v0 scenarios. Semantic merge
 machinery is deliberately omitted unless concrete failures show that Git,
 whole-corpus validation, and semantic review are insufficient. The authoritative accounting is

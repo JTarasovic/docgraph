@@ -2,7 +2,7 @@
 
 id = "task:implement-stable-section-lifecycle"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Implement stable-section lifecycle"
@@ -37,3 +37,10 @@ target = "task:add-semantic-change-review"
 # Implement stable-section lifecycle
 
 Add prospective, recoverable split, merge, and delete operations for stable sections, preserving identities and forcing explicit handling of durable inbound references.
+
+Implemented as `docgraph section split`, `merge`, and `delete`. Split creates a
+same-level heading at an exact source line while retaining the original section ID.
+Merge preserves the retired sibling's body and descendant sections; delete removes
+the whole selected subtree. Both refuse durable references to retired IDs, and all
+operations share dry-run, prospective validation, recovery journaling, generated
+frontmatter convergence, and index refresh behavior.

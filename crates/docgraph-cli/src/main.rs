@@ -36,6 +36,11 @@ enum Command {
         #[command(subcommand)]
         action: DocumentAction,
     },
+    /// Split, merge, or delete stable sections.
+    Section {
+        #[command(subcommand)]
+        action: SectionAction,
+    },
     /// Adopt an existing document into the managed graph.
     Adopt {
         path: Option<PathBuf>,
@@ -205,6 +210,34 @@ enum DocumentAction {
 }
 
 #[derive(Subcommand)]
+enum SectionAction {
+    /// Split a section by inserting a same-level heading at an exact source line.
+    Split {
+        section: String,
+        #[arg(long)]
+        at_line: usize,
+        #[arg(long)]
+        title: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Merge a section into the immediately preceding sibling.
+    Merge {
+        section: String,
+        #[arg(long)]
+        into: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Delete a section and its descendants when no durable references remain.
+    Delete {
+        section: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum WorkflowAction {
     /// Materialize the initial state for every uninitialized entity of a type.
     Initialize {
@@ -311,6 +344,36 @@ fn run(cli: Cli) -> Result<(), CliError> {
             ),
             DocumentAction::Delete { entity, dry_run } => mutate(
                 MutationRequest::DeleteDocument { entity },
+                dry_run,
+                cli.json,
+            ),
+        },
+        Command::Section { action } => match action {
+            SectionAction::Split {
+                section,
+                at_line,
+                title,
+                dry_run,
+            } => mutate(
+                MutationRequest::SplitSection {
+                    section,
+                    at_line,
+                    title,
+                },
+                dry_run,
+                cli.json,
+            ),
+            SectionAction::Merge {
+                section,
+                into,
+                dry_run,
+            } => mutate(
+                MutationRequest::MergeSection { section, into },
+                dry_run,
+                cli.json,
+            ),
+            SectionAction::Delete { section, dry_run } => mutate(
+                MutationRequest::DeleteSection { section },
                 dry_run,
                 cli.json,
             ),

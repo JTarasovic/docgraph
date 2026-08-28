@@ -434,6 +434,13 @@ split, the existing ID remains with its heading and each new heading receives a 
 ID. Merging or deleting a section retires an ID; durable inbound references must be
 removed or retargeted in the same safe mutation.
 
+`docgraph section split` inserts a same-level heading at an exact source line and
+assigns its new stable ID. `section merge` removes the heading and ID of an
+immediately following sibling while preserving its body and descendants. `section
+delete` removes the selected section subtree. Merge and delete refuse to retire IDs
+still used by managed relations or surviving Markdown links. All three use the
+ordinary prospective, journaled mutation protocol and support `--dry-run`.
+
 A short Crockford Base32 random token is a likely implementation.
 
 <a id="s-J8Z29XS8AS"></a>
@@ -950,8 +957,9 @@ workflow from prose.
 
 Vector retrieval, embedding providers, repository-host shorthand adapters, generated
 nested CLI commands, automated section split/merge operations, and semantic diff
-tooling were outside the v0 delivery boundary. Repository-defined commands and their
-introspection have since been delivered as follow-on work.
+tooling were outside the v0 delivery boundary. Repository-defined commands, command
+introspection, and stable-section lifecycle operations have since been delivered as
+follow-on work.
 
 <a id="s-DRW3RR84VS"></a>
 ### 15.2 Initial Design Follow-On
@@ -968,7 +976,6 @@ gaps tracked by the follow-on plan are now closed:
 
 This section is the authoritative accounting of the remaining initial-reference work:
 
-- automated stable-section split, merge, and delete operations
 - semantic change review
 - dedicated directional traversal and expanded context commands
 - repository-host shorthand adapters

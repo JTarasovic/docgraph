@@ -841,6 +841,9 @@ docgraph adopt --batch <manifest.toml> [--dry-run]
 docgraph document create <path> --id <entity> --type <type> --title <title> [--property <name>=<value>] [--dry-run]
 docgraph document move <entity> <path> [--dry-run]
 docgraph document delete <entity> [--dry-run]
+docgraph section split <stable-section> --at-line <line> --title <title> [--dry-run]
+docgraph section merge <stable-section> --into <stable-section> [--dry-run]
+docgraph section delete <stable-section> [--dry-run]
 docgraph get <entity-or-stable-section>
 docgraph search <query>
 docgraph transition <entity> <state>
@@ -863,6 +866,15 @@ docgraph frontmatter check
 Property values are parsed against the entity type's declared schema. String values
 are passed directly; other scalar and array values use TOML syntax. Both operations
 support `--dry-run` and the standard structured output envelope.
+
+Section split uses a one-based source line inside the selected section and inserts a
+same-level heading there. The original ID remains on the original heading. Merge
+accepts only an immediately following sibling, retires that sibling's ID and heading,
+and preserves its body and descendant sections. Delete removes the selected section
+and descendants. Merge and delete refuse durable managed references involving a
+retired section or surviving Markdown links targeting one; those references must be
+removed or retargeted first. Section operations use prospective validation, recovery
+journaling, generated-frontmatter convergence, and structured dry-run output.
 
 <a id="s-RVDXZTQY4X"></a>
 ## 21. Introspection
@@ -1083,7 +1095,6 @@ Outside the v0 delivery boundary:
 - vector retrieval and embedding providers
 - repository-host shorthand adapters
 - generated nested CLI commands from `commands.toml`
-- automated section split/merge operations
 - semantic diff tooling
 
 The generic CLI and named-query invocation remain available in v0.
@@ -1102,7 +1113,7 @@ The initial success slice was followed by four completed contract increments:
 
 Repository-defined nested commands and command introspection are now implemented. The
 authoritative remaining-work list is [Design section 15.2](./design.md#s-DRW3RR84VS):
-stable-section lifecycle operations, semantic change review, dedicated directional
+semantic change review, dedicated directional
 traversal and expanded context, repository-host shorthand adapters, vectors and
 embedding providers, and measurement-gated caching or inferred-fact materialization.
 Existing `get`, `neighbors`, and `path` remain the current structured-retrieval

@@ -40,6 +40,18 @@ pub enum MutationRequest {
     DeleteDocument {
         entity: String,
     },
+    SplitSection {
+        section: String,
+        at_line: usize,
+        title: String,
+    },
+    MergeSection {
+        section: String,
+        into: String,
+    },
+    DeleteSection {
+        section: String,
+    },
     Adopt {
         path: PathBuf,
         id: String,
@@ -273,6 +285,19 @@ impl MutationService {
                 reject_inbound_references(&graph, node.document, entity)?;
                 let path = graph.documents[node.document].path.clone();
                 contents.remove(&path);
+            }
+            MutationRequest::SplitSection {
+                section,
+                at_line,
+                title,
+            } => {
+                split_section(&graph, &mut contents, section, *at_line, title)?;
+            }
+            MutationRequest::MergeSection { section, into } => {
+                merge_section(&graph, &mut contents, section, into)?;
+            }
+            MutationRequest::DeleteSection { section } => {
+                delete_section(&graph, &mut contents, section)?;
             }
             MutationRequest::Adopt {
                 path,
@@ -662,6 +687,262 @@ fn unique_entity<'a>(
         _ => Err(MutationError::InvalidRequest(format!(
             "entity {id:?} is duplicated"
         ))),
+    }
+}
+
+fn unique_section(graph: &GraphIndex, reference: &str) -> Result<usize, MutationError> {
+    let matches: Vec<_> = graph
+        .sections
+        .iter()
+        .enumerate()
+        .filter(|(index, section)| {
+            section
+                .id
+                .as_ref()
+                .is_some_and(|id| id.as_str() == reference)
+                || stable_section_reference(graph, *index).as_deref() == Some(reference)
+        })
+        .map(|(index, _)| index)
+        .collect();
+    match matches.as_slice() {
+        [index] => Ok(*index),
+        [] => Err(MutationError::InvalidRequest(format!(
+            "stable section {reference:?} does not exist"
+        ))),
+        _ => Err(MutationError::InvalidRequest(format!(
+            "stable section {reference:?} is duplicated"
+        ))),
+    }
+}
+
+fn split_section(
+    graph: &GraphIndex,
+    contents: &mut BTreeMap<PathBuf, String>,
+    reference: &str,
+    at_line: usize,
+    title: &str,
+) -> Result<(), MutationError> {
+    if title.trim().is_empty() || title.contains(['\r', '\n']) {
+        return Err(MutationError::InvalidRequest(
+            "section title must be a non-empty single line".to_owned(),
+        ));
+    }
+    let index = unique_section(graph, reference)?;
+    let section = &graph.sections[index];
+    let path = graph.documents[section.document].path.clone();
+    let source = contents.get(&path).expect("section document exists");
+    let parsed = ParsedDocument::parse(source)
+        .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+    let heading = parsed
+        .headings
+        .iter()
+        .find(|heading| heading.id.as_ref() == section.id.as_ref())
+        .expect("graph section came from parsed heading");
+    let offset = line_offset(source, at_line).ok_or_else(|| {
+        MutationError::InvalidRequest(format!(
+            "line {at_line} does not exist in {}",
+            path.display()
+        ))
+    })?;
+    if at_line <= heading.heading_span.end_line
+        || offset <= heading.heading_span.bytes.end
+        || offset >= heading.section_span.bytes.end
+    {
+        return Err(MutationError::InvalidRequest(format!(
+            "line {at_line} must be after the heading and inside stable section {reference:?} (lines {}-{})",
+            heading.heading_span.start_line, heading.section_span.end_line
+        )));
+    }
+    let newline = if source.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let insertion = format!(
+        "{} {}{newline}{newline}",
+        "#".repeat(section.level as usize),
+        title.trim()
+    );
+    let mut edited = source.clone();
+    edited.insert_str(offset, &insertion);
+    let reserved: BTreeSet<StableSectionId> = graph
+        .sections
+        .iter()
+        .filter_map(|section| section.id.clone())
+        .collect();
+    let normalized = normalize_sections_with_reserved_random(&edited, reserved)
+        .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+    if normalized.inserted.len() != 1 {
+        return Err(MutationError::InvalidRequest(format!(
+            "split expected to create one stable section but created {}",
+            normalized.inserted.len()
+        )));
+    }
+    contents.insert(path, normalized.content);
+    Ok(())
+}
+
+fn merge_section(
+    graph: &GraphIndex,
+    contents: &mut BTreeMap<PathBuf, String>,
+    reference: &str,
+    into_reference: &str,
+) -> Result<(), MutationError> {
+    let source_index = unique_section(graph, reference)?;
+    let target_index = unique_section(graph, into_reference)?;
+    if source_index == target_index {
+        return Err(MutationError::InvalidRequest(
+            "a section cannot be merged into itself".to_owned(),
+        ));
+    }
+    let source_section = &graph.sections[source_index];
+    let target_section = &graph.sections[target_index];
+    if source_section.document != target_section.document
+        || source_section.level != target_section.level
+        || source_section.parent != target_section.parent
+    {
+        return Err(MutationError::InvalidRequest(
+            "section merge requires sibling sections in the same document".to_owned(),
+        ));
+    }
+    let path = graph.documents[source_section.document].path.clone();
+    let source = contents.get(&path).expect("section document exists");
+    let parsed = ParsedDocument::parse(source)
+        .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+    let source_heading = parsed
+        .headings
+        .iter()
+        .find(|heading| heading.id.as_ref() == source_section.id.as_ref())
+        .expect("graph section came from parsed heading");
+    let source_start = heading_start_with_anchor(source, source_heading);
+    if target_section.location.span.bytes.end != source_start {
+        return Err(MutationError::InvalidRequest(format!(
+            "stable section {reference:?} must immediately follow {into_reference:?}"
+        )));
+    }
+    reject_retired_section_references(graph, &[source_index], "merge", true)?;
+    let remove_end = consume_line_ending(source, source_heading.heading_span.bytes.end);
+    let mut edited = source.clone();
+    edited.replace_range(source_start..remove_end, "");
+    contents.insert(path, edited);
+    Ok(())
+}
+
+fn delete_section(
+    graph: &GraphIndex,
+    contents: &mut BTreeMap<PathBuf, String>,
+    reference: &str,
+) -> Result<(), MutationError> {
+    let index = unique_section(graph, reference)?;
+    let section = &graph.sections[index];
+    let path = graph.documents[section.document].path.clone();
+    let source = contents.get(&path).expect("section document exists");
+    let parsed = ParsedDocument::parse(source)
+        .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+    let heading = parsed
+        .headings
+        .iter()
+        .find(|heading| heading.id.as_ref() == section.id.as_ref())
+        .expect("graph section came from parsed heading");
+    let retired: Vec<_> = graph
+        .sections
+        .iter()
+        .enumerate()
+        .filter(|(_, candidate)| {
+            candidate.document == section.document
+                && candidate.location.span.bytes.start >= section.location.span.bytes.start
+                && candidate.location.span.bytes.start < section.location.span.bytes.end
+        })
+        .map(|(index, _)| index)
+        .collect();
+    reject_retired_section_references(graph, &retired, "delete", false)?;
+    let start = heading_start_with_anchor(source, heading);
+    let mut edited = source.clone();
+    edited.replace_range(start..heading.section_span.bytes.end, "");
+    contents.insert(path, edited);
+    Ok(())
+}
+
+fn reject_retired_section_references(
+    graph: &GraphIndex,
+    retired: &[usize],
+    operation: &str,
+    retired_body_survives: bool,
+) -> Result<(), MutationError> {
+    let retired: BTreeSet<_> = retired.iter().copied().collect();
+    let references: Vec<_> = graph
+        .relations
+        .iter()
+        .filter(|relation| {
+            let source_retired =
+                matches!(relation.source, GraphNode::Section(index) if retired.contains(&index));
+            let target_retired =
+                matches!(relation.target, GraphNode::Section(index) if retired.contains(&index));
+            match relation.origin {
+                RelationOrigin::Explicit => source_retired || target_retired,
+                RelationOrigin::MarkdownLink => {
+                    target_retired && (retired_body_survives || !source_retired)
+                }
+            }
+        })
+        .map(|relation| {
+            format!(
+                "{}:{} ({} {})",
+                relation.location.path.display(),
+                relation.location.span.start_line,
+                match relation.origin {
+                    RelationOrigin::Explicit => "managed",
+                    RelationOrigin::MarkdownLink => "Markdown",
+                },
+                relation.predicate
+            )
+        })
+        .collect();
+    if references.is_empty() {
+        Ok(())
+    } else {
+        Err(MutationError::InvalidRequest(format!(
+            "cannot {operation} stable section; remove or retarget durable references at {}",
+            references.join(", ")
+        )))
+    }
+}
+
+fn line_offset(source: &str, line: usize) -> Option<usize> {
+    if line == 0 {
+        return None;
+    }
+    if line == 1 {
+        return Some(0);
+    }
+    source
+        .match_indices('\n')
+        .nth(line - 2)
+        .map(|(offset, _)| offset + 1)
+        .filter(|offset| *offset < source.len())
+}
+
+fn heading_start_with_anchor(source: &str, heading: &docgraph_markdown::Heading) -> usize {
+    heading.anchor_span.as_ref().map_or_else(
+        || line_start_offset(source, heading.heading_span.bytes.start),
+        |anchor| line_start_offset(source, anchor.bytes.start),
+    )
+}
+
+fn line_start_offset(source: &str, offset: usize) -> usize {
+    source[..offset]
+        .rfind('\n')
+        .map_or(0, |newline| newline + 1)
+}
+
+fn consume_line_ending(source: &str, offset: usize) -> usize {
+    let tail = &source[offset..];
+    if tail.starts_with("\r\n") {
+        offset + 2
+    } else if tail.starts_with('\n') {
+        offset + 1
+    } else {
+        offset
     }
 }
 
@@ -1667,6 +1948,101 @@ mod tests {
         service.apply(&delete, false).unwrap();
         assert!(!fixture.0.join("docs/archive/three.md").exists());
         assert!(!service.state.paths.recovery_journal.exists());
+    }
+
+    fn write_section_fixture(fixture: &Fixture) {
+        fs::write(
+            fixture.0.join("docs/one.md"),
+            "+++\nid = \"task:1\"\ntype = \"task\"\nstate = \"open\"\n+++\n<a id=\"s-83JRT4K2P6\"></a>\n# One\n\n<a id=\"s-1111111111\"></a>\n## First\n\nFirst body.\n\n<a id=\"s-2222222222\"></a>\n## Second\n\nSecond body.\n\n<a id=\"s-3333333333\"></a>\n### Child\n\nChild body.\n\n<a id=\"s-4444444444\"></a>\n## Third\n\nThird body.\n",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn stable_section_lifecycle_splits_merges_and_deletes_recoverably() {
+        let split_fixture = Fixture::new();
+        write_section_fixture(&split_fixture);
+        let service = MutationService::open(&split_fixture.0).unwrap();
+        let split = MutationRequest::SplitSection {
+            section: "task:1#s-1111111111".to_owned(),
+            at_line: 13,
+            title: "First follow-up".to_owned(),
+        };
+        let preview = service.apply(&split, true).unwrap();
+        let intended = preview.changes[0].intended.as_deref().unwrap();
+        assert!(intended.contains("## First follow-up"));
+        assert!(intended.contains("<a id=\"s-1111111111\"></a>\n## First"));
+        assert_eq!(intended.matches("<a id=\"s-").count(), 6);
+        assert!(
+            !fs::read_to_string(split_fixture.0.join("docs/one.md"))
+                .unwrap()
+                .contains("First follow-up")
+        );
+        service.apply(&split, false).unwrap();
+        assert!(
+            fs::read_to_string(split_fixture.0.join("docs/one.md"))
+                .unwrap()
+                .contains("## First follow-up")
+        );
+
+        let merge_fixture = Fixture::new();
+        write_section_fixture(&merge_fixture);
+        let service = MutationService::open(&merge_fixture.0).unwrap();
+        service
+            .apply(
+                &MutationRequest::MergeSection {
+                    section: "task:1#s-2222222222".to_owned(),
+                    into: "task:1#s-1111111111".to_owned(),
+                },
+                false,
+            )
+            .unwrap();
+        let merged = fs::read_to_string(merge_fixture.0.join("docs/one.md")).unwrap();
+        assert!(!merged.contains("s-2222222222"));
+        assert!(!merged.contains("## Second"));
+        assert!(merged.contains("Second body."));
+        assert!(merged.contains("s-3333333333"));
+
+        let delete_fixture = Fixture::new();
+        write_section_fixture(&delete_fixture);
+        let service = MutationService::open(&delete_fixture.0).unwrap();
+        service
+            .apply(
+                &MutationRequest::DeleteSection {
+                    section: "s-2222222222".to_owned(),
+                },
+                false,
+            )
+            .unwrap();
+        let deleted = fs::read_to_string(delete_fixture.0.join("docs/one.md")).unwrap();
+        assert!(!deleted.contains("Second body."));
+        assert!(!deleted.contains("Child body."));
+        assert!(deleted.contains("Third body."));
+    }
+
+    #[test]
+    fn retiring_a_section_reports_durable_references() {
+        let fixture = Fixture::new();
+        write_section_fixture(&fixture);
+        let two = fixture.0.join("docs/two.md");
+        let source = fs::read_to_string(&two).unwrap();
+        fs::write(
+            &two,
+            format!("{source}\nSee [the second section](task:1#s-2222222222).\n"),
+        )
+        .unwrap();
+        let service = MutationService::open(&fixture.0).unwrap();
+
+        let error = service
+            .plan(&MutationRequest::DeleteSection {
+                section: "task:1#s-2222222222".to_owned(),
+            })
+            .unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains("remove or retarget durable references"));
+        assert!(message.contains("two.md"));
+        assert!(message.contains("Markdown links_to"));
     }
 
     #[test]
