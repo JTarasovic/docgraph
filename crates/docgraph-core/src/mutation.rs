@@ -1,10 +1,12 @@
 use crate::{
-    CanonicalCorpus, CorpusFile, DerivedState, GraphIndex, Repository, RepositoryConfig,
-    RepositoryFingerprint, Validator, state::StateLock, sync_generated_frontmatter,
+    CanonicalCorpus, CorpusFile, DerivedState, GraphIndex, GraphNode, RelationOrigin, Repository,
+    RepositoryConfig, RepositoryFingerprint, Validator, state::StateLock,
+    sync_generated_frontmatter,
 };
 use docgraph_markdown::{
     ParsedDocument, StableSectionId, frame_content, normalize_sections_with_reserved_random,
 };
+use ignore::overrides::OverrideBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -24,6 +26,20 @@ pub struct Adoption {
 
 #[derive(Clone, Debug)]
 pub enum MutationRequest {
+    CreateDocument {
+        path: PathBuf,
+        id: String,
+        entity_type: String,
+        title: String,
+        properties: BTreeMap<String, toml_edit::Value>,
+    },
+    MoveDocument {
+        entity: String,
+        path: PathBuf,
+    },
+    DeleteDocument {
+        entity: String,
+    },
     Adopt {
         path: PathBuf,
         id: String,
@@ -67,9 +83,9 @@ pub enum MutationRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileChange {
     pub path: PathBuf,
-    pub original: String,
-    pub intended: String,
-    pub original_hash: [u8; 32],
+    pub original: Option<String>,
+    pub intended: Option<String>,
+    pub original_hash: Option<[u8; 32]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -146,9 +162,12 @@ impl MutationService {
         }
         for change in &plan.changes {
             let absolute = self.repository.root().join(&change.path);
-            let current = fs::read_to_string(&absolute)
-                .map_err(|source| MutationError::io(&absolute, source))?;
-            if *blake3::hash(current.as_bytes()).as_bytes() != change.original_hash {
+            let current = read_optional_file(&absolute)?;
+            if current
+                .as_ref()
+                .map(|content| *blake3::hash(content.as_bytes()).as_bytes())
+                != change.original_hash
+            {
                 return Err(MutationError::ConcurrentEdit(change.path.clone()));
             }
         }
@@ -167,12 +186,15 @@ impl MutationService {
         }
         for change in &plan.changes {
             let absolute = self.repository.root().join(&change.path);
-            let current = fs::read_to_string(&absolute)
-                .map_err(|source| MutationError::io(&absolute, source))?;
-            if *blake3::hash(current.as_bytes()).as_bytes() != change.original_hash {
+            let current = read_optional_file(&absolute)?;
+            if current
+                .as_ref()
+                .map(|content| *blake3::hash(content.as_bytes()).as_bytes())
+                != change.original_hash
+            {
                 return Err(MutationError::ConcurrentEdit(change.path.clone()));
             }
-            replace_file(&absolute, &change.intended)?;
+            write_file_state(&absolute, change.intended.as_deref())?;
         }
         fs::remove_file(&self.state.paths.recovery_journal)
             .map_err(|source| MutationError::io(&self.state.paths.recovery_journal, source))?;
@@ -205,6 +227,53 @@ impl MutationService {
             .map(|file| (file.path.clone(), file.content.clone()))
             .collect();
         match request {
+            MutationRequest::CreateDocument {
+                path,
+                id,
+                entity_type,
+                title,
+                properties,
+            } => {
+                create_document(
+                    &self.repository,
+                    &self.config,
+                    &graph,
+                    &mut contents,
+                    DocumentCreation {
+                        path,
+                        id,
+                        entity_type,
+                        title,
+                        properties,
+                    },
+                )?;
+            }
+            MutationRequest::MoveDocument { entity, path } => {
+                let node = unique_entity(&graph, entity)?;
+                let source = graph.documents[node.document].path.clone();
+                let target = managed_document_path(&self.repository, &self.config, path)?;
+                if source == target {
+                    return Err(MutationError::InvalidRequest(format!(
+                        "entity {entity:?} is already at {}",
+                        target.display()
+                    )));
+                }
+                if contents.contains_key(&target) || self.repository.root().join(&target).exists() {
+                    return Err(MutationError::InvalidRequest(format!(
+                        "document {:?} already exists",
+                        target.display()
+                    )));
+                }
+                rewrite_relative_markdown_links(&graph, corpus, &mut contents, &source, &target)?;
+                let content = contents.remove(&source).expect("entity document exists");
+                contents.insert(target, content);
+            }
+            MutationRequest::DeleteDocument { entity } => {
+                let node = unique_entity(&graph, entity)?;
+                reject_inbound_references(&graph, node.document, entity)?;
+                let path = graph.documents[node.document].path.clone();
+                contents.remove(&path);
+            }
             MutationRequest::Adopt {
                 path,
                 id,
@@ -462,6 +531,13 @@ impl MutationService {
 
         let candidate = candidate_corpus(corpus, &contents)?;
         let candidate_graph = GraphIndex::build(&candidate, &self.config);
+        if matches!(request, MutationRequest::MoveDocument { .. })
+            && explicit_relation_meaning(&graph) != explicit_relation_meaning(&candidate_graph)
+        {
+            return Err(MutationError::InvalidRequest(
+                "move would change a managed relation; replace path-relative managed references with canonical entity or stable-section references first".to_owned(),
+            ));
+        }
         let report = Validator::validate_corpus(
             &self.repository,
             &self.config,
@@ -483,16 +559,22 @@ impl MutationService {
                     .collect(),
             ));
         }
-        let changes = corpus
+        let originals: BTreeMap<_, _> = corpus
             .files
             .iter()
-            .filter_map(|file| {
-                let intended = contents.get(&file.path).expect("corpus content exists");
-                (intended != &file.content).then(|| FileChange {
-                    path: file.path.clone(),
-                    original: file.content.clone(),
-                    intended: intended.clone(),
-                    original_hash: file.content_hash,
+            .map(|file| (file.path.clone(), file))
+            .collect();
+        let paths: BTreeSet<_> = originals.keys().chain(contents.keys()).cloned().collect();
+        let changes = paths
+            .into_iter()
+            .filter_map(|path| {
+                let original = originals.get(&path).map(|file| file.content.clone());
+                let intended = contents.get(&path).cloned();
+                (original != intended).then(|| FileChange {
+                    original_hash: originals.get(&path).map(|file| file.content_hash),
+                    path,
+                    original,
+                    intended,
                 })
             })
             .collect();
@@ -518,8 +600,7 @@ impl MutationService {
         let mut unknown = Vec::new();
         for file in &journal.file {
             let absolute = self.repository.root().join(&file.path);
-            let current = fs::read_to_string(&absolute)
-                .map_err(|source| MutationError::io(&absolute, source))?;
+            let current = read_optional_file(&absolute)?;
             if current != file.original && current != file.intended {
                 unknown.push(file.path.clone());
             }
@@ -535,7 +616,11 @@ impl MutationService {
             .map(|file| (file.path.clone(), file.content.clone()))
             .collect();
         for file in &journal.file {
-            contents.insert(file.path.clone(), file.intended.clone());
+            if let Some(intended) = &file.intended {
+                contents.insert(file.path.clone(), intended.clone());
+            } else {
+                contents.remove(&file.path);
+            }
         }
         let candidate = candidate_corpus(&corpus, &contents)?;
         let graph = GraphIndex::build(&candidate, &self.config);
@@ -550,11 +635,8 @@ impl MutationService {
         }
         for file in &journal.file {
             let absolute = self.repository.root().join(&file.path);
-            if fs::read_to_string(&absolute)
-                .map_err(|source| MutationError::io(&absolute, source))?
-                == file.original
-            {
-                replace_file(&absolute, &file.intended)?;
+            if read_optional_file(&absolute)? == file.original {
+                write_file_state(&absolute, file.intended.as_deref())?;
             }
         }
         fs::remove_file(&self.state.paths.recovery_journal)
@@ -690,6 +772,322 @@ fn repository_relative_path(root: &Path, requested: &Path) -> Result<PathBuf, Mu
         ));
     }
     Ok(normalized)
+}
+
+fn managed_document_path(
+    repository: &Repository,
+    config: &RepositoryConfig,
+    requested: &Path,
+) -> Result<PathBuf, MutationError> {
+    let path = repository_relative_path(repository.root(), requested)?;
+    let relative = path
+        .strip_prefix(&config.project.documents.root)
+        .map_err(|_| {
+            MutationError::InvalidRequest(format!(
+                "document {:?} is outside configured root {:?}",
+                path.display(),
+                config.project.documents.root.display()
+            ))
+        })?;
+    let docs_root = repository.root().join(&config.project.documents.root);
+    let mut overrides = OverrideBuilder::new(&docs_root);
+    for include in &config.project.documents.include {
+        overrides.add(include).map_err(|error| {
+            MutationError::Configuration(format!("invalid document include {include:?}: {error}"))
+        })?;
+    }
+    for exclude in &config.project.documents.exclude {
+        overrides.add(&format!("!{exclude}")).map_err(|error| {
+            MutationError::Configuration(format!("invalid document exclude {exclude:?}: {error}"))
+        })?;
+    }
+    let overrides = overrides
+        .build()
+        .map_err(|error| MutationError::Configuration(error.to_string()))?;
+    if config.project.documents.include.is_empty()
+        || !overrides.matched(relative, false).is_whitelist()
+    {
+        return Err(MutationError::InvalidRequest(format!(
+            "document {:?} is outside the configured corpus",
+            path.display()
+        )));
+    }
+    Ok(path)
+}
+
+struct DocumentCreation<'a> {
+    path: &'a Path,
+    id: &'a str,
+    entity_type: &'a str,
+    title: &'a str,
+    properties: &'a BTreeMap<String, toml_edit::Value>,
+}
+
+fn create_document(
+    repository: &Repository,
+    config: &RepositoryConfig,
+    graph: &GraphIndex,
+    contents: &mut BTreeMap<PathBuf, String>,
+    creation: DocumentCreation<'_>,
+) -> Result<(), MutationError> {
+    let DocumentCreation {
+        path: requested,
+        id,
+        entity_type,
+        title,
+        properties,
+    } = creation;
+    if title.trim().is_empty() || title.contains('\r') || title.contains('\n') {
+        return Err(MutationError::InvalidRequest(
+            "document title must be a non-empty single line".to_owned(),
+        ));
+    }
+    if graph.entities.iter().any(|entity| entity.id == id) {
+        return Err(MutationError::InvalidRequest(format!(
+            "entity {id:?} already exists"
+        )));
+    }
+    let path = managed_document_path(repository, config, requested)?;
+    if contents.contains_key(&path) || repository.root().join(&path).exists() {
+        return Err(MutationError::InvalidRequest(format!(
+            "document {:?} already exists",
+            path.display()
+        )));
+    }
+    let entity = config.entities.get(entity_type).ok_or_else(|| {
+        MutationError::InvalidRequest(format!("unknown entity type {entity_type:?}"))
+    })?;
+    let workflow = entity
+        .workflow
+        .as_deref()
+        .map(|name| {
+            config.workflows.get(name).ok_or_else(|| {
+                MutationError::InvalidRequest(format!(
+                    "entity type {entity_type:?} references unknown workflow {name:?}"
+                ))
+            })
+        })
+        .transpose()?;
+    let source = format!("# {}\n", title.trim());
+    let adopted = adopt_document(
+        &source,
+        config,
+        id,
+        entity_type,
+        workflow.map(|workflow| workflow.initial.as_str()),
+        properties,
+    )?;
+    let reserved: BTreeSet<StableSectionId> = graph
+        .sections
+        .iter()
+        .filter_map(|section| section.id.clone())
+        .collect();
+    let normalized = normalize_sections_with_reserved_random(&adopted, reserved)
+        .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+    contents.insert(path, normalized.content);
+    Ok(())
+}
+
+fn reject_inbound_references(
+    graph: &GraphIndex,
+    document: usize,
+    entity: &str,
+) -> Result<(), MutationError> {
+    let inbound: Vec<_> = graph
+        .relations
+        .iter()
+        .filter(|relation| graph_node_document(graph, &relation.target) == Some(document))
+        .filter(|relation| graph_node_document(graph, &relation.source) != Some(document))
+        .map(|relation| {
+            format!(
+                "{}:{} ({} {})",
+                relation.location.path.display(),
+                relation.location.span.start_line,
+                match relation.origin {
+                    RelationOrigin::Explicit => "managed",
+                    RelationOrigin::MarkdownLink => "Markdown",
+                },
+                relation.predicate
+            )
+        })
+        .collect();
+    if inbound.is_empty() {
+        Ok(())
+    } else {
+        Err(MutationError::InvalidRequest(format!(
+            "cannot delete entity {entity:?}; inbound references remain at {}",
+            inbound.join(", ")
+        )))
+    }
+}
+
+fn graph_node_document(graph: &GraphIndex, node: &GraphNode) -> Option<usize> {
+    match node {
+        GraphNode::Document(document) => Some(*document),
+        GraphNode::Entity(id) => graph
+            .entities
+            .iter()
+            .find(|entity| &entity.id == id)
+            .map(|entity| entity.document),
+        GraphNode::Section(section) => graph.sections.get(*section).map(|node| node.document),
+        GraphNode::ExternalUri(_) | GraphNode::Unresolved(_) => None,
+    }
+}
+
+fn rewrite_relative_markdown_links(
+    graph: &GraphIndex,
+    corpus: &CanonicalCorpus,
+    contents: &mut BTreeMap<PathBuf, String>,
+    source_path: &Path,
+    target_path: &Path,
+) -> Result<(), MutationError> {
+    let moved_document = graph
+        .documents
+        .iter()
+        .position(|document| document.path == source_path)
+        .expect("moved document exists");
+    let mut edits: BTreeMap<PathBuf, Vec<(std::ops::Range<usize>, String, String)>> =
+        BTreeMap::new();
+    for file in &corpus.files {
+        for link in &file.document.links {
+            let (base, fragment) = link
+                .destination
+                .split_once('#')
+                .map_or((link.destination.as_str(), None), |(base, fragment)| {
+                    (base, Some(fragment))
+                });
+            if !(base.starts_with("./") || base.starts_with("../")) {
+                continue;
+            }
+            let relation = graph.relations.iter().find(|relation| {
+                relation.origin == RelationOrigin::MarkdownLink
+                    && relation.location.path == file.path
+                    && relation.location.span == link.span
+            });
+            let target_document =
+                relation.and_then(|relation| graph_node_document(graph, &relation.target));
+            let source_moves = file.path == source_path;
+            let target_moves = target_document == Some(moved_document);
+            if !source_moves && !target_moves {
+                continue;
+            }
+            let target_document = target_document.ok_or_else(|| {
+                MutationError::InvalidRequest(format!(
+                    "cannot safely move {}; relative link at {}:{} is unresolved",
+                    source_path.display(),
+                    file.path.display(),
+                    link.span.start_line
+                ))
+            })?;
+            let new_source = if source_moves {
+                target_path
+            } else {
+                file.path.as_path()
+            };
+            let old_target = &graph.documents[target_document].path;
+            let new_target = if target_moves {
+                target_path
+            } else {
+                old_target.as_path()
+            };
+            let mut destination = relative_link_destination(new_source, new_target)?;
+            if let Some(fragment) = fragment {
+                destination.push('#');
+                destination.push_str(fragment);
+            }
+            edits.entry(file.path.clone()).or_default().push((
+                link.span.bytes.clone(),
+                link.destination.clone(),
+                destination,
+            ));
+        }
+    }
+    for (path, mut path_edits) in edits {
+        let content = contents.get_mut(&path).expect("link source exists");
+        path_edits.sort_by_key(|(span, _, _)| std::cmp::Reverse(span.start));
+        for (span, old, new) in path_edits {
+            let rendered = &content[span.clone()];
+            let Some(offset) = rendered.rfind(&old) else {
+                return Err(MutationError::InvalidRequest(format!(
+                    "cannot safely rewrite path-relative link at {}",
+                    path.display()
+                )));
+            };
+            let start = span.start + offset;
+            content.replace_range(start..start + old.len(), &new);
+        }
+    }
+    Ok(())
+}
+
+fn relative_link_destination(source: &Path, target: &Path) -> Result<String, MutationError> {
+    let source_parent = source.parent().unwrap_or_else(|| Path::new(""));
+    let source_parts: Vec<_> = source_parent.components().collect();
+    let target_parts: Vec<_> = target.components().collect();
+    let common = source_parts
+        .iter()
+        .zip(&target_parts)
+        .take_while(|(left, right)| left == right)
+        .count();
+    let mut parts = vec!["..".to_owned(); source_parts.len() - common];
+    parts.extend(
+        target_parts[common..]
+            .iter()
+            .map(|component| {
+                component
+                    .as_os_str()
+                    .to_str()
+                    .ok_or_else(|| {
+                        MutationError::InvalidRequest(
+                            "document paths must be valid UTF-8".to_owned(),
+                        )
+                    })
+                    .map(str::to_owned)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    let relative = parts.join("/");
+    Ok(if relative.starts_with("../") {
+        relative
+    } else {
+        format!("./{relative}")
+    })
+}
+
+fn explicit_relation_meaning(graph: &GraphIndex) -> BTreeSet<String> {
+    graph
+        .relations
+        .iter()
+        .filter(|relation| relation.origin == RelationOrigin::Explicit)
+        .map(|relation| {
+            format!(
+                "{}\0{}\0{}\0{:?}",
+                semantic_node_key(graph, &relation.source),
+                relation.predicate,
+                semantic_node_key(graph, &relation.target),
+                relation.properties
+            )
+        })
+        .collect()
+}
+
+fn semantic_node_key(graph: &GraphIndex, node: &GraphNode) -> String {
+    match node {
+        GraphNode::Document(document) => graph.documents[*document].entity.as_ref().map_or_else(
+            || format!("document:{}", graph.documents[*document].path.display()),
+            |entity| format!("entity:{entity}"),
+        ),
+        GraphNode::Entity(entity) => format!("entity:{entity}"),
+        GraphNode::Section(section) => {
+            let section = &graph.sections[*section];
+            section.id.as_ref().map_or_else(
+                || format!("section:{}:{}", section.document, section.heading),
+                |id| format!("section:{id}"),
+            )
+        }
+        GraphNode::ExternalUri(uri) => format!("external:{uri}"),
+        GraphNode::Unresolved(reference) => format!("unresolved:{reference}"),
+    }
 }
 
 fn adopt_documents(
@@ -880,21 +1278,16 @@ fn candidate_corpus(
     original: &CanonicalCorpus,
     contents: &BTreeMap<PathBuf, String>,
 ) -> Result<CanonicalCorpus, MutationError> {
-    let files = original
-        .files
+    let files = contents
         .iter()
-        .map(|file| {
-            let content = contents
-                .get(&file.path)
-                .expect("every corpus path has content")
-                .clone();
-            let document = ParsedDocument::parse(&content).map_err(|error| {
-                MutationError::InvalidRequest(format!("{}: {error}", file.path.display()))
+        .map(|(path, content)| {
+            let document = ParsedDocument::parse(content).map_err(|error| {
+                MutationError::InvalidRequest(format!("{}: {error}", path.display()))
             })?;
             Ok(CorpusFile {
-                path: file.path.clone(),
+                path: path.clone(),
                 content_hash: *blake3::hash(content.as_bytes()).as_bytes(),
-                content,
+                content: content.clone(),
                 document,
             })
         })
@@ -906,6 +1299,9 @@ fn candidate_corpus(
 }
 
 fn replace_file(path: &Path, intended: &str) -> Result<(), MutationError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| MutationError::io(parent, source))?;
+    }
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -918,6 +1314,22 @@ fn replace_file(path: &Path, intended: &str) -> Result<(), MutationError> {
         return Err(MutationError::io(path, source));
     }
     Ok(())
+}
+
+fn read_optional_file(path: &Path) -> Result<Option<String>, MutationError> {
+    match fs::read_to_string(path) {
+        Ok(content) => Ok(Some(content)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(MutationError::io(path, source)),
+    }
+}
+
+fn write_file_state(path: &Path, intended: Option<&str>) -> Result<(), MutationError> {
+    if let Some(intended) = intended {
+        replace_file(path, intended)
+    } else {
+        fs::remove_file(path).map_err(|source| MutationError::io(path, source))
+    }
 }
 
 fn acquire_state_lock(path: &Path) -> Result<StateLock, MutationError> {
@@ -939,8 +1351,8 @@ struct Journal {
 #[derive(Debug, Deserialize, Serialize)]
 struct JournalFile {
     path: PathBuf,
-    original: String,
-    intended: String,
+    original: Option<String>,
+    intended: Option<String>,
 }
 
 impl Journal {
@@ -1152,8 +1564,20 @@ mod tests {
             .iter()
             .find(|change| change.path == Path::new("docs/three.md"))
             .unwrap();
-        assert!(adopted.intended.contains("id = \"task:3\""));
-        assert!(adopted.intended.contains("state = \"open\""));
+        assert!(
+            adopted
+                .intended
+                .as_deref()
+                .unwrap()
+                .contains("id = \"task:3\"")
+        );
+        assert!(
+            adopted
+                .intended
+                .as_deref()
+                .unwrap()
+                .contains("state = \"open\"")
+        );
 
         service.apply(&request, false).unwrap();
         let adopted = fs::read_to_string(&path).unwrap();
@@ -1161,6 +1585,156 @@ mod tests {
         assert!(adopted.contains("<a id=\"s-"));
         assert!(adopted.contains("type = \"task\""));
         assert!(adopted.contains("[docgraph_generated]\nschema_version = 1"));
+    }
+
+    #[test]
+    fn document_lifecycle_creates_moves_and_deletes_recoverably() {
+        let fixture = Fixture::new();
+        let service = MutationService::open(&fixture.0).unwrap();
+        let create = MutationRequest::CreateDocument {
+            path: PathBuf::from("docs/three.md"),
+            id: "task:3".to_owned(),
+            entity_type: "task".to_owned(),
+            title: "Three".to_owned(),
+            properties: BTreeMap::new(),
+        };
+
+        let preview = service.apply(&create, true).unwrap();
+        let created = preview
+            .changes
+            .iter()
+            .find(|change| change.path == Path::new("docs/three.md"))
+            .unwrap();
+        assert!(created.original.is_none());
+        assert!(
+            created
+                .intended
+                .as_deref()
+                .unwrap()
+                .contains("id = \"task:3\"")
+        );
+        assert!(!fixture.0.join("docs/three.md").exists());
+        service.apply(&create, false).unwrap();
+        assert!(fixture.0.join("docs/three.md").exists());
+        let created_path = fixture.0.join("docs/three.md");
+        let created = format!(
+            "{}\nSee [one](./one.md).\n",
+            fs::read_to_string(&created_path).unwrap()
+        );
+        fs::write(&created_path, created).unwrap();
+        let one_path = fixture.0.join("docs/one.md");
+        let one = format!(
+            "{}\nSee [three](./three.md).\n",
+            fs::read_to_string(&one_path).unwrap()
+        );
+        fs::write(&one_path, one).unwrap();
+
+        let move_document = MutationRequest::MoveDocument {
+            entity: "task:3".to_owned(),
+            path: PathBuf::from("docs/archive/three.md"),
+        };
+        let preview = service.apply(&move_document, true).unwrap();
+        assert_eq!(preview.changes.len(), 3);
+        assert!(preview.changes.iter().any(|change| {
+            change.path == Path::new("docs/three.md") && change.intended.is_none()
+        }));
+        assert!(preview.changes.iter().any(|change| {
+            change.path == Path::new("docs/archive/three.md") && change.original.is_none()
+        }));
+        service.apply(&move_document, false).unwrap();
+        assert!(!fixture.0.join("docs/three.md").exists());
+        assert!(fixture.0.join("docs/archive/three.md").exists());
+        assert!(
+            fs::read_to_string(fixture.0.join("docs/archive/three.md"))
+                .unwrap()
+                .contains("[one](../one.md)")
+        );
+        let one = fs::read_to_string(&one_path).unwrap();
+        assert!(one.contains("[three](./archive/three.md)"));
+        fs::write(
+            &one_path,
+            one.replace("\nSee [three](./archive/three.md).\n", ""),
+        )
+        .unwrap();
+
+        let delete = MutationRequest::DeleteDocument {
+            entity: "task:3".to_owned(),
+        };
+        let preview = service.apply(&delete, true).unwrap();
+        assert!(preview.changes.iter().any(|change| {
+            change.path == Path::new("docs/archive/three.md") && change.intended.is_none()
+        }));
+        service.apply(&delete, false).unwrap();
+        assert!(!fixture.0.join("docs/archive/three.md").exists());
+        assert!(!service.state.paths.recovery_journal.exists());
+    }
+
+    #[test]
+    fn recovery_rolls_forward_interrupted_create_and_delete() {
+        let fixture = Fixture::new();
+        let service = MutationService::open(&fixture.0).unwrap();
+        fs::create_dir_all(&service.state.paths.directory).unwrap();
+        let create = MutationRequest::CreateDocument {
+            path: PathBuf::from("docs/three.md"),
+            id: "task:3".to_owned(),
+            entity_type: "task".to_owned(),
+            title: "Three".to_owned(),
+            properties: BTreeMap::new(),
+        };
+        let plan = service.plan(&create).unwrap();
+        fs::write(
+            &service.state.paths.recovery_journal,
+            toml_edit::ser::to_string(&Journal::from_plan(&plan)).unwrap(),
+        )
+        .unwrap();
+        let created = plan
+            .changes
+            .iter()
+            .find(|change| change.path == Path::new("docs/three.md"))
+            .unwrap();
+        write_file_state(&fixture.0.join(&created.path), created.intended.as_deref()).unwrap();
+
+        service.recover_pending().unwrap();
+        assert!(fixture.0.join("docs/three.md").exists());
+        assert!(!service.state.paths.recovery_journal.exists());
+
+        let delete = MutationRequest::DeleteDocument {
+            entity: "task:3".to_owned(),
+        };
+        let plan = service.plan(&delete).unwrap();
+        fs::write(
+            &service.state.paths.recovery_journal,
+            toml_edit::ser::to_string(&Journal::from_plan(&plan)).unwrap(),
+        )
+        .unwrap();
+        fs::remove_file(fixture.0.join("docs/three.md")).unwrap();
+
+        service.recover_pending().unwrap();
+        assert!(!fixture.0.join("docs/three.md").exists());
+        assert!(!service.state.paths.recovery_journal.exists());
+    }
+
+    #[test]
+    fn deletion_reports_inbound_references() {
+        let fixture = Fixture::new();
+        let one = fixture.0.join("docs/one.md");
+        let source = fs::read_to_string(&one).unwrap().replace(
+            "state = \"open\"\n",
+            "state = \"open\"\n\n[[relations]]\ntype = \"blocks\"\ntarget = \"task:2\"\n",
+        );
+        fs::write(one, source).unwrap();
+        let service = MutationService::open(&fixture.0).unwrap();
+
+        let error = service
+            .plan(&MutationRequest::DeleteDocument {
+                entity: "task:2".to_owned(),
+            })
+            .unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains("inbound references remain"));
+        assert!(message.contains("one.md"));
+        assert!(message.contains("blocks"));
     }
 
     #[test]
@@ -1178,12 +1752,12 @@ mod tests {
 
         let preview = service.apply(&request, true).unwrap();
         assert_eq!(preview.changes.len(), 2);
-        assert!(
-            preview
-                .changes
-                .iter()
-                .all(|change| change.intended.contains("state = \"open\""))
-        );
+        assert!(preview.changes.iter().all(|change| {
+            change
+                .intended
+                .as_deref()
+                .is_some_and(|content| content.contains("state = \"open\""))
+        }));
         assert!(
             !fs::read_to_string(fixture.0.join("docs/one.md"))
                 .unwrap()
@@ -1412,14 +1986,18 @@ mod tests {
         )
         .unwrap();
         let first = &plan.changes[0];
-        fs::write(fixture.0.join(&first.path), &first.intended).unwrap();
+        fs::write(
+            fixture.0.join(&first.path),
+            first.intended.as_deref().unwrap(),
+        )
+        .unwrap();
 
         service.recover_pending().unwrap();
 
         for change in &plan.changes {
             assert_eq!(
                 fs::read_to_string(fixture.0.join(&change.path)).unwrap(),
-                change.intended
+                change.intended.as_deref().unwrap()
             );
         }
         assert!(!service.state.paths.recovery_journal.exists());
@@ -1444,7 +2022,10 @@ mod tests {
         )
         .unwrap();
         let conflict = &plan.changes[0];
-        let manual = format!("{}\nManual concurrent edit.\n", conflict.original);
+        let manual = format!(
+            "{}\nManual concurrent edit.\n",
+            conflict.original.as_deref().unwrap()
+        );
         fs::write(fixture.0.join(&conflict.path), &manual).unwrap();
 
         let error = service.recover_pending().unwrap_err();

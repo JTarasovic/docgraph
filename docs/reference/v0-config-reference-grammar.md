@@ -838,6 +838,9 @@ docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 docgraph describe
 docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>] [--dry-run]
 docgraph adopt --batch <manifest.toml> [--dry-run]
+docgraph document create <path> --id <entity> --type <type> --title <title> [--property <name>=<value>] [--dry-run]
+docgraph document move <entity> <path> [--dry-run]
+docgraph document delete <entity> [--dry-run]
 docgraph get <entity-or-stable-section>
 docgraph search <query>
 docgraph transition <entity> <state>
@@ -887,6 +890,13 @@ A batch-adoption manifest groups each document's `path`, `id`, `type`, and optio
 validated as one candidate corpus. Workflow initialization likewise writes every
 missing initial state for the selected entity type as one mutation.
 
+Document creation requires a new path inside the configured corpus and creates the
+managed identity, initial workflow state, supplied properties, title heading, and
+stable heading ID together. A move preserves the document content and stable identity,
+rewrites resolvable relative Markdown links to and from the moved document, and rejects
+managed references whose meaning would change. Delete refuses while any inbound
+managed relation or Markdown link remains.
+
 `docgraph validate --changes <git-ref>` compares that base corpus with the current
 corpus. It accepts changes equivalent to supported mutations, including a sequence
 of configured workflow transitions, while rejecting unsupported identity, state,
@@ -902,7 +912,8 @@ is valid.
 
 Before replacing files through temporary files, the tool records a recovery journal
 containing the canonical-input fingerprint and the original and intended state of
-each affected file. Recovery may automatically roll forward only when every affected
+each affected path, including absence for creates and deletes. Recovery may
+automatically roll forward only when every affected
 file still matches one of those states and the intended result validates against the
 current complete graph. If a file matches neither state, recovery must not overwrite
 it and must report that manual resolution is required. Interrupted mutations are
@@ -1091,12 +1102,12 @@ The initial success slice was followed by four completed contract increments:
 
 Repository-defined nested commands and command introspection are now implemented. The
 authoritative remaining-work list is [Design section 15.2](./design.md#s-DRW3RR84VS):
-managed document and section lifecycle operations, semantic change review, dedicated
-directional traversal and expanded context, repository-host shorthand adapters,
-vectors and embedding providers, and measurement-gated caching or inferred-fact
-materialization. Existing `get`, `neighbors`, and `path` remain the current
-structured-retrieval surface. Semantic merge machinery is not planned without
-evidence that Git plus whole-corpus validation and semantic review are insufficient.
+stable-section lifecycle operations, semantic change review, dedicated directional
+traversal and expanded context, repository-host shorthand adapters, vectors and
+embedding providers, and measurement-gated caching or inferred-fact materialization.
+Existing `get`, `neighbors`, and `path` remain the current structured-retrieval
+surface. Semantic merge machinery is not planned without evidence that Git plus
+whole-corpus validation and semantic review are insufficient.
 
 <a id="s-PDQ5Q60C5R"></a>
 ## 28. v0 Constraints

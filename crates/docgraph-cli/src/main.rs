@@ -31,6 +31,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Create, move, or delete managed documents.
+    Document {
+        #[command(subcommand)]
+        action: DocumentAction,
+    },
     /// Adopt an existing document into the managed graph.
     Adopt {
         path: Option<PathBuf>,
@@ -169,6 +174,37 @@ enum FrontmatterAction {
 }
 
 #[derive(Subcommand)]
+enum DocumentAction {
+    /// Create a new managed document.
+    Create {
+        path: PathBuf,
+        #[arg(long)]
+        id: String,
+        #[arg(long = "type")]
+        entity_type: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long = "property")]
+        properties: Vec<String>,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Move a managed entity's document.
+    Move {
+        entity: String,
+        path: PathBuf,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Delete a managed entity's document when no inbound references remain.
+    Delete {
+        entity: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum WorkflowAction {
     /// Materialize the initial state for every uninitialized entity of a type.
     Initialize {
@@ -236,6 +272,49 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
+        Command::Document { action } => match action {
+            DocumentAction::Create {
+                path,
+                id,
+                entity_type,
+                title,
+                properties,
+                dry_run,
+            } => {
+                let service = MutationService::open(".").map_err(CliError::boxed)?;
+                let entity = service.config().entities.get(&entity_type).ok_or_else(|| {
+                    CliError::message(format!("unknown entity type {entity_type:?}"))
+                })?;
+                let properties = parse_properties(&properties, &entity.property, "entity")?;
+                let plan = service
+                    .apply(
+                        &MutationRequest::CreateDocument {
+                            path,
+                            id,
+                            entity_type,
+                            title,
+                            properties,
+                        },
+                        dry_run,
+                    )
+                    .map_err(CliError::boxed)?;
+                print_plan(&plan, dry_run, cli.json)
+            }
+            DocumentAction::Move {
+                entity,
+                path,
+                dry_run,
+            } => mutate(
+                MutationRequest::MoveDocument { entity, path },
+                dry_run,
+                cli.json,
+            ),
+            DocumentAction::Delete { entity, dry_run } => mutate(
+                MutationRequest::DeleteDocument { entity },
+                dry_run,
+                cli.json,
+            ),
+        },
         Command::Adopt {
             path,
             id,
@@ -1323,14 +1402,23 @@ fn print_plan(plan: &MutationPlan, dry_run: bool, json_output: bool) -> Result<(
         }
     } else {
         for change in &plan.changes {
-            println!("updated {}", change.path.display());
+            let action = match (&change.original, &change.intended) {
+                (None, Some(_)) => "created",
+                (Some(_), None) => "deleted",
+                _ => "updated",
+            };
+            println!("{action} {}", change.path.display());
         }
     }
     Ok(())
 }
 
 fn render_patch(change: &docgraph_core::FileChange) -> String {
-    render_text_patch(&change.path, &change.original, &change.intended)
+    render_text_patch(
+        &change.path,
+        change.original.as_deref().unwrap_or_default(),
+        change.intended.as_deref().unwrap_or_default(),
+    )
 }
 
 fn render_text_patch(path: &std::path::Path, original: &str, intended: &str) -> String {
@@ -1485,9 +1573,9 @@ mod tests {
     fn dry_run_patch_contains_only_the_changed_middle() {
         let change = docgraph_core::FileChange {
             path: PathBuf::from("docs/task.md"),
-            original: "same\nold\ntail\n".to_owned(),
-            intended: "same\nnew\ntail\n".to_owned(),
-            original_hash: [0; 32],
+            original: Some("same\nold\ntail\n".to_owned()),
+            intended: Some("same\nnew\ntail\n".to_owned()),
+            original_hash: Some([0; 32]),
         };
         let patch = render_patch(&change);
         assert!(patch.contains("-old\n+new"));

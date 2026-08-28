@@ -241,7 +241,7 @@ impl<'a> InstructionService<'a> {
             "- Inspect: `docgraph describe`, `docgraph get`, `docgraph search`, `docgraph neighbors`, and `docgraph path`.\n",
         );
         output.push_str(
-            "- Mutate: `docgraph transition`, `docgraph property`, `docgraph relate`, `docgraph unrelate`, and `docgraph normalize`.\n",
+            "- Mutate: `docgraph document`, `docgraph transition`, `docgraph property`, `docgraph relate`, `docgraph unrelate`, and `docgraph normalize`.\n",
         );
         output.push_str(
             "- Maintain: `docgraph validate`, `docgraph frontmatter`, and `docgraph instructions`.",

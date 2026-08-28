@@ -2,7 +2,7 @@
 
 id = "task:implement-managed-document-lifecycle"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Implement managed document lifecycle"
@@ -47,3 +47,10 @@ target = "task:implement-stable-section-lifecycle"
 # Implement managed document lifecycle
 
 Add prospective, recoverable create, move, and delete operations for managed documents and entities, including exact impact reporting and inbound-reference safety.
+
+Implemented through `docgraph document create|move|delete`. Creation initializes a
+validated document inside the configured corpus; moves preserve stable identity and
+rewrite resolvable relative Markdown links; deletion reports and refuses inbound
+managed or Markdown references. File creation and absence are journaled states, so
+create, move, and delete recover through the same transaction path as existing
+mutations. Dry-run and JSON output expose every affected path.

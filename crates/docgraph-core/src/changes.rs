@@ -12,6 +12,7 @@ pub struct ChangeDiagnostic {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ManagedChange {
     EntityAdded(String),
+    EntityRemoved(String),
     EntityMoved(String),
     StateChanged(String),
     PropertiesChanged(String),
@@ -56,13 +57,9 @@ impl ManagedChangeValidator {
         for (id, base_entity) in &base_entities {
             let base_path = base_graph.documents[base_entity.document].path.clone();
             let Some(candidate_entity) = candidate_entities.get(id) else {
-                report.diagnostics.push(ChangeDiagnostic {
-                    code: "unsupported-entity-removal",
-                    message: format!(
-                        "entity {id:?} was removed or its identity changed; no docgraph operation supports that change"
-                    ),
-                    path: base_path,
-                });
+                report
+                    .changes
+                    .push(ManagedChange::EntityRemoved((*id).to_owned()));
                 continue;
             };
             let candidate_path = candidate_graph.documents[candidate_entity.document]
@@ -137,9 +134,42 @@ impl ManagedChangeValidator {
         if explicit_relations(&base_graph) != explicit_relations(&candidate_graph) {
             report.changes.push(ManagedChange::RelationsChanged);
         }
+        let base_unresolved = unresolved_explicit_relations(&base_graph);
+        for (key, path) in unresolved_explicit_relations(&candidate_graph) {
+            if !base_unresolved.contains_key(&key) {
+                report.diagnostics.push(ChangeDiagnostic {
+                    code: "unsupported-dangling-managed-reference",
+                    message: "a managed relation became unresolved".to_owned(),
+                    path,
+                });
+            }
+        }
         validate_section_identity(&base_graph, &candidate_graph, &mut report);
         report
     }
+}
+
+fn unresolved_explicit_relations(graph: &GraphIndex) -> BTreeMap<String, PathBuf> {
+    graph
+        .relations
+        .iter()
+        .filter(|relation| relation.origin == RelationOrigin::Explicit)
+        .filter(|relation| {
+            matches!(relation.source, GraphNode::Unresolved(_))
+                || matches!(relation.target, GraphNode::Unresolved(_))
+        })
+        .map(|relation| {
+            (
+                format!(
+                    "{}\0{}\0{}",
+                    relation.location.path.display(),
+                    relation.predicate,
+                    node_key(graph, &relation.target)
+                ),
+                relation.location.path.clone(),
+            )
+        })
+        .collect()
 }
 
 fn supported_state_change(
@@ -359,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_identity_illegal_transition_and_surviving_heading_anchor_changes() {
+    fn accounts_for_lifecycle_illegal_transition_and_surviving_heading_anchor_changes() {
         let fixture = Fixture::new();
         let base = fixture.corpus(&document("task:1", "open", "s-83JRT4K2P6", "Before."));
 
@@ -376,9 +406,13 @@ mod tests {
         let report = ManagedChangeValidator::validate(&base, &renamed, &fixture.2);
         assert!(
             report
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.code == "unsupported-entity-removal")
+                .changes
+                .contains(&ManagedChange::EntityRemoved("task:1".to_owned()))
+        );
+        assert!(
+            report
+                .changes
+                .contains(&ManagedChange::EntityAdded("task:2".to_owned()))
         );
 
         let replaced = fixture.corpus(&document("task:1", "open", "s-7K3M9Q2W0", "Before."));

@@ -364,6 +364,12 @@ document and validates the combined corpus once. `docgraph workflow initialize
 <entity-type>` materializes a newly configured workflow's initial state across all
 affected entities in the same atomic mutation.
 
+`docgraph document create` creates a normalized managed document inside the configured
+corpus. `document move` preserves entity and section identity, rewrites resolvable
+path-relative Markdown links, and rejects managed references whose meaning would
+change. `document delete` refuses to leave inbound managed or Markdown references.
+All three expose the complete prospective file patch through `--dry-run`.
+
 Managed facts are changed through docgraph operations. Each entity document also has
 a reserved generated table containing direct incoming relations, configured
 inverses, and informational backlinks. Generated frontmatter is deterministic,
@@ -774,7 +780,7 @@ The skill/config/CLI contract should be versioned so stale checked-in guidance c
 Semantic mutation behaves as a recoverable validated transaction:
 
 ```text
-load state and record the canonical-input fingerprint and affected-file hashes
+load state and record the canonical-input fingerprint and affected-file states/hashes
     ↓
 validate request
     ↓
@@ -807,7 +813,8 @@ complete graph, reapplies the patch, and validates the new candidate. It continu
 when that candidate remains valid and otherwise aborts without writing. Retries are
 bounded so continuous edits cannot starve the operation indefinitely.
 
-The recovery journal records the original and intended state of every affected file
+The recovery journal records the original and intended state of every affected path,
+including path absence for creates and deletes,
 and the canonical-input fingerprint. Recovery classifies each affected file as
 original, intended, or unknown. It may automatically roll forward only when no file
 is unknown and the intended result validates against the current complete graph. If
@@ -961,7 +968,6 @@ gaps tracked by the follow-on plan are now closed:
 
 This section is the authoritative accounting of the remaining initial-reference work:
 
-- managed document/entity creation, deletion, and moves
 - automated stable-section split, merge, and delete operations
 - semantic change review
 - dedicated directional traversal and expanded context commands

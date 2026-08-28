@@ -556,13 +556,13 @@ Covered follow-on cases include:
 - exact section-source mutation and section-preserving generated-projection cases
 - runtime-backed logic execution in CI rather than only parser/type tests
 - nested repository-defined queries and mutations, project-aware help, command configuration validation, and command introspection
+- recoverable document creation, identity-preserving moves with relative-link rewriting, deletion, and inbound-reference refusal
 
-File/entity creation, deletion, and moves; automated section split/merge/delete;
-provider shorthand; vectors; semantic change review; directional traversal and
-expanded context; cross-command parse caching; and persistent inferred-fact
-materialization remain post-v0 scenarios. Semantic merge machinery is deliberately
-omitted unless concrete failures show that Git, whole-corpus validation, and semantic
-review are insufficient. The authoritative accounting is
+Automated section split/merge/delete; provider shorthand; vectors; semantic change
+review; directional traversal and expanded context; cross-command parse caching; and
+persistent inferred-fact materialization remain post-v0 scenarios. Semantic merge
+machinery is deliberately omitted unless concrete failures show that Git,
+whole-corpus validation, and semantic review are insufficient. The authoritative accounting is
 [Design section 15.2](./design.md#s-DRW3RR84VS).
 
 <a id="s-7BT3682S4Q"></a>

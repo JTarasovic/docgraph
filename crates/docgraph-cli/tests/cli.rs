@@ -140,6 +140,96 @@ fn adopt_previews_then_manages_an_existing_document() {
 }
 
 #[test]
+fn document_commands_create_move_and_safely_delete() {
+    let fixture = Fixture::copy("synthetic");
+    let created = fixture.0.join("docs/created.md");
+    let moved = fixture.0.join("docs/archive/created.md");
+
+    let preview = fixture.run(&[
+        "document",
+        "create",
+        "docs/created.md",
+        "--id",
+        "florp:created",
+        "--type",
+        "florp",
+        "--title",
+        "Created florp",
+        "--property",
+        "title=Created florp",
+        "--dry-run",
+    ]);
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    assert!(!created.exists());
+    assert!(String::from_utf8_lossy(&preview.stdout).contains("florp:created"));
+
+    let create = fixture.run(&[
+        "document",
+        "create",
+        "docs/created.md",
+        "--id",
+        "florp:created",
+        "--type",
+        "florp",
+        "--title",
+        "Created florp",
+        "--property",
+        "title=Created florp",
+    ]);
+    assert!(
+        create.status.success(),
+        "{}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    assert!(created.exists());
+    assert!(fs::read_to_string(&created).unwrap().contains("<a id=\"s-"));
+
+    let move_document = fixture.run(&[
+        "document",
+        "move",
+        "florp:created",
+        "docs/archive/created.md",
+    ]);
+    assert!(
+        move_document.status.success(),
+        "{}",
+        String::from_utf8_lossy(&move_document.stderr)
+    );
+    assert!(!created.exists());
+    assert!(moved.exists());
+
+    assert!(
+        fixture
+            .run(&["relate", "florp:1", "precedes", "florp:created"])
+            .status
+            .success()
+    );
+    let blocked = fixture.run(&["document", "delete", "florp:created"]);
+    assert!(!blocked.status.success());
+    assert!(String::from_utf8_lossy(&blocked.stderr).contains("inbound references remain"));
+    assert!(moved.exists());
+
+    assert!(
+        fixture
+            .run(&["unrelate", "florp:1", "precedes", "florp:created"])
+            .status
+            .success()
+    );
+    let delete = fixture.run(&["document", "delete", "florp:created"]);
+    assert!(
+        delete.status.success(),
+        "{}",
+        String::from_utf8_lossy(&delete.stderr)
+    );
+    assert!(!moved.exists());
+    assert!(fixture.run(&["validate"]).status.success());
+}
+
+#[test]
 fn workflow_initialize_materializes_missing_states() {
     let fixture = Fixture::copy("synthetic");
     let path = fixture.0.join("docs/florp.md");
