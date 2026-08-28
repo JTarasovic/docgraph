@@ -2,7 +2,7 @@
 
 id = "task:index-searchable-markdown-content"
 type = "task"
-state = "ready"
+state = "done"
 
 [properties]
 title = "Index searchable Markdown content"
@@ -60,3 +60,10 @@ frontmatter-only changes do not invalidate embeddings. Keep entity metadata and
 relations available through structured retrieval rather than flattening them into
 text tokens. Cover full-text results, vector input, and unchanged-vector reuse with
 tests.
+
+<a id="s-X3Z4ZRHCE8"></a>
+## Result
+
+Implemented a shared parsed-Markdown projection for document and section indexing,
+bumped the disposable index format, and verified that frontmatter-only changes reuse
+existing vectors.

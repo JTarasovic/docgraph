@@ -2,7 +2,7 @@
 
 id = "issue:search-index-includes-structured-frontmatter"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Search index includes structured frontmatter"
@@ -28,3 +28,10 @@ searchable prose, creating noisy matches and unnecessary embedding refreshes.
 
 Structured metadata already has deterministic graph and query surfaces. Retrieval
 should instead index a deliberate Markdown-body projection.
+
+<a id="s-6GMXSDP0F2"></a>
+## Resolution
+
+Search and embedding chunks now use parsed Markdown-body projections and projection
+hashes. Managed metadata remains available through structured retrieval without
+polluting text results or invalidating embeddings when only frontmatter changes.

@@ -3,13 +3,14 @@ use crate::{
     GraphIndex, GraphNode, RelationOrigin, RepositoryFingerprint, SemanticSearchHit,
     SemanticSearchMode, SemanticSearchResult,
 };
+use docgraph_markdown::searchable_markdown;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
 
 const INDEX_SCHEMA: &str = r#"
-PRAGMA user_version = 1;
+PRAGMA user_version = 3;
 
 CREATE TABLE metadata (
     key TEXT PRIMARY KEY,
@@ -500,9 +501,11 @@ fn populate(
             .entity
             .clone()
             .unwrap_or_else(|| portable_path(&document.path));
+        let search_content = file.document.searchable_text(&file.content);
+        let search_hash = blake3::hash(search_content.as_bytes());
         transaction.execute(
             "INSERT INTO search_entries(node, content, content_hash) VALUES (?1, ?2, ?3)",
-            params![document_node, file.content, &document.content_hash[..]],
+            params![document_node, search_content, search_hash.as_bytes()],
         )?;
     }
 
@@ -567,13 +570,11 @@ fn populate(
             .iter()
             .find(|file| file.path == document.path)
             .expect("graph sections originate in the canonical corpus");
+        let search_content = searchable_markdown(&file.content[span.bytes.clone()]);
+        let search_hash = blake3::hash(search_content.as_bytes());
         transaction.execute(
             "INSERT INTO search_entries(node, content, content_hash) VALUES (?1, ?2, ?3)",
-            params![
-                canonical_id,
-                &file.content[span.bytes.clone()],
-                &section.content_hash[..]
-            ],
+            params![canonical_id, search_content, search_hash.as_bytes()],
         )?;
     }
 
@@ -663,17 +664,19 @@ mod tests {
 
     #[test]
     fn persists_graph_locations_properties_and_search_content() {
-        let content = "<a id=\"s-83JRT4K2P6\"></a>\n# Retry policy\nExponential backoff protects the service.\n".to_owned();
+        let content = "+++\nid = \"spec:structured-only-token\"\ntype = \"spec\"\n+++\n<a id=\"s-83JRT4K2P6\"></a>\n# Retry policy\nExponential backoff protects the service.\n".to_owned();
         let path = PathBuf::from("docs/retry.md");
         let span = SourceSpan::from_offsets(&content, 0..content.len());
         let hash = *blake3::hash(content.as_bytes()).as_bytes();
         let fingerprint = RepositoryFingerprint::from_hex(&"1".repeat(64)).unwrap();
+        let parsed = ParsedDocument::parse(&content).unwrap();
+        let section_span = parsed.headings[0].section_span.clone();
         let corpus = CanonicalCorpus {
             files: vec![CorpusFile {
                 path: path.clone(),
                 content: content.clone(),
                 content_hash: hash,
-                document: ParsedDocument::parse(&content).unwrap(),
+                document: parsed,
             }],
             fingerprint,
         };
@@ -685,7 +688,7 @@ mod tests {
         properties.insert("title".to_owned(), toml_edit::Value::from("Retry policy"));
         let graph = GraphIndex {
             documents: vec![DocumentNode {
-                path,
+                path: path.clone(),
                 entity: Some("spec:retry".to_owned()),
                 content_hash: hash,
             }],
@@ -703,8 +706,12 @@ mod tests {
                 parent: None,
                 level: 1,
                 heading: "Retry policy".to_owned(),
-                location: location.clone(),
-                content_hash: hash,
+                location: GraphLocation {
+                    path: path.clone(),
+                    span: section_span.clone(),
+                },
+                content_hash: *blake3::hash(content[section_span.bytes.clone()].as_bytes())
+                    .as_bytes(),
             }],
             relations: vec![Relation {
                 source: GraphNode::Entity("spec:retry".to_owned()),
@@ -737,12 +744,14 @@ mod tests {
             .unwrap();
         drop(connection);
         let hits = search(&database, "exponential backoff", 5).unwrap();
+        let structured_hits = search(&database, "structured-only-token", 5).unwrap();
 
         assert_eq!(recorded_fingerprint(&database).unwrap(), Some(fingerprint));
         assert_eq!(entity_count, 1);
         assert_eq!(relation_location, ("docs/retry.md".to_owned(), 1));
         assert_eq!(hits[0].node, "spec:retry");
         assert!(hits[0].snippet.contains("Exponential backoff"));
+        assert!(structured_hits.is_empty());
 
         fs::remove_file(database).unwrap();
     }
@@ -777,17 +786,19 @@ mod tests {
 
     #[test]
     fn reuses_unchanged_vectors_and_returns_ranked_semantic_hits() {
-        let content = "<a id=\"s-83JRT4K2P6\"></a>\n# Retry policy\nExponential backoff protects the service.\n".to_owned();
+        let content = "+++\nid = \"spec:retry\"\ntype = \"spec\"\nstate = \"open\"\n+++\n<a id=\"s-83JRT4K2P6\"></a>\n# Retry policy\nExponential backoff protects the service.\n".to_owned();
         let path = PathBuf::from("docs/retry.md");
-        let span = SourceSpan::from_offsets(&content, 0..content.len());
+        let parsed = ParsedDocument::parse(&content).unwrap();
+        let span = parsed.headings[0].section_span.clone();
         let hash = *blake3::hash(content.as_bytes()).as_bytes();
+        let section_hash = *blake3::hash(content[span.bytes.clone()].as_bytes()).as_bytes();
         let fingerprint = RepositoryFingerprint::from_hex(&"2".repeat(64)).unwrap();
         let corpus = CanonicalCorpus {
             files: vec![CorpusFile {
                 path: path.clone(),
                 content: content.clone(),
                 content_hash: hash,
-                document: ParsedDocument::parse(&content).unwrap(),
+                document: parsed,
             }],
             fingerprint,
         };
@@ -805,7 +816,7 @@ mod tests {
                 level: 1,
                 heading: "Retry policy".to_owned(),
                 location: GraphLocation { path, span },
-                content_hash: hash,
+                content_hash: section_hash,
             }],
             relations: Vec::new(),
             diagnostics: Vec::new(),
@@ -835,9 +846,31 @@ mod tests {
         build(&first, fingerprint, &corpus, &graph).unwrap();
         index_vectors(&first, None, &config, &provider).unwrap();
         assert_eq!(provider.batches.borrow().len(), 1);
+        assert!(
+            provider.batches.borrow()[0]
+                .iter()
+                .all(|text| !text.contains("state =") && !text.contains("s-83JRT4K2P6"))
+        );
 
         provider.batches.borrow_mut().clear();
-        build(&second, fingerprint, &corpus, &graph).unwrap();
+        let changed_content = content.replace("state = \"open\"", "state = \"done\"");
+        let changed_hash = *blake3::hash(changed_content.as_bytes()).as_bytes();
+        let changed_fingerprint = RepositoryFingerprint::from_hex(&"3".repeat(64)).unwrap();
+        let mut changed_corpus = corpus.clone();
+        changed_corpus.fingerprint = changed_fingerprint;
+        changed_corpus.files[0].content = changed_content.clone();
+        changed_corpus.files[0].content_hash = changed_hash;
+        changed_corpus.files[0].document = ParsedDocument::parse(&changed_content).unwrap();
+        let mut changed_graph = graph.clone();
+        changed_graph.documents[0].content_hash = changed_hash;
+
+        build(
+            &second,
+            changed_fingerprint,
+            &changed_corpus,
+            &changed_graph,
+        )
+        .unwrap();
         index_vectors(&second, Some(&first), &config, &provider).unwrap();
         assert!(provider.batches.borrow().is_empty());
 

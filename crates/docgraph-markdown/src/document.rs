@@ -37,11 +37,7 @@ struct BuildingHeading {
 impl ParsedDocument {
     pub fn parse(source: &str) -> Result<Self, FrontmatterError> {
         let (frontmatter, body_offset) = parse_frontmatter(source)?;
-        let mut options = Options::empty();
-        options.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
-        options.insert(Options::ENABLE_TABLES);
-        options.insert(Options::ENABLE_STRIKETHROUGH);
-        options.insert(Options::ENABLE_TASKLISTS);
+        let options = markdown_options();
 
         let mut headings = Vec::new();
         let mut links = Vec::new();
@@ -115,6 +111,63 @@ impl ParsedDocument {
             headings,
             links,
         })
+    }
+
+    /// Projects the Markdown body into text suitable for lexical and semantic search.
+    pub fn searchable_text(&self, source: &str) -> String {
+        searchable_markdown(&source[self.body_offset..])
+    }
+}
+
+/// Projects Markdown into visible text without markup, HTML, or link destinations.
+pub fn searchable_markdown(source: &str) -> String {
+    let mut output = String::new();
+    for event in Parser::new_ext(source, markdown_options()) {
+        match event {
+            Event::Text(text)
+            | Event::Code(text)
+            | Event::InlineMath(text)
+            | Event::DisplayMath(text)
+            | Event::FootnoteReference(text) => output.push_str(&text),
+            Event::SoftBreak | Event::HardBreak | Event::Rule => push_break(&mut output),
+            Event::End(
+                TagEnd::Paragraph
+                | TagEnd::Heading(_)
+                | TagEnd::BlockQuote(_)
+                | TagEnd::CodeBlock
+                | TagEnd::List(_)
+                | TagEnd::Item
+                | TagEnd::FootnoteDefinition
+                | TagEnd::DefinitionList
+                | TagEnd::DefinitionListTitle
+                | TagEnd::DefinitionListDefinition
+                | TagEnd::Table
+                | TagEnd::TableHead
+                | TagEnd::TableRow
+                | TagEnd::TableCell,
+            ) => push_break(&mut output),
+            Event::Start(_)
+            | Event::End(_)
+            | Event::Html(_)
+            | Event::InlineHtml(_)
+            | Event::TaskListMarker(_) => {}
+        }
+    }
+    output.trim().to_owned()
+}
+
+fn markdown_options() -> Options {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
+    options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+    options
+}
+
+fn push_break(output: &mut String) {
+    if !output.is_empty() && !output.ends_with('\n') {
+        output.push('\n');
     }
 }
 
@@ -192,6 +245,35 @@ More.
             &source[document.links[0].span.bytes.clone()],
             "[ADR](../adr/42.md#s-7K3M9Q2W)"
         );
+    }
+
+    #[test]
+    fn projects_searchable_body_without_frontmatter_markup_or_link_destinations() {
+        let source = r#"+++
+id = "task:secret-entity-token"
+type = "task"
++++
+<a id="s-83JRT4K2P6"></a>
+# Retry *policy*
+
+See [the clock](https://secret-destination-token.invalid/path) and call `retry_after`.
+
+```rust
+run_retry_loop();
+```
+"#;
+
+        let document = ParsedDocument::parse(source).unwrap();
+        let searchable = document.searchable_text(source);
+
+        assert!(searchable.contains("Retry policy"));
+        assert!(searchable.contains("the clock"));
+        assert!(searchable.contains("retry_after"));
+        assert!(searchable.contains("run_retry_loop();"));
+        assert!(!searchable.contains("secret-entity-token"));
+        assert!(!searchable.contains("secret-destination-token"));
+        assert!(!searchable.contains("s-83JRT4K2P6"));
+        assert!(!searchable.contains("<a"));
     }
 
     #[test]

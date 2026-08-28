@@ -6,7 +6,7 @@ mod normalize;
 mod reference;
 mod span;
 
-pub use document::{Heading, MarkdownLink, ParsedDocument};
+pub use document::{Heading, MarkdownLink, ParsedDocument, searchable_markdown};
 pub use frontmatter::{Frontmatter, FrontmatterError, frame_content};
 pub use normalize::{
     Normalization, NormalizeError, SectionInsertion, normalize_sections, normalize_sections_with,

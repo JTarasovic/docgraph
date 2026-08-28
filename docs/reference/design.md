@@ -688,6 +688,12 @@ Embedding generation uses a provider-neutral subprocess protocol rather than bun
 a model into the binary. `semantic-search` labels vector and full-text fallback
 results explicitly; search matches remain non-authoritative discovery results.
 
+Full-text and vector chunks project searchable text from Markdown bodies. They retain
+headings, prose, link labels, inline code, and fenced-code contents while excluding
+managed frontmatter, stable-anchor markup, link destinations, and formatting syntax.
+Structured metadata remains available through graph retrieval and queries. Content
+hashes cover the projection so metadata-only changes reuse existing embeddings.
+
 <a id="s-DAR1R6WHJE"></a>
 ## 10. Repo-Aware CLI
 
