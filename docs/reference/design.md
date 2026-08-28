@@ -620,17 +620,19 @@ The index contains:
 - inferred facts
 - source locations
 - FTS
-- vector index (post-v0)
+- vector index (follow-on)
 - index metadata
 
 v0 persists normalized graph facts, exact source locations, metadata, and FTS in a
 per-worktree SQLite index. Operations fingerprint canonical inputs; a missing,
 stale, old-format, or corrupt disposable index is rebuilt, while search reuses a
-fresh FTS index across commands.
+fresh FTS index across commands. Follow-on vector data lives in the same disposable
+index.
 
 Cross-command parse caching and persistent materialization of inferred facts remain
 post-v0 performance work. Named queries evaluate configured logic against the current
-canonical graph. Changed-chunk re-embedding belongs to post-v0 vector indexing.
+canonical graph. Vector refresh reuses embeddings whose content hash and provider
+identity are unchanged and embeds only changed chunks.
 
 The index records enough metadata to detect staleness after checkout, merge, parser changes, schema changes, or embedding changes.
 
@@ -652,19 +654,19 @@ driver or attempt semantic three-way merging.
 <a id="s-FDMHXV5Q4Q"></a>
 ## 9. Search and Retrieval
 
-The target architecture supports structured graph retrieval (`get`, `neighbors`,
+The retrieval surface supports structured graph retrieval (`get`, `neighbors`,
 `incoming`, `outgoing`, `traverse`, `path`, and `context`), full-text search, and
 vector search. Repositories may expose named explanation queries for important
-derived predicates. v0 includes structured retrieval, FTS, and named queries; vector
-retrieval is post-v0 direction.
+derived predicates.
 
 The CLI exposes `get`, `neighbors`, `incoming`, `outgoing`, `traverse`, `path`, and
 `context`. Structured output preserves edge direction and origin. Traversal is
 directional and depth-bounded; context assembles detailed nodes and the relations
 among them. Informational Markdown edges remain opt-in.
 
-Post-v0 embedding generation should use a provider abstraction rather than bundle a
-large model into the binary.
+Embedding generation uses a provider-neutral subprocess protocol rather than bundling
+a model into the binary. `semantic-search` labels vector and full-text fallback
+results explicitly; search matches remain non-authoritative discovery results.
 
 <a id="s-DAR1R6WHJE"></a>
 ## 10. Repo-Aware CLI
@@ -982,8 +984,8 @@ workflow from prose.
 Vector retrieval, embedding providers, repository-host shorthand adapters, generated
 nested CLI commands, automated section split/merge operations, and semantic diff
 tooling were outside the v0 delivery boundary. Repository-defined commands, command
-introspection, stable-section lifecycle operations, and semantic change review have
-since been delivered as follow-on work.
+introspection, stable-section lifecycle operations, semantic change review, provider
+adapters, and vector retrieval have since been delivered as follow-on work.
 
 <a id="s-DRW3RR84VS"></a>
 ### 15.2 Initial Design Follow-On
@@ -998,12 +1000,10 @@ gaps tracked by the follow-on plan are now closed:
 - stable-section relation mutation and projections retain exact endpoints
 - conformance covers generic workflows, recursion, cycles, recovery, worktrees, and the packaged runtime in CI
 
-This section is the authoritative accounting of the remaining initial-reference work:
-
-- dedicated directional traversal and expanded context commands
-- repository-host shorthand adapters
-- vector retrieval and embedding providers
-- measurement-gated cross-command parse caching and persistent inferred-fact materialization
+Directional traversal, expanded context, repository-host shorthand adapters, and
+vector retrieval are delivered. The remaining initial-reference work is
+measurement-gated cross-command parse caching or persistent inferred-fact
+materialization.
 
 Semantic merge machinery is deliberately omitted. Git remains the merge mechanism and
 docgraph validates the complete result; that decision should be revisited only with

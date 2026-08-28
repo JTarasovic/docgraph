@@ -1117,6 +1117,21 @@ fn v0_fixtures_exercise_exact_graph_search_and_named_query_retrieval() {
 }
 
 #[test]
+fn semantic_search_labels_full_text_fallback_without_a_provider() {
+    let fixture = Fixture::copy("synthetic");
+    let output = fixture.run(&["--json", "semantic-search", "novel ontology"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["mode"], "full_text_fallback");
+    assert_eq!(result["reason"], "no embedding provider is configured");
+    assert!(!result["rows"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn synthetic_fixture_exercises_generic_workflows_sections_cycles_and_recursive_logic() {
     if !logic_runtime_configured() {
         return;

@@ -40,6 +40,7 @@ impl RepositoryConfig {
         let commands: CommandFile = read_optional(&repository.config_dir().join("commands.toml"))?;
         let logic_path = repository.config_dir().join("logic.dl");
         let logic = read_optional_text(&logic_path)?;
+        validate_embedding_config(&project_path, project_file.embeddings.as_ref())?;
 
         Ok(Self {
             project: ProjectConfig {
@@ -49,6 +50,7 @@ impl RepositoryConfig {
                 agent_instructions: project_file.agent_instructions,
                 validation: project_file.validation,
                 references: resolve_git_references(repository, project_file.references)?,
+                embeddings: project_file.embeddings,
             },
             entities: entities.entity,
             relations: relations.relation,
@@ -60,6 +62,29 @@ impl RepositoryConfig {
     }
 }
 
+fn validate_embedding_config(
+    path: &Path,
+    config: Option<&EmbeddingConfig>,
+) -> Result<(), ConfigLoadError> {
+    let Some(config) = config else {
+        return Ok(());
+    };
+    if config.provider.trim().is_empty()
+        || config.model.trim().is_empty()
+        || config.dimensions == 0
+        || config.command.is_empty()
+        || config.command[0].trim().is_empty()
+        || config.batch_size == 0
+        || config.timeout_seconds == 0
+    {
+        return Err(ConfigLoadError::Invalid {
+            path: path.to_path_buf(),
+            message: "embeddings requires non-empty provider, model, command, and positive dimensions, batch_size, and timeout_seconds".to_owned(),
+        });
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProjectConfig {
     pub name: String,
@@ -68,6 +93,44 @@ pub struct ProjectConfig {
     pub agent_instructions: AgentInstructionsConfig,
     pub validation: ValidationConfig,
     pub references: Vec<GitReferenceConfig>,
+    pub embeddings: Option<EmbeddingConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct EmbeddingConfig {
+    pub provider: String,
+    pub model: String,
+    pub dimensions: usize,
+    pub command: Vec<String>,
+    #[serde(default = "default_embedding_batch_size")]
+    pub batch_size: usize,
+    #[serde(default = "default_embedding_timeout_seconds")]
+    pub timeout_seconds: u64,
+    #[serde(default)]
+    pub fallback: EmbeddingFallback,
+}
+
+fn default_embedding_batch_size() -> usize {
+    32
+}
+
+fn default_embedding_timeout_seconds() -> u64 {
+    30
+}
+
+impl EmbeddingConfig {
+    pub fn identity(&self) -> String {
+        format!("{}:{}:{}", self.provider, self.model, self.dimensions)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EmbeddingFallback {
+    #[default]
+    FullText,
+    Error,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -361,6 +424,8 @@ struct ProjectFile {
     query: BTreeMap<String, NamedQueryConfig>,
     #[serde(default)]
     references: RawReferencesConfig,
+    #[serde(default)]
+    embeddings: Option<EmbeddingConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -919,5 +984,32 @@ remote = "upstream"
         assert_eq!(config.project.references.len(), 2);
         assert_eq!(config.project.references[1].provider, "gitlab");
         assert_eq!(config.project.references[1].host, "git.example.com");
+    }
+
+    #[test]
+    fn loads_embedding_provider_configuration() {
+        let fixture = Fixture::new();
+        fixture.write(
+            "project.toml",
+            r#"schema_version = 1
+[project]
+name = "vectors"
+[documents]
+root = "docs"
+[embeddings]
+provider = "local"
+model = "example"
+dimensions = 3
+command = ["embed", "--stdio"]
+fallback = "error"
+"#,
+        );
+
+        let config = fixture.load().unwrap();
+        let embeddings = config.project.embeddings.unwrap();
+        assert_eq!(embeddings.identity(), "local:example:3");
+        assert_eq!(embeddings.batch_size, 32);
+        assert_eq!(embeddings.timeout_seconds, 30);
+        assert_eq!(embeddings.fallback, EmbeddingFallback::Error);
     }
 }

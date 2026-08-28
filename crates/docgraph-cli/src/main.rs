@@ -1,10 +1,11 @@
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use docgraph_core::{
-    Adoption, CanonicalCorpus, CommandConfig, CommandOperation, DerivedState, DiagnosticSeverity,
-    GeneratedBlockStatus, GraphIndex, GraphNode, GraphTraversal, InstructionService,
-    InstructionStatus, ManagedChangeValidator, MutationPlan, MutationRequest, MutationService,
-    PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig,
-    SemanticChange, SemanticChangeReviewer, SemanticSection, TraversalDirection, Validator,
+    Adoption, CanonicalCorpus, CommandConfig, CommandEmbeddingProvider, CommandOperation,
+    DerivedState, DiagnosticSeverity, GeneratedBlockStatus, GraphIndex, GraphNode, GraphTraversal,
+    InstructionService, InstructionStatus, ManagedChangeValidator, MutationPlan, MutationRequest,
+    MutationService, PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository,
+    RepositoryConfig, SemanticChange, SemanticChangeReviewer, SemanticSearchHit,
+    SemanticSearchMode, SemanticSearchResult, SemanticSection, TraversalDirection, Validator,
     check_generated_frontmatter,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
@@ -67,6 +68,12 @@ enum Command {
     Get { reference: String },
     /// Full-text search indexed documents and sections.
     Search {
+        query: String,
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
+    /// Search by semantic similarity, with an explicit configured fallback.
+    SemanticSearch {
         query: String,
         #[arg(long, default_value_t = 10)]
         limit: usize,
@@ -331,9 +338,16 @@ impl Context {
 
     fn ensure_derived(&self) -> Result<DerivedState, CliError> {
         let state = DerivedState::discover(&self.repository).map_err(CliError::boxed)?;
-        state
-            .ensure_fresh(&self.corpus, &self.graph)
-            .map_err(CliError::boxed)?;
+        if let Some(config) = &self.config.project.embeddings {
+            let provider = CommandEmbeddingProvider::new(config);
+            state
+                .ensure_fresh_with_embeddings(&self.corpus, &self.graph, Some((config, &provider)))
+                .map_err(CliError::boxed)?;
+        } else {
+            state
+                .ensure_fresh(&self.corpus, &self.graph)
+                .map_err(CliError::boxed)?;
+        }
         Ok(state)
     }
 }
@@ -507,6 +521,32 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 }
                 Ok(())
             }
+        }
+        Command::SemanticSearch { query, limit } => {
+            let context = Context::load()?;
+            let state = context.ensure_derived()?;
+            let result = if let Some(config) = &context.config.project.embeddings {
+                let provider = CommandEmbeddingProvider::new(config);
+                state
+                    .semantic_search(&query, limit, config, &provider)
+                    .map_err(CliError::boxed)?
+            } else {
+                SemanticSearchResult {
+                    mode: SemanticSearchMode::FullTextFallback,
+                    reason: Some("no embedding provider is configured".to_owned()),
+                    hits: state
+                        .search(&query, limit)
+                        .map_err(CliError::boxed)?
+                        .into_iter()
+                        .map(|hit| SemanticSearchHit {
+                            node: hit.node,
+                            score: hit.score,
+                            snippet: hit.snippet,
+                        })
+                        .collect(),
+                }
+            };
+            print_semantic_search(&query, &result, cli.json)
         }
         Command::Transition {
             entity,
@@ -931,6 +971,17 @@ fn describe(
                 "repository": reference.repository,
                 "remote": reference.remote,
             })).collect::<Vec<_>>(),
+            "embeddings": config.project.embeddings.as_ref().map(|embedding| json!({
+                "provider": embedding.provider,
+                "model": embedding.model,
+                "dimensions": embedding.dimensions,
+                "batch_size": embedding.batch_size,
+                "timeout_seconds": embedding.timeout_seconds,
+                "fallback": match embedding.fallback {
+                    docgraph_core::EmbeddingFallback::FullText => "full_text",
+                    docgraph_core::EmbeddingFallback::Error => "error",
+                },
+            })),
         }),
         (Some(DescribeKind::Type), Some(name)) => {
             let item = config
@@ -1906,9 +1957,16 @@ fn render_text_patch(path: &std::path::Path, original: &str, intended: &str) -> 
 
 fn refresh_derived(context: &Context) -> Result<(), CliError> {
     let state = DerivedState::discover(&context.repository).map_err(CliError::boxed)?;
-    state
-        .refresh(&context.corpus, &context.graph)
-        .map_err(CliError::boxed)
+    if let Some(config) = &context.config.project.embeddings {
+        let provider = CommandEmbeddingProvider::new(config);
+        state
+            .refresh_with_embeddings(&context.corpus, &context.graph, Some((config, &provider)))
+            .map_err(CliError::boxed)
+    } else {
+        state
+            .refresh(&context.corpus, &context.graph)
+            .map_err(CliError::boxed)
+    }
 }
 
 fn node_name(graph: &GraphIndex, node: &GraphNode) -> String {
@@ -1972,6 +2030,46 @@ fn query_value_json(value: &QueryValue) -> JsonValue {
         QueryValue::Integer(value) => json!(value),
         QueryValue::Float(value) => json!(value),
         QueryValue::Boolean(value) => json!(value),
+    }
+}
+
+fn print_semantic_search(
+    query: &str,
+    result: &SemanticSearchResult,
+    json_output: bool,
+) -> Result<(), CliError> {
+    let mode = match result.mode {
+        SemanticSearchMode::Vector => "vector",
+        SemanticSearchMode::FullTextFallback => "full_text_fallback",
+    };
+    if json_output {
+        let rows: Vec<_> = result
+            .hits
+            .iter()
+            .map(|hit| {
+                json!({
+                    "node": hit.node,
+                    "score": hit.score,
+                    "snippet": hit.snippet,
+                })
+            })
+            .collect();
+        print_json(json!({
+            "query": query,
+            "mode": mode,
+            "reason": result.reason,
+            "rows": rows,
+        }))
+    } else {
+        if let Some(reason) = &result.reason {
+            println!("mode={mode}\treason={reason}");
+        } else {
+            println!("mode={mode}");
+        }
+        for hit in &result.hits {
+            println!("{:.3}\t{}\t{}", hit.score, hit.node, hit.snippet);
+        }
+        Ok(())
     }
 }
 

@@ -2,7 +2,7 @@
 
 id = "task:add-vector-retrieval"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Add vector retrieval"
@@ -37,3 +37,7 @@ target = "task:optimize-repeated-graph-computation"
 # Add vector retrieval
 
 Add provider-neutral embedding configuration, changed-chunk vector indexing, and semantic retrieval with deterministic fallback behavior when providers are unavailable.
+
+Embedding commands use a small JSON stdin/stdout protocol. The disposable SQLite
+index reuses unchanged vectors by content hash and provider identity; semantic search
+reports vector or full-text fallback mode explicitly.

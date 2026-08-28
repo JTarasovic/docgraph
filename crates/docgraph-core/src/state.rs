@@ -1,6 +1,7 @@
 use crate::{
-    CanonicalCorpus, DerivedSearchHit, GraphIndex, Repository, RepositoryFingerprint,
-    SCHEMA_VERSION, derived_index,
+    CanonicalCorpus, DerivedSearchHit, EmbeddingConfig, EmbeddingError, EmbeddingProvider,
+    GraphIndex, Repository, RepositoryFingerprint, SCHEMA_VERSION, SemanticSearchResult,
+    derived_index,
 };
 use std::error::Error;
 use std::fmt;
@@ -8,7 +9,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
-const INDEX_FORMAT_VERSION: u32 = 1;
+const INDEX_FORMAT_VERSION: u32 = 2;
 
 pub(crate) struct StateLock {
     file: File,
@@ -160,6 +161,15 @@ impl DerivedState {
         corpus: &CanonicalCorpus,
         graph: &GraphIndex,
     ) -> Result<(), DerivedStateError> {
+        self.refresh_with_embeddings(corpus, graph, None)
+    }
+
+    pub fn refresh_with_embeddings(
+        &self,
+        corpus: &CanonicalCorpus,
+        graph: &GraphIndex,
+        embeddings: Option<(&EmbeddingConfig, &dyn EmbeddingProvider)>,
+    ) -> Result<(), DerivedStateError> {
         fs::create_dir_all(&self.paths.directory).map_err(|source| DerivedStateError::Io {
             path: self.paths.directory.clone(),
             source,
@@ -181,6 +191,24 @@ impl DerivedState {
                 source,
             }
         })?;
+        if let Some((config, provider)) = embeddings
+            && let Err(error) = derived_index::index_vectors(
+                &temporary,
+                self.paths
+                    .index
+                    .is_file()
+                    .then_some(self.paths.index.as_path()),
+                config,
+                provider,
+            )
+        {
+            derived_index::record_vector_failure(&temporary, &error).map_err(|source| {
+                DerivedStateError::Sqlite {
+                    path: temporary.clone(),
+                    source,
+                }
+            })?;
+        }
         match fs::remove_file(&self.paths.index) {
             Ok(()) => {}
             Err(source) if source.kind() == io::ErrorKind::NotFound => {}
@@ -203,11 +231,20 @@ impl DerivedState {
         corpus: &CanonicalCorpus,
         graph: &GraphIndex,
     ) -> Result<(), DerivedStateError> {
+        self.ensure_fresh_with_embeddings(corpus, graph, None)
+    }
+
+    pub fn ensure_fresh_with_embeddings(
+        &self,
+        corpus: &CanonicalCorpus,
+        graph: &GraphIndex,
+        embeddings: Option<(&EmbeddingConfig, &dyn EmbeddingProvider)>,
+    ) -> Result<(), DerivedStateError> {
         match self.status(corpus.fingerprint) {
             Ok(IndexStatus::Fresh) => Ok(()),
             Ok(IndexStatus::Missing | IndexStatus::Stale { .. })
             | Err(DerivedStateError::CorruptMetadata { .. } | DerivedStateError::Sqlite { .. }) => {
-                self.refresh(corpus, graph)
+                self.refresh_with_embeddings(corpus, graph, embeddings)
             }
             Err(error) => Err(error),
         }
@@ -224,6 +261,16 @@ impl DerivedState {
                 source,
             }
         })
+    }
+
+    pub fn semantic_search(
+        &self,
+        query: &str,
+        limit: usize,
+        config: &EmbeddingConfig,
+        provider: &dyn EmbeddingProvider,
+    ) -> Result<SemanticSearchResult, EmbeddingError> {
+        derived_index::semantic_search(&self.paths.index, query, limit, config, provider)
     }
 }
 

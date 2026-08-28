@@ -1,6 +1,12 @@
-use crate::{CanonicalCorpus, GraphIndex, GraphNode, RelationOrigin, RepositoryFingerprint};
+use crate::{
+    CanonicalCorpus, EmbeddingConfig, EmbeddingError, EmbeddingFallback, EmbeddingProvider,
+    GraphIndex, GraphNode, RelationOrigin, RepositoryFingerprint, SemanticSearchHit,
+    SemanticSearchMode, SemanticSearchResult,
+};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::OnceLock;
 
 const INDEX_SCHEMA: &str = r#"
 PRAGMA user_version = 1;
@@ -86,8 +92,20 @@ CREATE TABLE relation_properties (
 CREATE VIRTUAL TABLE search_entries USING fts5(
     node UNINDEXED,
     content,
+    content_hash UNINDEXED,
     tokenize = 'unicode61'
 );
+
+CREATE TABLE vector_entries (
+    node TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_hash BLOB NOT NULL,
+    provider_key TEXT NOT NULL,
+    vector BLOB NOT NULL,
+    PRIMARY KEY (node, provider_key)
+) STRICT;
+
+CREATE INDEX vector_entries_reuse ON vector_entries(content_hash, provider_key);
 "#;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -103,6 +121,7 @@ pub(crate) fn build(
     corpus: &CanonicalCorpus,
     graph: &GraphIndex,
 ) -> rusqlite::Result<()> {
+    initialize_sqlite_vec()?;
     let mut connection = Connection::open(path)?;
     connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = DELETE;")?;
     let transaction = connection.transaction()?;
@@ -116,6 +135,7 @@ pub(crate) fn build(
 }
 
 pub(crate) fn recorded_fingerprint(path: &Path) -> rusqlite::Result<Option<RepositoryFingerprint>> {
+    initialize_sqlite_vec()?;
     let connection = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     connection
         .query_row(
@@ -132,6 +152,7 @@ pub(crate) fn search(
     query: &str,
     limit: usize,
 ) -> rusqlite::Result<Vec<DerivedSearchHit>> {
+    initialize_sqlite_vec()?;
     let Some(query) = fts_query(query) else {
         return Ok(Vec::new());
     };
@@ -154,6 +175,305 @@ pub(crate) fn search(
         })
     })?;
     rows.collect()
+}
+
+pub(crate) fn index_vectors(
+    path: &Path,
+    previous: Option<&Path>,
+    config: &EmbeddingConfig,
+    provider: &dyn EmbeddingProvider,
+) -> Result<(), EmbeddingError> {
+    initialize_sqlite_vec().map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    let mut connection =
+        Connection::open(path).map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    let provider_key = config.identity();
+    let reusable = previous.map_or_else(HashMap::new, |path| reusable_vectors(path, &provider_key));
+    let chunks = {
+        let mut statement = connection
+            .prepare("SELECT node, content, content_hash FROM search_entries ORDER BY node")
+            .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Vec<u8>>(2)?,
+                ))
+            })
+            .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|error| EmbeddingError::Protocol(error.to_string()))?
+    };
+    let mut missing = Vec::new();
+    let transaction = connection
+        .transaction()
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    for (node, content, content_hash) in &chunks {
+        if let Some(vector) = reusable.get(content_hash) {
+            insert_vector(
+                &transaction,
+                node,
+                content,
+                content_hash,
+                &provider_key,
+                vector,
+            )?;
+        } else {
+            missing.push((node, content, content_hash));
+        }
+    }
+    if !missing.is_empty() {
+        for batch in missing.chunks(config.batch_size) {
+            let texts: Vec<_> = batch
+                .iter()
+                .map(|(_, content, _)| (*content).clone())
+                .collect();
+            let vectors = provider.embed(&texts)?;
+            validate_vectors(&vectors, texts.len(), config.dimensions)?;
+            for ((node, content, content_hash), vector) in batch.iter().zip(vectors) {
+                insert_vector(
+                    &transaction,
+                    node,
+                    content,
+                    content_hash,
+                    &provider_key,
+                    &encode_vector(&vector),
+                )?;
+            }
+        }
+    }
+    transaction
+        .execute(
+            "INSERT OR REPLACE INTO metadata(key, value) VALUES ('vector_provider_key', ?1)",
+            [&provider_key],
+        )
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    transaction
+        .execute(
+            "INSERT OR REPLACE INTO metadata(key, value) VALUES ('vector_status', 'ready')",
+            [],
+        )
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    transaction
+        .commit()
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))
+}
+
+pub(crate) fn record_vector_failure(path: &Path, error: &EmbeddingError) -> rusqlite::Result<()> {
+    initialize_sqlite_vec()?;
+    let connection = Connection::open(path)?;
+    connection.execute(
+        "INSERT OR REPLACE INTO metadata(key, value) VALUES ('vector_status', 'unavailable')",
+        [],
+    )?;
+    connection.execute(
+        "INSERT OR REPLACE INTO metadata(key, value) VALUES ('vector_error', ?1)",
+        [error.to_string()],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn semantic_search(
+    path: &Path,
+    query: &str,
+    limit: usize,
+    config: &EmbeddingConfig,
+    provider: &dyn EmbeddingProvider,
+) -> Result<SemanticSearchResult, EmbeddingError> {
+    initialize_sqlite_vec().map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    if limit == 0 {
+        return Ok(SemanticSearchResult {
+            mode: SemanticSearchMode::Vector,
+            reason: None,
+            hits: Vec::new(),
+        });
+    }
+    let connection = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    let status = metadata(&connection, "vector_status")
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    if status.as_deref() != Some("ready") {
+        let reason = metadata(&connection, "vector_error")
+            .map_err(|error| EmbeddingError::Protocol(error.to_string()))?
+            .unwrap_or_else(|| "vector index is unavailable".to_owned());
+        return fallback(path, query, limit, config.fallback, reason);
+    }
+    let query_vector = match provider.embed(&[query.to_owned()]) {
+        Ok(vectors) => {
+            validate_vectors(&vectors, 1, config.dimensions)?;
+            vectors
+                .into_iter()
+                .next()
+                .expect("one vector was validated")
+        }
+        Err(error) => return fallback(path, query, limit, config.fallback, error.to_string()),
+    };
+    let query_vector = encode_vector(&query_vector);
+    let mut statement = connection
+        .prepare(
+            "SELECT node, content, vec_distance_cosine(vector, vec_f32(?2)) AS distance
+             FROM vector_entries
+             WHERE provider_key = ?1
+             ORDER BY distance, node
+             LIMIT ?3",
+        )
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    let rows = statement
+        .query_map(
+            params![config.identity(), query_vector, limit as i64],
+            |row| {
+                Ok(SemanticSearchHit {
+                    node: row.get(0)?,
+                    snippet: compact_snippet(&row.get::<_, String>(1)?),
+                    score: 1.0 - row.get::<_, f64>(2)?,
+                })
+            },
+        )
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    let hits = rows
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    Ok(SemanticSearchResult {
+        mode: SemanticSearchMode::Vector,
+        reason: None,
+        hits,
+    })
+}
+
+fn fallback(
+    path: &Path,
+    query: &str,
+    limit: usize,
+    policy: EmbeddingFallback,
+    reason: String,
+) -> Result<SemanticSearchResult, EmbeddingError> {
+    if policy == EmbeddingFallback::Error {
+        return Err(EmbeddingError::Unavailable(reason));
+    }
+    let hits = search(path, query, limit)
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?
+        .into_iter()
+        .map(|hit| SemanticSearchHit {
+            node: hit.node,
+            score: hit.score,
+            snippet: hit.snippet,
+        })
+        .collect();
+    Ok(SemanticSearchResult {
+        mode: SemanticSearchMode::FullTextFallback,
+        reason: Some(reason),
+        hits,
+    })
+}
+
+fn reusable_vectors(path: &Path, provider_key: &str) -> HashMap<Vec<u8>, Vec<u8>> {
+    if initialize_sqlite_vec().is_err() {
+        return HashMap::new();
+    }
+    let Ok(connection) =
+        Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+    else {
+        return HashMap::new();
+    };
+    let Ok(mut statement) = connection.prepare(
+        "SELECT content_hash, vector FROM vector_entries WHERE provider_key = ?1 ORDER BY node",
+    ) else {
+        return HashMap::new();
+    };
+    let Ok(rows) = statement.query_map([provider_key], |row| Ok((row.get(0)?, row.get(1)?))) else {
+        return HashMap::new();
+    };
+    rows.filter_map(Result::ok).collect()
+}
+
+fn insert_vector(
+    transaction: &Transaction<'_>,
+    node: &str,
+    content: &str,
+    content_hash: &[u8],
+    provider_key: &str,
+    vector: &[u8],
+) -> Result<(), EmbeddingError> {
+    transaction
+        .execute(
+            "INSERT INTO vector_entries(node, content, content_hash, provider_key, vector) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![node, content, content_hash, provider_key, vector],
+        )
+        .map_err(|error| EmbeddingError::Protocol(error.to_string()))?;
+    Ok(())
+}
+
+fn metadata(connection: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
+    connection
+        .query_row("SELECT value FROM metadata WHERE key = ?1", [key], |row| {
+            row.get(0)
+        })
+        .optional()
+}
+
+fn encode_vector(vector: &[f32]) -> Vec<u8> {
+    vector
+        .iter()
+        .flat_map(|value| value.to_le_bytes())
+        .collect()
+}
+
+fn validate_vectors(
+    vectors: &[Vec<f32>],
+    expected_count: usize,
+    dimensions: usize,
+) -> Result<(), EmbeddingError> {
+    if vectors.len() != expected_count {
+        return Err(EmbeddingError::Protocol(format!(
+            "provider returned {} vectors for {expected_count} texts",
+            vectors.len()
+        )));
+    }
+    if let Some(vector) = vectors
+        .iter()
+        .find(|vector| vector.len() != dimensions || vector.iter().any(|value| !value.is_finite()))
+    {
+        return Err(EmbeddingError::Protocol(format!(
+            "provider returned an invalid {}-dimension vector; expected {dimensions} finite values",
+            vector.len()
+        )));
+    }
+    Ok(())
+}
+
+fn initialize_sqlite_vec() -> rusqlite::Result<()> {
+    type ExtensionEntry = unsafe extern "C" fn(
+        *mut rusqlite::ffi::sqlite3,
+        *mut *mut std::ffi::c_char,
+        *const rusqlite::ffi::sqlite3_api_routines,
+    ) -> std::ffi::c_int;
+    static RESULT: OnceLock<i32> = OnceLock::new();
+    let result = *RESULT.get_or_init(|| unsafe {
+        rusqlite::ffi::sqlite3_auto_extension(Some(
+            std::mem::transmute::<*const (), ExtensionEntry>(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            ),
+        ))
+    });
+    if result == rusqlite::ffi::SQLITE_OK {
+        Ok(())
+    } else {
+        Err(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(result),
+            Some("cannot register sqlite-vec".to_owned()),
+        ))
+    }
+}
+
+fn compact_snippet(content: &str) -> String {
+    let compact = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut characters = compact.chars();
+    let snippet: String = characters.by_ref().take(160).collect();
+    if characters.next().is_some() {
+        format!("{snippet}…")
+    } else {
+        snippet
+    }
 }
 
 fn populate(
@@ -181,8 +501,8 @@ fn populate(
             .clone()
             .unwrap_or_else(|| portable_path(&document.path));
         transaction.execute(
-            "INSERT INTO search_entries(node, content) VALUES (?1, ?2)",
-            params![document_node, file.content],
+            "INSERT INTO search_entries(node, content, content_hash) VALUES (?1, ?2, ?3)",
+            params![document_node, file.content, &document.content_hash[..]],
         )?;
     }
 
@@ -248,8 +568,12 @@ fn populate(
             .find(|file| file.path == document.path)
             .expect("graph sections originate in the canonical corpus");
         transaction.execute(
-            "INSERT INTO search_entries(node, content) VALUES (?1, ?2)",
-            params![canonical_id, &file.content[span.bytes.clone()]],
+            "INSERT INTO search_entries(node, content, content_hash) VALUES (?1, ?2, ?3)",
+            params![
+                canonical_id,
+                &file.content[span.bytes.clone()],
+                &section.content_hash[..]
+            ],
         )?;
     }
 
@@ -332,6 +656,7 @@ mod tests {
     use super::*;
     use crate::{CorpusFile, DocumentNode, EntityNode, GraphLocation, Relation, SectionNode};
     use docgraph_markdown::{ParsedDocument, SourceSpan, StableSectionId};
+    use std::cell::RefCell;
     use std::collections::BTreeMap;
     use std::fs;
     use std::path::PathBuf;
@@ -420,5 +745,118 @@ mod tests {
         assert!(hits[0].snippet.contains("Exponential backoff"));
 
         fs::remove_file(database).unwrap();
+    }
+
+    struct RecordingProvider {
+        batches: RefCell<Vec<Vec<String>>>,
+    }
+
+    impl RecordingProvider {
+        fn new() -> Self {
+            Self {
+                batches: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl EmbeddingProvider for RecordingProvider {
+        fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+            self.batches.borrow_mut().push(texts.to_vec());
+            Ok(texts
+                .iter()
+                .map(|text| {
+                    if text.to_ascii_lowercase().contains("backoff") {
+                        vec![1.0, 0.0]
+                    } else {
+                        vec![0.0, 1.0]
+                    }
+                })
+                .collect())
+        }
+    }
+
+    #[test]
+    fn reuses_unchanged_vectors_and_returns_ranked_semantic_hits() {
+        let content = "<a id=\"s-83JRT4K2P6\"></a>\n# Retry policy\nExponential backoff protects the service.\n".to_owned();
+        let path = PathBuf::from("docs/retry.md");
+        let span = SourceSpan::from_offsets(&content, 0..content.len());
+        let hash = *blake3::hash(content.as_bytes()).as_bytes();
+        let fingerprint = RepositoryFingerprint::from_hex(&"2".repeat(64)).unwrap();
+        let corpus = CanonicalCorpus {
+            files: vec![CorpusFile {
+                path: path.clone(),
+                content: content.clone(),
+                content_hash: hash,
+                document: ParsedDocument::parse(&content).unwrap(),
+            }],
+            fingerprint,
+        };
+        let graph = GraphIndex {
+            documents: vec![DocumentNode {
+                path: path.clone(),
+                entity: Some("spec:retry".to_owned()),
+                content_hash: hash,
+            }],
+            entities: Vec::new(),
+            sections: vec![SectionNode {
+                id: StableSectionId::parse("s-83JRT4K2P6"),
+                document: 0,
+                parent: None,
+                level: 1,
+                heading: "Retry policy".to_owned(),
+                location: GraphLocation { path, span },
+                content_hash: hash,
+            }],
+            relations: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        let config = EmbeddingConfig {
+            provider: "test".to_owned(),
+            model: "two-dimensional".to_owned(),
+            dimensions: 2,
+            command: vec!["unused".to_owned()],
+            batch_size: 32,
+            timeout_seconds: 30,
+            fallback: EmbeddingFallback::FullText,
+        };
+        let directory = std::env::temp_dir();
+        let first = directory.join(format!(
+            "docgraph-vector-first-{}.sqlite",
+            std::process::id()
+        ));
+        let second = directory.join(format!(
+            "docgraph-vector-second-{}.sqlite",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&first);
+        let _ = fs::remove_file(&second);
+        let provider = RecordingProvider::new();
+
+        build(&first, fingerprint, &corpus, &graph).unwrap();
+        index_vectors(&first, None, &config, &provider).unwrap();
+        assert_eq!(provider.batches.borrow().len(), 1);
+
+        provider.batches.borrow_mut().clear();
+        build(&second, fingerprint, &corpus, &graph).unwrap();
+        index_vectors(&second, Some(&first), &config, &provider).unwrap();
+        assert!(provider.batches.borrow().is_empty());
+
+        let result = semantic_search(&second, "backoff", 1, &config, &provider).unwrap();
+        assert_eq!(result.mode, SemanticSearchMode::Vector);
+        assert_eq!(result.hits[0].node, "spec:retry");
+        assert_eq!(result.hits[0].score, 1.0);
+
+        record_vector_failure(
+            &second,
+            &EmbeddingError::Unavailable("provider is offline".to_owned()),
+        )
+        .unwrap();
+        let fallback = semantic_search(&second, "backoff", 1, &config, &provider).unwrap();
+        assert_eq!(fallback.mode, SemanticSearchMode::FullTextFallback);
+        assert!(fallback.reason.unwrap().contains("provider is offline"));
+        assert_eq!(fallback.hits[0].node, "spec:retry");
+
+        fs::remove_file(first).unwrap();
+        fs::remove_file(second).unwrap();
     }
 }

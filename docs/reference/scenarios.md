@@ -424,7 +424,8 @@ the remaining initial-design gaps, and explicitly deferred structural scenarios.
 ## 16. Retrieval Tests
 
 Each v0 fixture should exercise exact retrieval, graph traversal, FTS, named queries,
-and context assembly. Post-v0 vector extensions add semantic search coverage.
+and context assembly. Follow-on coverage exercises vector indexing, semantic search,
+and labeled provider fallback.
 
 Agents should not reconstruct semantic context through filesystem search.
 
@@ -532,9 +533,8 @@ Golden tests verify exact patches, structured output, graph facts, and diagnosti
 
 v0 requires the ADR, historical-research, and synthetic fixtures. Together they must
 exercise the complete parse, normalize, index, infer, query, mutate, validate, write,
-reindex, and generated-frontmatter sync/check loop plus the agent-guidance tests. The
-remaining fixtures and the tests for vectors, repository-host shorthand, and semantic
-diff remain the post-v0 conformance roadmap.
+reindex, and generated-frontmatter sync/check loop plus the agent-guidance tests.
+Follow-on tests cover vectors, repository-host shorthand, and semantic review.
 
 <a id="s-N6Z4YKP9M0"></a>
 ### 20.2 Current Coverage and Remaining Gaps
@@ -561,9 +561,9 @@ Covered follow-on cases include:
 - text and JSON review of granular entity, workflow, property, section, and relation changes between Git states
 - direct incoming and outgoing retrieval, bounded directional traversal, and expanded context with opt-in informational edges
 
-Vectors, cross-command parse caching, and persistent inferred-fact materialization
-remain post-v0 scenarios. Semantic merge
-machinery is deliberately omitted unless concrete failures show that Git,
+Vector reuse, semantic ranking, and labeled FTS fallback are covered. Cross-command
+parse caching and persistent inferred-fact materialization remain post-v0 scenarios.
+Semantic merge machinery is deliberately omitted unless concrete failures show that Git,
 whole-corpus validation, and semantic review are insufficient. The authoritative accounting is
 [Design section 15.2](./design.md#s-DRW3RR84VS).
 

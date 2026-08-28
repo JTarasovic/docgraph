@@ -610,6 +610,24 @@ They implement a common offline normalization interface and include the host in
 canonical identities. Future forge-backed entity sources may enrich those identities
 for retrieval without making remote content canonical or required for graph use.
 
+<a id="s-DGPPPW92CX"></a>
+### Embedding providers
+
+```toml
+[embeddings]
+provider = "local"
+model = "example-model"
+dimensions = 768
+command = ["embed-stdio"]
+batch_size = 32
+timeout_seconds = 30
+fallback = "full_text" # or "error"
+```
+
+Docgraph sends `{"model":"...","texts":["..."]}` to the command on stdin and
+expects `{"vectors":[[...]]}` on stdout. Provider, model, and dimensions identify
+reusable vectors. The command is invoked directly, without a shell.
+
 <a id="s-2WHZNDG0A1"></a>
 ## 14. Reference Resolution
 
@@ -862,6 +880,7 @@ docgraph section merge <stable-section> --into <stable-section> [--dry-run]
 docgraph section delete <stable-section> [--dry-run]
 docgraph get <entity-or-stable-section>
 docgraph search <query>
+docgraph semantic-search <query> [--limit <count>]
 docgraph transition <entity> <state>
 docgraph workflow initialize <entity-type> [--dry-run]
 docgraph property set <entity> <property> <value>
@@ -1127,15 +1146,14 @@ Agent instructions are a required product interface in v0, not release packaging
 They must direct agents to inspect the model, use docgraph for managed semantics, run
 dry-runs for substantial mutations, and validate the result.
 
-Outside the v0 delivery boundary:
+Originally outside the v0 delivery boundary:
 
 - vector retrieval and embedding providers
 - repository-host shorthand adapters
 - generated nested CLI commands from `commands.toml`
 
-The generic CLI and named-query invocation remain available in v0.
-Repository-defined nested commands and `describe_command` were delivered as follow-on
-work.
+These capabilities were delivered as follow-on work. The generic CLI and named-query
+invocation remain available in v0.
 
 <a id="s-P73QA8YDQB"></a>
 ### 27.1 Implementation Accounting
@@ -1147,14 +1165,12 @@ The initial success slice was followed by four completed contract increments:
 - CLI mutation of relations whose explicit source is a stable section, plus generated projections that retain the exact section endpoint
 - expanded conformance fixtures and CI coverage, including runtime-backed logic tests on the CI platform
 
-Repository-defined nested commands and command introspection are now implemented. The
-authoritative remaining-work list is [Design section 15.2](./design.md#s-DRW3RR84VS):
-dedicated directional traversal and expanded context, repository-host shorthand
-adapters, vectors and embedding providers, and measurement-gated caching or
-inferred-fact materialization.
-Existing `get`, `neighbors`, and `path` remain the current structured-retrieval
-surface. Semantic merge machinery is not planned without evidence that Git plus
-whole-corpus validation and semantic review are insufficient.
+Repository-defined commands, expanded retrieval, provider adapters, and vectors are
+now implemented. The authoritative remaining work is measurement-gated caching or
+inferred-fact materialization in
+[Design section 15.2](./design.md#s-DRW3RR84VS). Semantic merge machinery is not
+planned without evidence that Git plus whole-corpus validation and semantic review
+are insufficient.
 
 <a id="s-PDQ5Q60C5R"></a>
 ## 28. v0 Constraints

@@ -1,7 +1,7 @@
 use crate::{
-    CanonicalCorpus, CorpusFile, DerivedState, GraphIndex, GraphNode, RelationOrigin, Repository,
-    RepositoryConfig, RepositoryFingerprint, Validator, state::StateLock,
-    sync_generated_frontmatter,
+    CanonicalCorpus, CommandEmbeddingProvider, CorpusFile, DerivedState, GraphIndex, GraphNode,
+    RelationOrigin, Repository, RepositoryConfig, RepositoryFingerprint, Validator,
+    state::StateLock, sync_generated_frontmatter,
 };
 use docgraph_markdown::{
     ParsedDocument, StableSectionId, frame_content, normalize_sections_with_reserved_random,
@@ -214,9 +214,16 @@ impl MutationService {
         let refreshed = CanonicalCorpus::load(&self.repository, &self.config)
             .map_err(|error| MutationError::Corpus(error.to_string()))?;
         let refreshed_graph = GraphIndex::build(&refreshed, &self.config);
-        self.state
-            .refresh(&refreshed, &refreshed_graph)
-            .map_err(|error| MutationError::State(error.to_string()))?;
+        if let Some(config) = &self.config.project.embeddings {
+            let provider = CommandEmbeddingProvider::new(config);
+            self.state
+                .refresh_with_embeddings(&refreshed, &refreshed_graph, Some((config, &provider)))
+                .map_err(|error| MutationError::State(error.to_string()))?;
+        } else {
+            self.state
+                .refresh(&refreshed, &refreshed_graph)
+                .map_err(|error| MutationError::State(error.to_string()))?;
+        }
         Ok(plan)
     }
 

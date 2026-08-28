@@ -319,6 +319,7 @@ mod tests {
                 agent_instructions: crate::AgentInstructionsConfig::default(),
                 validation: crate::ValidationConfig::default(),
                 references: Vec::new(),
+                embeddings: None,
             },
             entities: Default::default(),
             relations: Default::default(),

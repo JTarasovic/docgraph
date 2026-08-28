@@ -4,6 +4,7 @@ mod changes;
 mod config;
 mod corpus;
 mod derived_index;
+mod embedding;
 mod generated_frontmatter;
 mod graph;
 mod instructions;
@@ -15,13 +16,18 @@ mod validation;
 
 pub use config::{
     AgentInstructionsConfig, ArgumentMode, CommandConfig, CommandOperation, ConfigDiagnostic,
-    ConfigLoadError, DiagnosticSeverity, DocumentsConfig, EntityTypeConfig, FrontmatterConfig,
-    GitReferenceConfig, NamedQueryConfig, ProjectConfig, PropertyConfig, PropertyType,
-    QueryArgumentConfig, QueryValueType, RelationTypeConfig, RepositoryConfig, ScalarType,
-    ScalarValue, SourceSpan, StateConfig, ValidationConfig, WorkflowConfig,
+    ConfigLoadError, DiagnosticSeverity, DocumentsConfig, EmbeddingConfig, EmbeddingFallback,
+    EntityTypeConfig, FrontmatterConfig, GitReferenceConfig, NamedQueryConfig, ProjectConfig,
+    PropertyConfig, PropertyType, QueryArgumentConfig, QueryValueType, RelationTypeConfig,
+    RepositoryConfig, ScalarType, ScalarValue, SourceSpan, StateConfig, ValidationConfig,
+    WorkflowConfig,
 };
 pub use corpus::{CanonicalCorpus, CorpusError, CorpusFile, RepositoryFingerprint};
 pub use derived_index::DerivedSearchHit;
+pub use embedding::{
+    CommandEmbeddingProvider, EmbeddingError, EmbeddingProvider, SemanticSearchHit,
+    SemanticSearchMode, SemanticSearchResult,
+};
 pub use generated_frontmatter::{
     GeneratedBlockError, GeneratedBlockStatus, check_generated_frontmatter,
     sync_generated_frontmatter,
