@@ -2,7 +2,7 @@
 
 id = "task:add-provider-reference-adapters"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Add provider reference adapters"
@@ -37,3 +37,11 @@ target = "task:optimize-repeated-graph-computation"
 # Add provider reference adapters
 
 Normalize configured GitHub- and GitLab-style issue, change, and commit shorthand into opaque external identities entirely offline.
+
+<a id="s-7TRKVRC8DQ"></a>
+## Result
+
+Implemented registered GitHub and GitLab reference adapters with explicit or
+Git-remote-inferred repository context. Normalization is offline, canonical external
+identities include the host, and the adapter boundary leaves remote entity enrichment
+as a separate future capability.

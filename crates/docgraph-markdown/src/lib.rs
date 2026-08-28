@@ -12,7 +12,9 @@ pub use normalize::{
     Normalization, NormalizeError, SectionInsertion, normalize_sections, normalize_sections_with,
     normalize_sections_with_reserved, normalize_sections_with_reserved_random,
 };
-pub use reference::{ReferenceClassifier, ReferenceTarget};
+pub use reference::{
+    ProviderRepository, ReferenceAdapter, ReferenceClassifier, ReferenceTarget, reference_adapter,
+};
 pub use span::SourceSpan;
 
 /// An opaque, web-renderable stable section identity.

@@ -539,7 +539,7 @@ https://example.com/spec
 ```
 
 <a id="s-5XTVF2Q9XV"></a>
-### 12.7 Repository-host shorthand (post-v0)
+### 12.7 Repository-host shorthand
 
 Provider adapters may recognize shorthand commonly produced by humans and agents.
 
@@ -564,10 +564,10 @@ group/project!47
 Recognized shorthand normalizes into opaque canonical external identities:
 
 ```text
-github:issue:owner/repo:123
-github:commit:owner/repo:a5c3785
-gitlab:issue:group/project:123
-gitlab:merge_request:group/project:47
+github:issue:github.com/owner/repo:123
+github:commit:github.com/owner/repo:a5c3785
+gitlab:issue:gitlab.com/group/project:123
+gitlab:merge_request:gitlab.com/group/project:47
 ```
 
 These are graph identities, not workflow types.
@@ -575,7 +575,7 @@ These are graph identities, not workflow types.
 Remote metadata is not required.
 
 <a id="s-6RGFEKP4CT"></a>
-## 13. Provider Configuration (post-v0)
+## 13. Provider Configuration
 
 Provider context may normally be inferred from Git remotes.
 
@@ -598,11 +598,17 @@ repository = "platform/service"
 remote = "origin"
 ```
 
+Use `[[references.git]]` entries when more than one remote context participates in
+reference normalization. With no explicit entry, docgraph attempts to infer `origin`.
+
 Configuration must support multiple remotes, mirrors, forks, self-hosted services, and no network access.
 
 Provider recognition must not require network access.
 
 Provider adapters are built-in reference-normalization mechanisms, not repository workflow plugins.
+They implement a common offline normalization interface and include the host in
+canonical identities. Future forge-backed entity sources may enrich those identities
+for retrieval without making remote content canonical or required for graph use.
 
 <a id="s-2WHZNDG0A1"></a>
 ## 14. Reference Resolution

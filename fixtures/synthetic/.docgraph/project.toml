@@ -9,6 +9,12 @@ root = "docs"
 [agent_instructions]
 targets = ["AGENTS.md", "CLAUDE.md"]
 
+[references.git]
+provider = "github"
+host = "github.com"
+repository = "owner/repo"
+remote = "origin"
+
 [query.grommit_targets]
 description = "Targets grommitted by a florp."
 predicate = "grommit_target"

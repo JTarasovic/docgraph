@@ -318,6 +318,7 @@ mod tests {
                 frontmatter: crate::FrontmatterConfig::default(),
                 agent_instructions: crate::AgentInstructionsConfig::default(),
                 validation: crate::ValidationConfig::default(),
+                references: Vec::new(),
             },
             entities: Default::default(),
             relations: Default::default(),

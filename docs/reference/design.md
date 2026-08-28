@@ -492,7 +492,7 @@ Example:
 ```text
 #123
   ↓
-github:issue:owner/repo:123
+github:issue:github.com/owner/repo:123
 ```
 
 or:
@@ -500,12 +500,15 @@ or:
 ```text
 !47
   ↓
-gitlab:merge_request:group/project:47
+gitlab:merge_request:gitlab.com/group/project:47
 ```
 
 Provider adapters are syntax adapters only. GitHub, GitLab, or other provider concepts must not leak into the generic graph or workflow model.
 
 External references may exist as graph nodes without fetching remote metadata.
+Adapters share an offline normalization interface. A future, separate external-entity
+source capability may enrich those nodes from a forge as disposable derived data;
+remote issue or change content does not become canonical repository Markdown.
 
 <a id="s-ZDNCXK183C"></a>
 ### 6.4 Deterministic resolution

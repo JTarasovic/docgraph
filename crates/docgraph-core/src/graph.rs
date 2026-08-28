@@ -1,5 +1,7 @@
 use crate::{CanonicalCorpus, RepositoryConfig};
-use docgraph_markdown::{ReferenceClassifier, ReferenceTarget, SourceSpan, StableSectionId};
+use docgraph_markdown::{
+    ProviderRepository, ReferenceClassifier, ReferenceTarget, SourceSpan, StableSectionId,
+};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Component, Path, PathBuf};
 use toml_edit::{Item, Table, Value};
@@ -113,7 +115,17 @@ impl GraphIndex {
             relations: Vec::new(),
             diagnostics: Vec::new(),
         };
-        let classifier = ReferenceClassifier::new(config.entities.keys().cloned());
+        let classifier = ReferenceClassifier::new(config.entities.keys().cloned()).with_providers(
+            config
+                .project
+                .references
+                .iter()
+                .map(|reference| ProviderRepository {
+                    provider: reference.provider.clone(),
+                    host: reference.host.clone(),
+                    repository: reference.repository.clone(),
+                }),
+        );
         let mut raw_relations = Vec::new();
 
         for file in &corpus.files {

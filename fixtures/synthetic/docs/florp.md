@@ -14,7 +14,7 @@ labels = ["odd", "novel"]
 
 [[relations]]
 type = "grommits"
-target = "github:issue:owner/repo:123"
+target = "#123"
 confidence = 0.75
 
 [[relations]]

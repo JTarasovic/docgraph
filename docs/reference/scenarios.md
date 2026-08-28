@@ -306,7 +306,7 @@ docgraph florp glorpable florp:1
 No Florp-specific code may exist in the binary.
 
 <a id="s-PH9DH662QH"></a>
-## 14. Repository-Host Reference Conformance (post-v0)
+## 14. Repository-Host Reference Conformance
 
 Provider shorthand should be exercised in both the documentation-maintenance fixture and synthetic fixture.
 
@@ -561,8 +561,8 @@ Covered follow-on cases include:
 - text and JSON review of granular entity, workflow, property, section, and relation changes between Git states
 - direct incoming and outgoing retrieval, bounded directional traversal, and expanded context with opt-in informational edges
 
-Provider shorthand; vectors; cross-command parse caching; and
-persistent inferred-fact materialization remain post-v0 scenarios. Semantic merge
+Vectors, cross-command parse caching, and persistent inferred-fact materialization
+remain post-v0 scenarios. Semantic merge
 machinery is deliberately omitted unless concrete failures show that Git,
 whole-corpus validation, and semantic review are insufficient. The authoritative accounting is
 [Design section 15.2](./design.md#s-DRW3RR84VS).

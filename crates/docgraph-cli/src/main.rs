@@ -925,6 +925,12 @@ fn describe(
             "workflows": config.workflows.keys().collect::<Vec<_>>(),
             "queries": config.queries.keys().collect::<Vec<_>>(),
             "commands": config.commands.keys().collect::<Vec<_>>(),
+            "reference_providers": config.project.references.iter().map(|reference| json!({
+                "provider": reference.provider,
+                "host": reference.host,
+                "repository": reference.repository,
+                "remote": reference.remote,
+            })).collect::<Vec<_>>(),
         }),
         (Some(DescribeKind::Type), Some(name)) => {
             let item = config

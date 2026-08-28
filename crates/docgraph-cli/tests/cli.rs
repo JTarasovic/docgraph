@@ -664,7 +664,10 @@ fn configured_logic_runtime_executes_a_typed_query() {
     );
     let query: Value = serde_json::from_slice(&query.stdout).unwrap();
     assert_eq!(query["query"], "grommit_targets");
-    assert_eq!(query["rows"][0]["target"], "github:issue:owner/repo:123");
+    assert_eq!(
+        query["rows"][0]["target"],
+        "github:issue:github.com/owner/repo:123"
+    );
 
     let confidence = fixture.run(&[
         "--json",
@@ -802,7 +805,10 @@ fn repository_commands_appear_in_help_and_dispatch_named_queries() {
     let targets = fixture.run(&["--json", "florp", "targets", "florp:1"]);
     assert!(targets.status.success());
     let targets: Value = serde_json::from_slice(&targets.stdout).unwrap();
-    assert_eq!(targets["rows"][0]["target"], "github:issue:owner/repo:123");
+    assert_eq!(
+        targets["rows"][0]["target"],
+        "github:issue:github.com/owner/repo:123"
+    );
 
     let transition = fixture.run(&["florp", "activate", "florp:2", "--dry-run"]);
     assert!(transition.status.success());

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const FINGERPRINT_DOMAIN: &[u8] = b"docgraph-canonical-inputs-v1\0";
-const PARSER_REVISION: u32 = 1;
+const PARSER_REVISION: u32 = 2;
 
 #[derive(Clone, Debug)]
 pub struct CanonicalCorpus {
@@ -345,6 +345,15 @@ fn fingerprint(
                 });
             }
         }
+    }
+    if let Ok(output) = Command::new("git")
+        .args(["config", "--get-regexp", r"^remote\..*\.url$"])
+        .current_dir(repository.root())
+        .output()
+        && output.status.success()
+        && !output.stdout.is_empty()
+    {
+        inputs.push((PathBuf::from(".git-remotes"), output.stdout));
     }
     for file in files {
         inputs.push((file.path.clone(), file.content.as_bytes().to_vec()));

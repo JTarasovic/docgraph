@@ -7,6 +7,7 @@ use std::fs;
 use std::io;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RepositoryConfig {
@@ -47,6 +48,7 @@ impl RepositoryConfig {
                 frontmatter: project_file.frontmatter,
                 agent_instructions: project_file.agent_instructions,
                 validation: project_file.validation,
+                references: resolve_git_references(repository, project_file.references)?,
             },
             entities: entities.entity,
             relations: relations.relation,
@@ -65,6 +67,15 @@ pub struct ProjectConfig {
     pub frontmatter: FrontmatterConfig,
     pub agent_instructions: AgentInstructionsConfig,
     pub validation: ValidationConfig,
+    pub references: Vec<GitReferenceConfig>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitReferenceConfig {
+    pub provider: String,
+    pub repository: String,
+    pub host: String,
+    pub remote: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -348,6 +359,44 @@ struct ProjectFile {
     validation: ValidationConfig,
     #[serde(default)]
     query: BTreeMap<String, NamedQueryConfig>,
+    #[serde(default)]
+    references: RawReferencesConfig,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawReferencesConfig {
+    git: GitReferenceEntries,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GitReferenceEntries {
+    One(RawGitReferenceConfig),
+    Many(Vec<RawGitReferenceConfig>),
+}
+
+impl Default for GitReferenceEntries {
+    fn default() -> Self {
+        Self::Many(Vec::new())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawGitReferenceConfig {
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
+    repository: Option<String>,
+    #[serde(default = "default_git_remote")]
+    remote: String,
+    #[serde(default)]
+    host: Option<String>,
+}
+
+fn default_git_remote() -> String {
+    "origin".to_owned()
 }
 
 #[derive(Debug, Deserialize)]
@@ -410,6 +459,10 @@ pub enum ConfigLoadError {
         found: u32,
         supported: u32,
     },
+    Invalid {
+        path: PathBuf,
+        message: String,
+    },
 }
 
 impl fmt::Display for ConfigLoadError {
@@ -434,8 +487,115 @@ impl fmt::Display for ConfigLoadError {
                 "{}: unsupported schema_version {found}; this binary supports {supported}",
                 path.display()
             ),
+            Self::Invalid { path, message } => write!(formatter, "{}: {message}", path.display()),
         }
     }
+}
+
+fn resolve_git_references(
+    repository: &Repository,
+    references: RawReferencesConfig,
+) -> Result<Vec<GitReferenceConfig>, ConfigLoadError> {
+    let configured = match references.git {
+        GitReferenceEntries::One(entry) => vec![entry],
+        GitReferenceEntries::Many(entries) => entries,
+    };
+    let infer_default = configured.is_empty();
+    let entries = if infer_default {
+        vec![RawGitReferenceConfig {
+            provider: None,
+            repository: None,
+            remote: default_git_remote(),
+            host: None,
+        }]
+    } else {
+        configured
+    };
+    let mut resolved = Vec::new();
+    for entry in entries {
+        let inferred = infer_remote(repository, &entry.remote);
+        if infer_default && inferred.is_none() {
+            continue;
+        }
+        let provider = entry
+            .provider
+            .or_else(|| inferred.as_ref().map(|value| value.0.clone()))
+            .ok_or_else(|| invalid_reference_config(repository, &entry.remote))?;
+        if docgraph_markdown::reference_adapter(&provider).is_none() {
+            return Err(ConfigLoadError::Invalid {
+                path: repository.project_file(),
+                message: format!("unknown reference provider {provider:?}"),
+            });
+        }
+        let repository_name = entry
+            .repository
+            .or_else(|| inferred.as_ref().map(|value| value.2.clone()))
+            .ok_or_else(|| invalid_reference_config(repository, &entry.remote))?;
+        let host = entry
+            .host
+            .or_else(|| inferred.map(|value| value.1))
+            .unwrap_or_else(|| match provider.as_str() {
+                "github" => "github.com".to_owned(),
+                "gitlab" => "gitlab.com".to_owned(),
+                _ => String::new(),
+            });
+        resolved.push(GitReferenceConfig {
+            provider,
+            repository: repository_name,
+            host,
+            remote: entry.remote,
+        });
+    }
+    Ok(resolved)
+}
+
+fn invalid_reference_config(repository: &Repository, remote: &str) -> ConfigLoadError {
+    ConfigLoadError::Invalid {
+        path: repository.project_file(),
+        message: format!(
+            "references.git for remote {remote:?} requires provider and repository when the remote cannot be inferred"
+        ),
+    }
+}
+
+fn infer_remote(repository: &Repository, remote: &str) -> Option<(String, String, String)> {
+    let output = Command::new("git")
+        .args(["config", "--get", &format!("remote.{remote}.url")])
+        .current_dir(repository.root())
+        .output()
+        .ok()?;
+    output.status.success().then_some(())?;
+    parse_remote_url(String::from_utf8(output.stdout).ok()?.trim())
+}
+
+fn parse_remote_url(url: &str) -> Option<(String, String, String)> {
+    let without_scheme = url
+        .split_once("://")
+        .map_or(url, |(_, remainder)| remainder);
+    let without_user = without_scheme
+        .rsplit_once('@')
+        .map_or(without_scheme, |(_, value)| value);
+    let (host, path) = if url.contains("://") {
+        without_user.split_once('/')?
+    } else {
+        without_user
+            .split_once(':')
+            .or_else(|| without_user.split_once('/'))?
+    };
+    let repository = path.trim_end_matches('/').trim_end_matches(".git");
+    if repository.is_empty() {
+        return None;
+    }
+    let provider = if host.eq_ignore_ascii_case("github.com") {
+        "github"
+    } else if host.eq_ignore_ascii_case("gitlab.com")
+        || host.to_ascii_lowercase().contains("gitlab")
+    {
+        "gitlab"
+    } else {
+        return None;
+    };
+    Some((provider.to_owned(), host.to_owned(), repository.to_owned()))
 }
 
 impl Error for ConfigLoadError {
@@ -705,5 +865,59 @@ excludes = ["generated/**"]
         );
 
         assert!(matches!(fixture.load(), Err(ConfigLoadError::Parse(_))));
+    }
+
+    #[test]
+    fn parses_common_git_remote_forms_without_network_access() {
+        assert_eq!(
+            parse_remote_url("git@github.com:owner/repo.git"),
+            Some((
+                "github".to_owned(),
+                "github.com".to_owned(),
+                "owner/repo".to_owned()
+            ))
+        );
+        assert_eq!(
+            parse_remote_url("https://gitlab.com/group/project.git"),
+            Some((
+                "gitlab".to_owned(),
+                "gitlab.com".to_owned(),
+                "group/project".to_owned()
+            ))
+        );
+        assert_eq!(
+            parse_remote_url("https://code.example.com/owner/repo"),
+            None
+        );
+    }
+
+    #[test]
+    fn loads_multiple_explicit_reference_adapters() {
+        let fixture = Fixture::new();
+        fixture.write(
+            "project.toml",
+            r#"schema_version = 1
+[project]
+name = "providers"
+[documents]
+root = "docs"
+[[references.git]]
+provider = "github"
+host = "github.com"
+repository = "owner/repo"
+remote = "origin"
+[[references.git]]
+provider = "gitlab"
+host = "git.example.com"
+repository = "group/project"
+remote = "upstream"
+"#,
+        );
+
+        let config = fixture.load().unwrap();
+
+        assert_eq!(config.project.references.len(), 2);
+        assert_eq!(config.project.references[1].provider, "gitlab");
+        assert_eq!(config.project.references[1].host, "git.example.com");
     }
 }
