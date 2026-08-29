@@ -7,6 +7,10 @@ state = "active"
 [properties]
 title = "Ship the first public release"
 
+[[relations]]
+type = "implements"
+target = "decision:first-release-contract"
+
 [docgraph_generated]
 schema_version = 1
 
