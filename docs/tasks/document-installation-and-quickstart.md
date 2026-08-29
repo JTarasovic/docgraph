@@ -2,7 +2,7 @@
 
 id = "task:document-installation-and-quickstart"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Document installation and the quickstart"
@@ -37,3 +37,8 @@ target = "task:automate-tagged-releases"
 # Document installation and the quickstart
 
 Add the repository README, license and package metadata needed for a public release. Document installation, project adoption, configuration, validation, retrieval, mutation, and the external runtime requirements in one short runnable path.
+
+<a id="s-REP2P7Q696"></a>
+## Result
+
+The repository now has an MIT license, `0.1.0` package metadata, and a concise README covering release installation, the bundled runtime, supported targets, pre-1.0 expectations, a tested quickstart, safe editing boundaries, and source builds.

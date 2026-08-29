@@ -32,6 +32,7 @@ jobs:
         run: |
           scratch=$(mktemp -d)
           trap 'rm -rf -- "$scratch"' EXIT
+          mkdir "$scratch/out"
           printf '.decl answer(value:number)\nanswer(42).\n.output answer\n' >"$scratch/smoke.dl"
           target/logic-runtime/linux-x86_64/docgraph-logic-runtime \
             --no-preprocessor -D "$scratch/out" "$scratch/smoke.dl"

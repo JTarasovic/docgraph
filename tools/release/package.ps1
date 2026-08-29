@@ -67,7 +67,11 @@ try {
     Copy-Item -LiteralPath $readme, $license -Destination $resolvedStaging
     $thirdParty = Join-Path $resolvedStaging "THIRD_PARTY_LICENSES\souffle"
     New-Item -ItemType Directory -Force -Path $thirdParty | Out-Null
-    Copy-Item -LiteralPath $logicLicenses -Destination $thirdParty -Recurse
+    if (Test-Path -LiteralPath $logicLicenses -PathType Container) {
+        Get-ChildItem -LiteralPath $logicLicenses | Copy-Item -Destination $thirdParty -Recurse
+    } else {
+        Copy-Item -LiteralPath $logicLicenses -Destination $thirdParty
+    }
 
     if ($Target -eq "linux-x86_64") {
         chmod +x (Join-Path $resolvedStaging $cliName) (Join-Path $resolvedStaging $runtimeName)
