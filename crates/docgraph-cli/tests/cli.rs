@@ -769,6 +769,10 @@ fn repository_commands_appear_in_help_and_dispatch_named_queries() {
     let help = String::from_utf8_lossy(&help.stdout);
     assert!(help.contains("Repository commands:"));
     assert!(help.contains("florp ready"));
+    assert!(
+        help.find("Repository commands:").unwrap() < help.find("Usage:").unwrap(),
+        "repository commands should be presented before generic CLI usage and commands"
+    );
 
     let command_help = fixture.run(&["florp", "ready", "--help"]);
     assert!(command_help.status.success());

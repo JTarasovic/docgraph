@@ -736,7 +736,7 @@ fn print_root_help() -> Result<(), CliError> {
                 configured.description
             ));
         }
-        command = command.after_help(help);
+        command = command.before_help(help.trim_end().to_owned());
     }
     command.print_long_help().map_err(CliError::boxed)?;
     println!();
