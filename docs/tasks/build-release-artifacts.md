@@ -2,7 +2,7 @@
 
 id = "task:build-release-artifacts"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Build release artifacts"
@@ -37,3 +37,8 @@ target = "task:automate-tagged-releases"
 # Build release artifacts
 
 Build versioned archives and checksums for every supported target. Ensure the CLI can locate its required logic runtime from the installed layout and reports a useful error when that runtime is unavailable.
+
+<a id="s-B4NS9SPA4M"></a>
+# Result
+
+Release packaging now produces versioned Windows and Linux archives with adjacent SHA-256 checksums, the MIT license, and bundled runtime notices. The pinned native runtime companions are checksum-verified, and clean-layout smoke tests cover version reporting, help, validation, queries, search, and adjacent runtime discovery.
