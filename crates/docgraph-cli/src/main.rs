@@ -4,9 +4,9 @@ use docgraph_core::{
     DerivedState, DiagnosticSeverity, GeneratedBlockStatus, GeneratedFrontmatterIndex, GraphIndex,
     GraphNode, GraphTraversal, InstructionService, InstructionStatus, ManagedChangeValidator,
     MutationPlan, MutationRequest, MutationService, PropertyConfig, PropertyType, QueryValueType,
-    RelationOrigin, Repository, RepositoryConfig, SemanticChange, SemanticChangeReviewer,
-    SemanticSearchHit, SemanticSearchMode, SemanticSearchResult, SemanticSection,
-    TraversalDirection, Validator,
+    RelationOrigin, Repository, RepositoryConfig, SCHEMA_VERSION, ScalarValue, SemanticChange,
+    SemanticChangeReviewer, SemanticSearchHit, SemanticSearchMode, SemanticSearchResult,
+    SemanticSection, TraversalDirection, Validator,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -60,6 +60,9 @@ enum Command {
     },
     /// Describe the configured repository model.
     Describe {
+        /// Emit every configured definition and project setting in one document.
+        #[arg(long)]
+        all: bool,
         #[arg(value_enum)]
         kind: Option<DescribeKind>,
         name: Option<String>,
@@ -486,9 +489,9 @@ fn run(cli: Cli) -> Result<(), CliError> {
             let plan = service.apply(&request, dry_run).map_err(CliError::boxed)?;
             print_plan(&plan, dry_run, cli.json)
         }
-        Command::Describe { kind, name } => {
+        Command::Describe { all, kind, name } => {
             let context = Context::load()?;
-            describe(&context.config, kind, name.as_deref(), cli.json)
+            describe(&context.config, all, kind, name.as_deref(), cli.json)
         }
         Command::Get { reference } => {
             let context = Context::load()?;
@@ -943,10 +946,19 @@ fn parse_entity_mutation_arguments(arguments: &[String]) -> Result<(String, bool
 
 fn describe(
     config: &RepositoryConfig,
+    all: bool,
     kind: Option<DescribeKind>,
     name: Option<&str>,
     json_output: bool,
 ) -> Result<(), CliError> {
+    if all && (kind.is_some() || name.is_some()) {
+        return Err(CliError::message(
+            "describe --all does not accept a kind or name",
+        ));
+    }
+    if all {
+        return print_json(complete_description_json(config));
+    }
     let value = match (kind, name) {
         (None, None) => json!({
             "project": config.project.name,
@@ -1009,23 +1021,7 @@ fn describe(
                 .commands
                 .get(name)
                 .ok_or_else(|| CliError::message(format!("unknown command {name:?}")))?;
-            let operation = match &item.operation {
-                CommandOperation::Query { query, entity_type } => json!({
-                    "type": "query", "query": query, "entity_type": entity_type,
-                }),
-                CommandOperation::Transition {
-                    entity_type,
-                    target_state,
-                } => json!({
-                    "type": "transition", "entity_type": entity_type, "target_state": target_state,
-                }),
-                CommandOperation::AddRelation {
-                    entity_type,
-                    relation,
-                } => json!({
-                    "type": "add_relation", "entity_type": entity_type, "relation": relation,
-                }),
-            };
+            let operation = command_operation_json(&item.operation);
             json!({ "name": name, "description": item.description, "operation": operation })
         }
         (Some(_), None) => return Err(CliError::message("describe kind requires a name")),
@@ -1039,6 +1035,168 @@ fn describe(
             serde_json::to_string_pretty(&value).map_err(CliError::boxed)?
         );
         Ok(())
+    }
+}
+
+fn complete_description_json(config: &RepositoryConfig) -> JsonValue {
+    let entity_types: BTreeMap<_, _> = config
+        .entities
+        .iter()
+        .map(|(name, item)| {
+            (
+                name,
+                json!({
+                    "description": item.description,
+                    "workflow": item.workflow,
+                    "properties": property_schema_json(&item.property),
+                }),
+            )
+        })
+        .collect();
+    let relations: BTreeMap<_, _> = config
+        .relations
+        .iter()
+        .map(|(name, item)| {
+            (
+                name,
+                json!({
+                    "description": item.description,
+                    "source": item.source,
+                    "target": item.target,
+                    "inverse": item.inverse,
+                    "acyclic": item.acyclic,
+                    "properties": property_schema_json(&item.property),
+                }),
+            )
+        })
+        .collect();
+    let workflows: BTreeMap<_, _> = config
+        .workflows
+        .iter()
+        .map(|(name, item)| {
+            let states: BTreeMap<_, _> = item
+                .states
+                .iter()
+                .map(|(name, state)| {
+                    (
+                        name,
+                        json!({
+                            "description": state.description,
+                            "transitions": state.transitions,
+                        }),
+                    )
+                })
+                .collect();
+            (name, json!({ "initial": item.initial, "states": states }))
+        })
+        .collect();
+    let queries: BTreeMap<_, _> = config
+        .queries
+        .iter()
+        .map(|(name, item)| {
+            let arguments: Vec<_> = item
+                .arguments
+                .iter()
+                .map(|argument| {
+                    json!({
+                        "name": argument.name,
+                        "mode": format!("{:?}", argument.mode).to_lowercase(),
+                        "type": format!("{:?}", argument.value_type).to_lowercase(),
+                        "default": argument.default,
+                    })
+                })
+                .collect();
+            (
+                name,
+                json!({
+                    "description": item.description,
+                    "predicate": item.predicate,
+                    "arguments": arguments,
+                }),
+            )
+        })
+        .collect();
+    let commands: BTreeMap<_, _> = config
+        .commands
+        .iter()
+        .map(|(name, item)| {
+            (
+                name,
+                json!({
+                    "description": item.description,
+                    "operation": command_operation_json(&item.operation),
+                }),
+            )
+        })
+        .collect();
+
+    json!({
+        "schema_version": SCHEMA_VERSION,
+        "project": {
+            "name": config.project.name,
+            "documents": {
+                "root": json_path(&config.project.documents.root),
+                "include": config.project.documents.include,
+                "exclude": config.project.documents.exclude,
+            },
+            "frontmatter": {
+                "id": config.project.frontmatter.id,
+                "entity_type": config.project.frontmatter.entity_type,
+                "state": config.project.frontmatter.state,
+                "relations": config.project.frontmatter.relations,
+                "properties": config.project.frontmatter.properties,
+            },
+            "agent_instructions": {
+                "targets": config.project.agent_instructions.targets.iter().map(|target| json_path(target)).collect::<Vec<_>>(),
+            },
+            "validation": {
+                "broken_internal_links": severity_name(config.project.validation.broken_internal_links),
+            },
+            "references": config.project.references.iter().map(|reference| json!({
+                "provider": reference.provider,
+                "host": reference.host,
+                "repository": reference.repository,
+                "remote": reference.remote,
+            })).collect::<Vec<_>>(),
+            "embeddings": config.project.embeddings.as_ref().map(|embedding| json!({
+                "provider": embedding.provider,
+                "model": embedding.model,
+                "dimensions": embedding.dimensions,
+                "command": embedding.command,
+                "batch_size": embedding.batch_size,
+                "timeout_seconds": embedding.timeout_seconds,
+                "fallback": match embedding.fallback {
+                    docgraph_core::EmbeddingFallback::FullText => "full_text",
+                    docgraph_core::EmbeddingFallback::Error => "error",
+                },
+            })),
+            "logic_configured": config.logic.is_some(),
+        },
+        "entity_types": entity_types,
+        "relations": relations,
+        "workflows": workflows,
+        "queries": queries,
+        "commands": commands,
+    })
+}
+
+fn command_operation_json(operation: &CommandOperation) -> JsonValue {
+    match operation {
+        CommandOperation::Query { query, entity_type } => json!({
+            "type": "query", "query": query, "entity_type": entity_type,
+        }),
+        CommandOperation::Transition {
+            entity_type,
+            target_state,
+        } => json!({
+            "type": "transition", "entity_type": entity_type, "target_state": target_state,
+        }),
+        CommandOperation::AddRelation {
+            entity_type,
+            relation,
+        } => json!({
+            "type": "add_relation", "entity_type": entity_type, "relation": relation,
+        }),
     }
 }
 
@@ -1857,11 +2015,22 @@ fn property_schema_json(schema: &BTreeMap<String, PropertyConfig>) -> JsonValue 
                         "type": format!("{:?}", property.property_type).to_lowercase(),
                         "required": property.required,
                         "items": property.items.map(|item| format!("{item:?}").to_lowercase()),
+                        "values": property.values.as_ref().map(|values| values.iter().map(scalar_value_json).collect::<Vec<_>>()),
                     }),
                 )
             })
             .collect(),
     )
+}
+
+fn scalar_value_json(value: &ScalarValue) -> JsonValue {
+    match value {
+        ScalarValue::String(value) => JsonValue::String(value.clone()),
+        ScalarValue::Integer(value) => json!(value),
+        ScalarValue::Float(value) => json!(value),
+        ScalarValue::Boolean(value) => json!(value),
+        ScalarValue::Datetime(value) => JsonValue::String(value.to_string()),
+    }
 }
 
 fn toml_value_json(value: &Value) -> JsonValue {

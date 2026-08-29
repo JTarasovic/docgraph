@@ -536,6 +536,62 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
     assert_eq!(describe["project"], "Synthetic ontology conformance");
     assert_eq!(describe["entity_types"][0], "florp");
 
+    let complete = fixture.run(&["--json", "describe", "--all"]);
+    assert!(
+        complete.status.success(),
+        "{}",
+        String::from_utf8_lossy(&complete.stderr)
+    );
+    let complete: Value = serde_json::from_slice(&complete.stdout).unwrap();
+    assert_eq!(complete["schema_version"], 1);
+    assert_eq!(
+        complete["project"]["name"],
+        "Synthetic ontology conformance"
+    );
+    assert_eq!(complete["project"]["documents"]["root"], "docs");
+    assert_eq!(
+        complete["project"]["agent_instructions"]["targets"],
+        serde_json::json!(["AGENTS.md", "CLAUDE.md"])
+    );
+    assert_eq!(
+        complete["entity_types"]["grommit"]["properties"]["mode"]["values"],
+        serde_json::json!(["soft", "hard"])
+    );
+    assert_eq!(
+        complete["entity_types"]["florp"]["properties"]["labels"]["items"],
+        "string"
+    );
+    assert_eq!(
+        complete["relations"]["grommits"]["inverse"],
+        "grommitted_by"
+    );
+    assert_eq!(
+        complete["workflows"]["florp"]["states"]["queued"]["transitions"],
+        serde_json::json!(["active"])
+    );
+    assert_eq!(
+        complete["queries"]["grommit_targets"]["arguments"][0]["type"],
+        "entity"
+    );
+    assert_eq!(
+        complete["commands"]["florp.activate"]["operation"]["type"],
+        "transition"
+    );
+    assert_eq!(complete["project"]["logic_configured"], true);
+
+    let readable = fixture.run(&["describe", "--all"]);
+    assert!(readable.status.success());
+    let readable = String::from_utf8_lossy(&readable.stdout);
+    assert!(readable.contains("\"entity_types\""));
+    assert!(readable.contains("\"grommit_targets\""));
+
+    let conflicting = fixture.run(&["describe", "--all", "type", "florp"]);
+    assert!(!conflicting.status.success());
+    assert!(
+        String::from_utf8_lossy(&conflicting.stderr)
+            .contains("describe --all does not accept a kind or name")
+    );
+
     let get = fixture.run(&["--json", "get", "florp:1"]);
     assert!(get.status.success());
     let get: Value = serde_json::from_slice(&get.stdout).unwrap();

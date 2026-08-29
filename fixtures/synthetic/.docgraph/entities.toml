@@ -28,3 +28,7 @@ workflow = "grommit"
 [entity.grommit.property.title]
 type = "string"
 required = true
+
+[entity.grommit.property.mode]
+type = "string"
+values = ["soft", "hard"]

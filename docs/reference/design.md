@@ -40,6 +40,11 @@ predicate = "implements"
 target = "reference:design#s-B7542FYPRY"
 
 [[docgraph_generated.incoming]]
+source = "task:expose-complete-ontology-dump"
+predicate = "implements"
+target = "reference:design"
+
+[[docgraph_generated.incoming]]
 source = "task:generate-model-appendix"
 predicate = "implements"
 target = "reference:design#s-DD5NS2HR0R"
@@ -53,6 +58,11 @@ target = "reference:design#s-7BBMBXC9RK"
 source = "task:index-searchable-markdown-content"
 predicate = "implements"
 target = "reference:design#s-FDMHXV5Q4Q"
+
+[[docgraph_generated.inverses]]
+source = "reference:design"
+type = "implemented_by"
+target = "task:expose-complete-ontology-dump"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-7BBMBXC9RK"
@@ -829,6 +839,9 @@ operations. `docgraph instructions sync` and `check` manage it with the rest of 
 block; it is not a separate generated file.
 
 Detailed ontology remains dynamically queryable through `docgraph describe`.
+`docgraph describe --all` returns the complete configured repository model in a
+single stable JSON document, while the bare and scoped forms support compact and
+focused inspection.
 
 <a id="s-Y4QFB1ZND8"></a>
 ### 11.4 Tested documentation

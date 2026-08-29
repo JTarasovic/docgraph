@@ -75,6 +75,11 @@ predicate = "implements"
 target = "reference:config-grammar#s-Q9K2W13EGT"
 
 [[docgraph_generated.incoming]]
+source = "task:expose-complete-ontology-dump"
+predicate = "implements"
+target = "reference:config-grammar"
+
+[[docgraph_generated.incoming]]
 source = "task:support-section-path-endpoints"
 predicate = "implements"
 target = "reference:config-grammar#s-TW0V0THMJD"
@@ -83,6 +88,11 @@ target = "reference:config-grammar#s-TW0V0THMJD"
 source = "reference:config-grammar"
 type = "affected_by"
 target = "issue:document-create-title-does-not-set-property"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar"
+type = "implemented_by"
+target = "task:expose-complete-ontology-dump"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-3B3J65MSQN"
@@ -875,6 +885,7 @@ docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 
 ```bash
 docgraph describe
+docgraph describe --all [--json]
 docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>] [--dry-run]
 docgraph adopt --batch <manifest.toml> [--dry-run]
 docgraph document create <path> --id <entity> --type <type> --title <title> [--property <name>=<value>] [--dry-run]
@@ -945,6 +956,14 @@ describe_workflow
 Command introspection includes `describe_command`.
 
 Structured JSON output must also be available.
+
+`docgraph describe --all` emits the complete configured model in one operation.
+Its stable JSON object contains `schema_version`, complete project settings,
+entity-type property schemas (including allowed values and array item types),
+relation endpoints, inverses and properties, workflow states and transitions,
+named-query signatures, and repository-command operations. Bare `docgraph
+describe` remains the compact inventory; the scoped `describe <kind> <name>`
+forms remain available for focused inspection.
 
 <a id="s-V5R4RB2AP1"></a>
 ## 22. Mutations

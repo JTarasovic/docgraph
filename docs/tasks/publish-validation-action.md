@@ -2,7 +2,7 @@
 
 id = "task:publish-validation-action"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Publish a docgraph validation action"

@@ -2,7 +2,7 @@
 
 id = "issue:expose-complete-ontology-dump"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Expose a complete ontology dump"
@@ -13,10 +13,6 @@ target = "milestone:v1-0"
 
 [docgraph_generated]
 schema_version = 1
-
-[[docgraph_generated.backlinks]]
-source = "milestone:v1-0#s-XHXCWTTW9K"
-target = "docs/issues/expose-complete-ontology-dump.md"
 
 +++
 <a id="s-TK7035WX02"></a>
@@ -32,3 +28,18 @@ repository model, including property schemas, relation endpoints and inverses,
 workflow states and transitions, named-query signatures, repository commands,
 and project-level settings. Human-readable output should remain scannable, while
 JSON output should be stable enough for agents and other tooling to consume.
+
+<a id="s-X4TW79XPF9"></a>
+## Resolution
+
+Added `docgraph describe --all`. It emits one stable JSON object containing the
+schema version; complete project, corpus, frontmatter, validation, reference,
+embedding, and logic settings; all entity property schemas and allowed values;
+all relation endpoints, inverses, acyclicity, and properties; all workflow states
+and transitions; all query signatures; and all repository-command operations.
+
+Bare `docgraph describe` remains the compact inventory, and scoped descriptions
+remain backward-compatible. The same property-schema serializer now exposes
+allowed values in scoped output as well. Synthetic CLI coverage verifies the
+complete shape, readable output, and incompatible-argument rejection; the full
+102-test repository suite passes.
