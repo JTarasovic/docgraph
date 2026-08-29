@@ -2,7 +2,7 @@
 
 id = "task:automate-tagged-releases"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Automate tagged releases"
@@ -41,3 +41,8 @@ target = "task:validate-first-release"
 # Automate tagged releases
 
 Add a tag-triggered GitHub Actions workflow that verifies the intended version, builds the supported artifacts, runs artifact-level smoke tests, and publishes one GitHub release with checksums and concise release notes. Give every job an explicit, conservative timeout, cancel superseded runs, and consume the pinned logic-runtime artifacts rather than rebuilding Soufflé.
+
+<a id="s-NF5PYEPBAD"></a>
+# Result
+
+Semantic-version tags now build and smoke-test Windows and Linux archives from pinned runtime companions before publishing one GitHub release. Build jobs are capped at 15 minutes, publishing at 5 minutes, superseded runs are cancelled, and transient transfer artifacts expire after one day.
