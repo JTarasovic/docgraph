@@ -735,9 +735,10 @@ docgraph task blockers task:184
 docgraph task ready
 ```
 
-Project-aware `--help` exposes repository-defined commands and descriptions before
-the generic CLI usage and command inventory so that the repository's preferred
-operations are the first commands a user encounters.
+Project-aware root help through `--help`, `-h`, or the `help` subcommand exposes
+repository-defined commands and descriptions before the generic CLI usage and
+command inventory so that the repository's preferred operations are the first
+commands a user encounters.
 Dot-separated command names form nested command paths. Query commands expose named
 query inputs as long options; an input with a configured default is optional. When
 `entity_type` is set, the first query input is instead the positional source entity.

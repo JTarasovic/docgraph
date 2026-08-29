@@ -801,9 +801,10 @@ docgraph query task_blockers --arg task=task:184
 <a id="s-3B3J65MSQN"></a>
 ## 19. Dynamic Commands
 
-Root `--help` presents configured repository commands before the generic CLI usage
-and built-in command inventory. This keeps the repository's preferred operations
-prominent while retaining every generic escape hatch below them.
+Root `--help`, `-h`, and the `help` subcommand present configured repository commands
+before the generic CLI usage and built-in command inventory. This keeps the
+repository's preferred operations prominent while retaining every generic escape
+hatch below them.
 
 Transition:
 

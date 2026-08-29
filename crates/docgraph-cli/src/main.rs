@@ -352,7 +352,7 @@ impl Context {
 
 fn main() -> ExitCode {
     let arguments: Vec<_> = std::env::args_os().collect();
-    if arguments.len() == 2 && matches!(arguments[1].to_str(), Some("--help" | "-h")) {
+    if arguments.len() == 2 && matches!(arguments[1].to_str(), Some("--help" | "-h" | "help")) {
         return match print_root_help() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {

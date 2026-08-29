@@ -764,15 +764,17 @@ fn configured_logic_runtime_executes_a_typed_query() {
 #[test]
 fn repository_commands_appear_in_help_and_dispatch_named_queries() {
     let fixture = Fixture::copy("synthetic");
-    let help = fixture.run(&["--help"]);
-    assert!(help.status.success());
-    let help = String::from_utf8_lossy(&help.stdout);
-    assert!(help.contains("Repository commands:"));
-    assert!(help.contains("florp ready"));
-    assert!(
-        help.find("Repository commands:").unwrap() < help.find("Usage:").unwrap(),
-        "repository commands should be presented before generic CLI usage and commands"
-    );
+    for help_argument in ["--help", "-h", "help"] {
+        let help = fixture.run(&[help_argument]);
+        assert!(help.status.success());
+        let help = String::from_utf8_lossy(&help.stdout);
+        assert!(help.contains("Repository commands:"));
+        assert!(help.contains("florp ready"));
+        assert!(
+            help.find("Repository commands:").unwrap() < help.find("Usage:").unwrap(),
+            "repository commands should be presented before generic CLI usage and commands"
+        );
+    }
 
     let command_help = fixture.run(&["florp", "ready", "--help"]);
     assert!(command_help.status.success());
