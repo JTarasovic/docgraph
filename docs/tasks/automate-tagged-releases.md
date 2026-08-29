@@ -40,4 +40,4 @@ target = "task:validate-first-release"
 <a id="s-FB3725AAYS"></a>
 # Automate tagged releases
 
-Add a tag-triggered GitHub Actions workflow that verifies the intended version, builds the supported artifacts, runs artifact-level smoke tests, and publishes one GitHub release with checksums and concise release notes.
+Add a tag-triggered GitHub Actions workflow that verifies the intended version, builds the supported artifacts, runs artifact-level smoke tests, and publishes one GitHub release with checksums and concise release notes. Give every job an explicit, conservative timeout, cancel superseded runs, and consume the pinned logic-runtime artifacts rather than rebuilding Soufflé.

@@ -2,7 +2,7 @@
 
 id = "task:build-release-artifacts"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Build release artifacts"

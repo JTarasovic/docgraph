@@ -1,0 +1,71 @@
+name: Build Linux logic runtime
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: logic-runtime-linux
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bison cmake flex libsqlite3-dev ninja-build
+
+      - name: Build minimal runtime
+        run: bash tools/logic-runtime/build-linux.sh
+
+      - name: Smoke-test runtime
+        run: |
+          scratch=$(mktemp -d)
+          trap 'rm -rf -- "$scratch"' EXIT
+          printf '.decl answer(value:number)\nanswer(42).\n.output answer\n' >"$scratch/smoke.dl"
+          target/logic-runtime/linux-x86_64/docgraph-logic-runtime \
+            --no-preprocessor -D "$scratch/out" "$scratch/smoke.dl"
+          grep -Fx '42' "$scratch/out/answer.csv"
+
+      - name: Package pinned companion
+        shell: pwsh
+        run: |
+          $revision = "a1303be3"
+          $source = Join-Path $env:GITHUB_WORKSPACE "target/logic-runtime/linux-x86_64"
+          $stage = Join-Path $env:RUNNER_TEMP "docgraph-logic-runtime-linux-x86_64-$revision"
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item -LiteralPath (Join-Path $source "docgraph-logic-runtime") -Destination $stage
+          Copy-Item -LiteralPath (Join-Path $source "licenses") -Destination $stage -Recurse
+          $archive = "$stage.tar.gz"
+          tar -czf $archive -C (Split-Path -Parent $stage) (Split-Path -Leaf $stage)
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          Set-Content -NoNewline -LiteralPath "$archive.sha256" -Value "$hash  $([IO.Path]::GetFileName($archive))`n"
+
+      - name: Publish pinned companion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $revision = "a1303be3"
+          $tag = "logic-runtime-linux-$revision"
+          $archive = Join-Path $env:RUNNER_TEMP "docgraph-logic-runtime-linux-x86_64-$revision.tar.gz"
+          $checksum = "$archive.sha256"
+          if (gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null) {
+            gh release upload $tag $archive $checksum --clobber --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $tag $archive $checksum `
+              --repo $env:GITHUB_REPOSITORY `
+              --target $env:GITHUB_SHA `
+              --title "Pinned Linux logic runtime $revision" `
+              --notes "Opaque Linux x86-64 logic runtime companion for docgraph release packaging."
+          }

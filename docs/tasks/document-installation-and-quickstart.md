@@ -2,7 +2,7 @@
 
 id = "task:document-installation-and-quickstart"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Document installation and the quickstart"
