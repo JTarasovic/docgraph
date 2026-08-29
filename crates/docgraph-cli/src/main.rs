@@ -1,12 +1,12 @@
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use docgraph_core::{
     Adoption, CanonicalCorpus, CommandConfig, CommandEmbeddingProvider, CommandOperation,
-    DerivedState, DiagnosticSeverity, GeneratedBlockStatus, GraphIndex, GraphNode, GraphTraversal,
-    InstructionService, InstructionStatus, ManagedChangeValidator, MutationPlan, MutationRequest,
-    MutationService, PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository,
-    RepositoryConfig, SemanticChange, SemanticChangeReviewer, SemanticSearchHit,
-    SemanticSearchMode, SemanticSearchResult, SemanticSection, TraversalDirection, Validator,
-    check_generated_frontmatter,
+    DerivedState, DiagnosticSeverity, GeneratedBlockStatus, GeneratedFrontmatterIndex, GraphIndex,
+    GraphNode, GraphTraversal, InstructionService, InstructionStatus, ManagedChangeValidator,
+    MutationPlan, MutationRequest, MutationService, PropertyConfig, PropertyType, QueryValueType,
+    RelationOrigin, Repository, RepositoryConfig, SemanticChange, SemanticChangeReviewer,
+    SemanticSearchHit, SemanticSearchMode, SemanticSearchResult, SemanticSection,
+    TraversalDirection, Validator,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -320,12 +320,10 @@ struct Context {
 
 impl Context {
     fn load() -> Result<Self, CliError> {
-        MutationService::open(".")
-            .map_err(CliError::boxed)?
-            .recover_pending()
-            .map_err(CliError::boxed)?;
-        let repository = Repository::discover(".").map_err(CliError::boxed)?;
-        let config = RepositoryConfig::load(&repository).map_err(CliError::boxed)?;
+        let service = MutationService::open(".").map_err(CliError::boxed)?;
+        service.recover_pending().map_err(CliError::boxed)?;
+        let repository = service.repository().clone();
+        let config = service.config().clone();
         let corpus = CanonicalCorpus::load(&repository, &config).map_err(CliError::boxed)?;
         let graph = GraphIndex::build(&corpus, &config);
         Ok(Self {
@@ -494,7 +492,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
         }
         Command::Get { reference } => {
             let context = Context::load()?;
-            context.ensure_derived()?;
             get(&context, &reference, cli.json)
         }
         Command::Search { query, limit } => {
@@ -614,12 +611,10 @@ fn run(cli: Cli) -> Result<(), CliError> {
         ),
         Command::Neighbors { reference, all } => {
             let context = Context::load()?;
-            context.ensure_derived()?;
             direct_relations(&context, &reference, None, all, cli.json)
         }
         Command::Incoming { reference, all } => {
             let context = Context::load()?;
-            context.ensure_derived()?;
             direct_relations(
                 &context,
                 &reference,
@@ -630,7 +625,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
         }
         Command::Outgoing { reference, all } => {
             let context = Context::load()?;
-            context.ensure_derived()?;
             direct_relations(
                 &context,
                 &reference,
@@ -646,7 +640,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
             all,
         } => {
             let context = Context::load()?;
-            context.ensure_derived()?;
             traverse(&context, &reference, direction.into(), depth, all, cli.json)
         }
         Command::Context {
@@ -655,7 +648,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
             all,
         } => {
             let context = Context::load()?;
-            context.ensure_derived()?;
             expanded_context(&context, &reference, depth, all, cli.json)
         }
         Command::Path {
@@ -664,7 +656,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
             all,
         } => {
             let context = Context::load()?;
-            context.ensure_derived()?;
             let source = resolve_graph_reference(&context.graph, &source)?;
             let target = resolve_graph_reference(&context.graph, &target)?;
             let path = GraphTraversal::new(&context.graph)
@@ -1640,7 +1631,6 @@ fn execute_query(
     json_output: bool,
 ) -> Result<(), CliError> {
     let context = Context::load()?;
-    context.ensure_derived()?;
     let query = context
         .config
         .queries
@@ -1764,6 +1754,7 @@ fn frontmatter(action: FrontmatterAction, json_output: bool) -> Result<(), CliEr
         }
         FrontmatterAction::Check => {
             let context = Context::load()?;
+            let projections = GeneratedFrontmatterIndex::new(&context.graph, &context.config);
             let statuses: Vec<_> = context
                 .graph
                 .documents
@@ -1771,12 +1762,7 @@ fn frontmatter(action: FrontmatterAction, json_output: bool) -> Result<(), CliEr
                 .enumerate()
                 .filter(|(_, document)| document.entity.is_some())
                 .map(|(index, document)| {
-                    let status = check_generated_frontmatter(
-                        &context.corpus,
-                        &context.graph,
-                        &context.config,
-                        index,
-                    );
+                    let status = projections.check(&context.corpus, &context.graph, index);
                     (document.path.clone(), status)
                 })
                 .collect();

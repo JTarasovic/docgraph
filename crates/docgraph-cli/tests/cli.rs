@@ -906,7 +906,7 @@ fn read_commands_recover_an_interrupted_mutation_before_loading_the_graph() {
 
     assert_eq!(get["state"], "accepted");
     assert!(!state.join("recovery.toml").exists());
-    assert!(state.join("index.sqlite").exists());
+    assert!(!state.join("index.sqlite").exists());
 }
 
 #[test]
@@ -1228,11 +1228,15 @@ fn derived_index_is_sqlite_reused_when_fresh_and_refreshed_when_stale() {
     let fingerprint = fixture.0.join(".docgraph/.state/fingerprint");
 
     assert!(fixture.run(&["get", "florp:1"]).status.success());
+    assert!(!index.exists());
+    assert!(!fingerprint.exists());
+
+    assert!(fixture.run(&["search", "florp"]).status.success());
     let fresh_index = fs::read(&index).unwrap();
     let fresh_fingerprint = fs::read_to_string(&fingerprint).unwrap();
     assert_eq!(&fresh_index[..16], b"SQLite format 3\0");
 
-    assert!(fixture.run(&["get", "florp:1"]).status.success());
+    assert!(fixture.run(&["search", "florp"]).status.success());
     assert_eq!(fs::read(&index).unwrap(), fresh_index);
     assert_eq!(fs::read_to_string(&fingerprint).unwrap(), fresh_fingerprint);
 

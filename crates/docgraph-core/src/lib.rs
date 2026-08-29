@@ -29,8 +29,8 @@ pub use embedding::{
     SemanticSearchMode, SemanticSearchResult,
 };
 pub use generated_frontmatter::{
-    GeneratedBlockError, GeneratedBlockStatus, check_generated_frontmatter,
-    sync_generated_frontmatter,
+    GeneratedBlockError, GeneratedBlockStatus, GeneratedFrontmatterIndex,
+    check_generated_frontmatter, sync_generated_frontmatter,
 };
 pub use graph::{
     DiagnosticKind as GraphDiagnosticKind, DocumentNode, EntityNode, GraphDiagnostic, GraphIndex,

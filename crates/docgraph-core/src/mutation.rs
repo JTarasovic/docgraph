@@ -1,7 +1,7 @@
 use crate::{
     CanonicalCorpus, CommandEmbeddingProvider, CorpusFile, DerivedState, GraphIndex, GraphNode,
     RelationOrigin, Repository, RepositoryConfig, RepositoryFingerprint, Validator,
-    state::StateLock, sync_generated_frontmatter,
+    state::StateLock,
 };
 use docgraph_markdown::{
     ParsedDocument, StableSectionId, frame_content, normalize_sections_with_reserved_random,
@@ -537,14 +537,14 @@ impl MutationService {
         for _ in 0..3 {
             let snapshot = candidate_corpus(corpus, &contents)?;
             let snapshot_graph = GraphIndex::build(&snapshot, &self.config);
+            let projections = crate::GeneratedFrontmatterIndex::new(&snapshot_graph, &self.config);
             let mut updates = Vec::new();
             for (document, node) in snapshot_graph.documents.iter().enumerate() {
                 if node.entity.is_none() {
                     continue;
                 }
                 let source = contents.get(&node.path).expect("corpus content exists");
-                let synced =
-                    sync_generated_frontmatter(source, &snapshot_graph, &self.config, document)?;
+                let synced = projections.sync(source, document)?;
                 if synced != *source {
                     updates.push((node.path.clone(), synced));
                 }

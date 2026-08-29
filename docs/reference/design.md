@@ -644,15 +644,16 @@ The index contains:
 - index metadata
 
 v0 persists normalized graph facts, exact source locations, metadata, and FTS in a
-per-worktree SQLite index. Operations fingerprint canonical inputs; a missing,
+per-worktree SQLite index. Index-backed operations fingerprint canonical inputs; a missing,
 stale, old-format, or corrupt disposable index is rebuilt, while search reuses a
 fresh FTS index across commands. Follow-on vector data lives in the same disposable
 index.
 
-Cross-command parse caching and persistent materialization of inferred facts remain
-post-v0 performance work. Named queries evaluate configured logic against the current
-canonical graph. Vector refresh reuses embeddings whose content hash and provider
-identity are unchanged and embeds only changed chunks.
+Benchmarks up to 2,100 documents did not justify cross-command parse caching or
+persistent inferred-fact materialization. Graph-only reads avoid the SQLite index,
+and generated-frontmatter facts are prepared once per graph. Named queries evaluate
+configured logic against the current canonical graph. Vector refresh reuses embeddings
+whose content hash and provider identity are unchanged and embeds only changed chunks.
 
 The index records enough metadata to detect staleness after checkout, merge, parser changes, schema changes, or embedding changes.
 
@@ -1027,9 +1028,9 @@ gaps tracked by the follow-on plan are now closed:
 - conformance covers generic workflows, recursion, cycles, recovery, worktrees, and the packaged runtime in CI
 
 Directional traversal, expanded context, repository-host shorthand adapters, and
-vector retrieval are delivered. The remaining initial-reference work is
-measurement-gated cross-command parse caching or persistent inferred-fact
-materialization.
+vector retrieval are delivered. Representative benchmarks found no need for
+cross-command parse caching or persistent inferred-fact materialization; simpler
+repeated work in graph-only reads and generated projections was removed instead.
 
 Semantic merge machinery is deliberately omitted. Git remains the merge mechanism and
 docgraph validates the complete result; that decision should be revisited only with

@@ -2,7 +2,7 @@
 
 id = "plan:address-post-v0-reference-work"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Address post-v0 reference work"

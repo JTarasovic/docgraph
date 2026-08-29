@@ -561,8 +561,9 @@ Covered follow-on cases include:
 - text and JSON review of granular entity, workflow, property, section, and relation changes between Git states
 - direct incoming and outgoing retrieval, bounded directional traversal, and expanded context with opt-in informational edges
 
-Vector reuse, semantic ranking, and labeled FTS fallback are covered. Cross-command
-parse caching and persistent inferred-fact materialization remain post-v0 scenarios.
+Vector reuse, semantic ranking, and labeled FTS fallback are covered. Benchmarks up to
+2,100 documents did not justify cross-command parse caching or persistent inferred-fact
+materialization; graph-only reads and generated projections avoid unnecessary repeated work.
 Semantic merge machinery is deliberately omitted unless concrete failures show that Git,
 whole-corpus validation, and semantic review are insufficient. The authoritative accounting is
 [Design section 15.2](./design.md#s-DRW3RR84VS).

@@ -1,7 +1,7 @@
 use crate::{
-    ArgumentMode, CommandOperation, DiagnosticSeverity, GraphIndex, GraphLocation, GraphNode,
-    PropertyConfig, PropertyType, RelationOrigin, Repository, RepositoryConfig, ScalarType,
-    ScalarValue,
+    ArgumentMode, CommandOperation, DiagnosticSeverity, GeneratedFrontmatterIndex, GraphIndex,
+    GraphLocation, GraphNode, PropertyConfig, PropertyType, RelationOrigin, Repository,
+    RepositoryConfig, ScalarType, ScalarValue,
 };
 use docgraph_markdown::SourceSpan;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -87,32 +87,36 @@ impl<'a> Validator<'a> {
         graph: &'a GraphIndex,
     ) -> ValidationReport {
         let mut report = Self::validate(repository, config, graph);
+        let projections = GeneratedFrontmatterIndex::new(graph, config);
+        let entity_locations: HashMap<_, ValidationLocation> = graph
+            .entities
+            .iter()
+            .map(|entity| (entity.document, (&entity.location).into()))
+            .collect();
         for (document, node) in graph.documents.iter().enumerate() {
             if node.entity.is_none() {
                 continue;
             }
-            let (code, message) =
-                match crate::check_generated_frontmatter(corpus, graph, config, document) {
-                    Ok(crate::GeneratedBlockStatus::Current) => continue,
-                    Ok(crate::GeneratedBlockStatus::Missing) => (
-                        "missing-generated-frontmatter",
-                        "entity document has no generated frontmatter block".to_owned(),
-                    ),
-                    Ok(crate::GeneratedBlockStatus::Stale) => (
-                        "stale-generated-frontmatter",
-                        "entity document generated frontmatter is stale".to_owned(),
-                    ),
-                    Err(error) => ("malformed-generated-frontmatter", error.to_string()),
-                };
-            let location = graph
-                .entities
-                .iter()
-                .find(|entity| entity.document == document)
-                .map(|entity| (&entity.location).into())
-                .unwrap_or_else(|| ValidationLocation {
-                    path: node.path.clone(),
-                    span: None,
-                });
+            let (code, message) = match projections.check(corpus, graph, document) {
+                Ok(crate::GeneratedBlockStatus::Current) => continue,
+                Ok(crate::GeneratedBlockStatus::Missing) => (
+                    "missing-generated-frontmatter",
+                    "entity document has no generated frontmatter block".to_owned(),
+                ),
+                Ok(crate::GeneratedBlockStatus::Stale) => (
+                    "stale-generated-frontmatter",
+                    "entity document generated frontmatter is stale".to_owned(),
+                ),
+                Err(error) => ("malformed-generated-frontmatter", error.to_string()),
+            };
+            let location =
+                entity_locations
+                    .get(&document)
+                    .cloned()
+                    .unwrap_or_else(|| ValidationLocation {
+                        path: node.path.clone(),
+                        span: None,
+                    });
             report.diagnostics.push(ValidationDiagnostic {
                 severity: DiagnosticSeverity::Error,
                 code,
