@@ -22,6 +22,14 @@ workflow = "plan"
 type = "string"
 required = true
 
+[entity.milestone]
+description = "A named product checkpoint reached when its required work is complete."
+workflow = "milestone"
+
+[entity.milestone.property.title]
+type = "string"
+required = true
+
 [entity.task]
 description = "A concrete unit of work."
 workflow = "task"

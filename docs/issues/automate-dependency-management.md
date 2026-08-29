@@ -7,8 +7,16 @@ state = "open"
 [properties]
 title = "Automate dependency management"
 
+[[relations]]
+type = "affects"
+target = "milestone:v1-0"
+
 [docgraph_generated]
 schema_version = 1
+
+[[docgraph_generated.backlinks]]
+source = "milestone:v1-0#s-XHXCWTTW9K"
+target = "docs/issues/automate-dependency-management.md"
 
 +++
 <a id="s-T1EN7KGEWP"></a>

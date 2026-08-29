@@ -32,6 +32,19 @@ description = "The plan's outcome has been achieved."
 [workflow.plan.states.abandoned]
 description = "The plan will not be completed."
 
+[workflow.milestone]
+initial = "planned"
+
+[workflow.milestone.states.planned]
+description = "The milestone is an intended product checkpoint."
+transitions = ["reached", "cancelled"]
+
+[workflow.milestone.states.reached]
+description = "The milestone's required outcome has been achieved."
+
+[workflow.milestone.states.cancelled]
+description = "The milestone will not be pursued."
+
 [workflow.task]
 initial = "backlog"
 

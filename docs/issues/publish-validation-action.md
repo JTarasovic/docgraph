@@ -7,8 +7,16 @@ state = "open"
 [properties]
 title = "Publish a docgraph validation action"
 
+[[relations]]
+type = "affects"
+target = "milestone:v1-0"
+
 [docgraph_generated]
 schema_version = 1
+
+[[docgraph_generated.backlinks]]
+source = "milestone:v1-0#s-XHXCWTTW9K"
+target = "docs/issues/publish-validation-action.md"
 
 +++
 <a id="s-JMW4ZDJMTB"></a>

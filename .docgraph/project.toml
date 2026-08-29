@@ -10,6 +10,15 @@ exclude = ["research/**"]
 [agent_instructions]
 targets = ["AGENTS.md"]
 
+[query.milestone_blockers]
+description = "Explain unresolved blockers for a milestone."
+predicate = "milestone_blockers"
+arguments = [
+  { name = "milestone", mode = "input", type = "entity" },
+  { name = "blocker", mode = "output", type = "entity" },
+  { name = "reason", mode = "output", type = "string" },
+]
+
 [query.next_work]
 description = "Find project-level candidates for what to do next."
 predicate = "next_work"

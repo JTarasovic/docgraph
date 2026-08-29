@@ -1,5 +1,9 @@
 unfinished_dependency(task) :- relation(task, "depends_on", dependency), !entity_state(dependency, "done").
 
+milestone_blockers(milestone, issue, "open issue affects milestone") :- entity_type(milestone, "milestone"), relation(milestone, "affected_by", issue), entity_type(issue, "issue"), entity_state(issue, "open").
+milestone_blockers(milestone, plan, "required plan is not completed") :- entity_type(milestone, "milestone"), relation(milestone, "requires", plan), entity_type(plan, "plan"), !entity_state(plan, "completed").
+milestone_blockers(milestone, task, "required task is not done") :- entity_type(milestone, "milestone"), relation(milestone, "requires", task), entity_type(task, "task"), !entity_state(task, "done").
+
 actionable_task(task, plan) :- entity_type(task, "task"), entity_state(task, "ready"), relation(task, "part_of", plan), entity_state(plan, "active"), !unfinished_dependency(task).
 promotable_task(task, plan) :- entity_type(task, "task"), entity_state(task, "backlog"), relation(task, "part_of", plan), entity_state(plan, "active"), !unfinished_dependency(task).
 current_task(task, plan) :- entity_type(task, "task"), entity_state(task, "in_progress"), relation(task, "part_of", plan), entity_state(plan, "active").

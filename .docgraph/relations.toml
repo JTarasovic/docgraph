@@ -24,6 +24,18 @@ target = ["task"]
 inverse = "depends_on"
 acyclic = true
 
+[relation.required_for]
+description = "The source work must be completed before the target milestone can be reached."
+source = ["plan", "task"]
+target = ["milestone"]
+inverse = "requires"
+
+[relation.requires]
+description = "The source milestone cannot be reached before the target work is complete."
+source = ["milestone"]
+target = ["plan", "task"]
+inverse = "required_for"
+
 [relation.implements]
 description = "The source performs work required by the target."
 source = ["plan", "task"]
@@ -39,11 +51,11 @@ inverse = "implements"
 [relation.affects]
 description = "The source issue creates friction or risk for the target."
 source = ["issue"]
-target = ["reference", "decision", "plan", "task", "section"]
+target = ["reference", "decision", "milestone", "plan", "task", "section"]
 inverse = "affected_by"
 
 [relation.affected_by]
 description = "The source is subject to the target issue."
-source = ["reference", "decision", "plan", "task", "section"]
+source = ["reference", "decision", "milestone", "plan", "task", "section"]
 target = ["issue"]
 inverse = "affects"
