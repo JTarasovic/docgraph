@@ -2,7 +2,7 @@
 
 id = "task:automate-tagged-releases"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Automate tagged releases"
