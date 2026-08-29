@@ -2,7 +2,7 @@
 
 id = "task:validate-first-release"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Validate the first release"
@@ -27,3 +27,8 @@ schema_version = 1
 # Validate the first release
 
 Exercise the packaged CLI from clean supported environments without relying on the repository toolchain or build tree. Cover installation, help, adoption, validation, search, graph retrieval, configured logic, and one safe mutation before declaring the release ready.
+
+<a id="s-H2QV9DPFTB"></a>
+# Result
+
+The published v0.1.0 Windows and Linux archives passed checksum verification and the representative workflow from clean unpacked directories. Both platforms exercised version and help output, adoption, validation, search, graph retrieval, configured logic, adjacent runtime discovery, and a property mutation.

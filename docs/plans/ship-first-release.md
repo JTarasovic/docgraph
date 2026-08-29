@@ -2,7 +2,7 @@
 
 id = "plan:ship-first-release"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Ship the first public release"
