@@ -7,7 +7,8 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 $souffleRevision = "a1303be3c0166400dee3d1f36f0d96abe03e6901"
 $vcpkgRevision = "cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3"
-$winFlexBisonUrl = "https://github.com/lexxmark/winflexbison/releases/download/v2.5.25/win_flex_bison-2.5.25.zip"
+$winFlexBisonVersion = "2.5.25"
+$winFlexBisonUrl = "https://github.com/lexxmark/winflexbison/releases/download/v$winFlexBisonVersion/win_flex_bison-$winFlexBisonVersion.zip"
 $winFlexBisonSha256 = "8D324B62BE33604B2C45AD1DD34AB93D722534448F55A16CA7292DE32B6AC135"
 
 if (-not $IsWindows) {

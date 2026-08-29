@@ -1,0 +1,78 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "group:allNonMajor"
+  ],
+  "dependencyDashboard": true,
+  "internalChecksFilter": "strict",
+  "minimumReleaseAge": "3 days",
+  "prConcurrentLimit": 3,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Require explicit approval for breaking updates",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Coordinate native runtime source updates and checksum regeneration",
+      "matchManagers": ["custom.regex"],
+      "groupName": "native logic runtime inputs",
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Rebuild both native runtime artifacts and update their release names, URLs, and checksums in `tools/logic-runtime/sources.toml` and the workflows before merging."
+      ]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track the Souffle revision used by native runtime builds",
+      "managerFilePatterns": [
+        "/^tools/logic-runtime/(?:build-linux\\.sh|build-windows\\.ps1|sources\\.toml)$/"
+      ],
+      "matchStrings": [
+        "\\$souffleRevision = \"(?<currentDigest>[a-f0-9]{40})\"",
+        "souffle_revision=(?<currentDigest>[a-f0-9]{40})",
+        "\\[souffle\\][\\s\\S]*?revision = \"(?<currentDigest>[a-f0-9]{40})\""
+      ],
+      "currentValueTemplate": "master",
+      "depNameTemplate": "souffle-lang/souffle",
+      "packageNameTemplate": "https://github.com/souffle-lang/souffle.git",
+      "datasourceTemplate": "git-refs"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the vcpkg revision used by the Windows runtime build",
+      "managerFilePatterns": [
+        "/^tools/logic-runtime/(?:build-windows\\.ps1|sources\\.toml)$/"
+      ],
+      "matchStrings": [
+        "\\$vcpkgRevision = \"(?<currentDigest>[a-f0-9]{40})\"",
+        "\\[vcpkg\\][\\s\\S]*?revision = \"(?<currentDigest>[a-f0-9]{40})\""
+      ],
+      "currentValueTemplate": "master",
+      "depNameTemplate": "microsoft/vcpkg",
+      "packageNameTemplate": "https://github.com/microsoft/vcpkg.git",
+      "datasourceTemplate": "git-refs"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the winflexbison release used by the Windows runtime build",
+      "managerFilePatterns": [
+        "/^tools/logic-runtime/(?:build-windows\\.ps1|sources\\.toml)$/"
+      ],
+      "matchStrings": [
+        "\\$winFlexBisonVersion = \"(?<currentValue>[^\"]+)\"",
+        "\\[winflexbison\\][\\s\\S]*?version = \"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "lexxmark/winflexbison",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
