@@ -818,6 +818,43 @@ fn configured_logic_runtime_executes_a_typed_query() {
 }
 
 #[test]
+fn string_properties_accept_bare_and_toml_quoted_values() {
+    for raw in ["mode=hard", "mode=\"hard\""] {
+        let fixture = Fixture::copy("synthetic");
+        let document = fixture.0.join("docs/adopt-me.md");
+        fs::write(&document, "# Adopt me\n\nKeep this prose.\n").unwrap();
+        let adopt = fixture.run(&[
+            "adopt",
+            "docs/adopt-me.md",
+            "--id",
+            "grommit:adopted",
+            "--type",
+            "grommit",
+            "--property",
+            "title=Adopted grommit",
+            "--property",
+            raw,
+        ]);
+        assert!(
+            adopt.status.success(),
+            "{raw}: {}",
+            String::from_utf8_lossy(&adopt.stderr)
+        );
+        let adopted = fs::read_to_string(&document).unwrap();
+        assert!(adopted.contains("mode = \"hard\""), "{raw}: {adopted}");
+
+        let set = fixture.run(&["property", "set", "grommit:adopted", "mode", "\"soft\""]);
+        assert!(
+            set.status.success(),
+            "{}",
+            String::from_utf8_lossy(&set.stderr)
+        );
+        let updated = fs::read_to_string(&document).unwrap();
+        assert!(updated.contains("mode = \"soft\""), "{updated}");
+    }
+}
+
+#[test]
 fn repository_commands_appear_in_help_and_dispatch_named_queries() {
     let fixture = Fixture::copy("synthetic");
     for help_argument in ["--help", "-h", "help"] {
