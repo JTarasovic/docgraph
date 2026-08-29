@@ -2,7 +2,7 @@
 
 id = "task:bootstrap-docgraph-repositories"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Bootstrap docgraph repositories"

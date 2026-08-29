@@ -2,7 +2,7 @@
 
 id = "task:version-portable-agent-skill"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Version and verify the portable agent skill"
@@ -10,6 +10,18 @@ title = "Version and verify the portable agent skill"
 [[relations]]
 type = "part_of"
 target = "plan:complete-v1-readiness"
+
+[[relations]]
+type = "implements"
+target = "reference:design"
+
+[[relations]]
+type = "implements"
+target = "reference:config-grammar"
+
+[[relations]]
+type = "implements"
+target = "reference:scenarios"
 
 [docgraph_generated]
 schema_version = 1
@@ -31,3 +43,11 @@ target = "task:bootstrap-docgraph-repositories"
 Define the CLI/config/skill compatibility marker, package the matching portable
 skill, and make repository maintenance detect missing, modified, or incompatible
 managed skill content with previewable repair behavior.
+
+<a id="s-P8XZVP7FJK"></a>
+## Result
+
+Implemented the manifest contract, embedded canonical bundle, maintenance checks
+and previewable repair, local-extension boundary, release packaging, and clean
+archive smoke coverage. All 102 repository tests pass. The dependent bootstrap
+task owns final initialization integration.

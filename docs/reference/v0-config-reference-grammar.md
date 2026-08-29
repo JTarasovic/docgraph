@@ -84,6 +84,11 @@ source = "task:support-section-path-endpoints"
 predicate = "implements"
 target = "reference:config-grammar#s-TW0V0THMJD"
 
+[[docgraph_generated.incoming]]
+source = "task:version-portable-agent-skill"
+predicate = "implements"
+target = "reference:config-grammar"
+
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar"
 type = "affected_by"
@@ -93,6 +98,11 @@ target = "issue:document-create-title-does-not-set-property"
 source = "reference:config-grammar"
 type = "implemented_by"
 target = "task:expose-complete-ontology-dump"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar"
+type = "implemented_by"
+target = "task:version-portable-agent-skill"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-3B3J65MSQN"
@@ -1140,6 +1150,19 @@ malformed. Duplicate, nested, reversed, or unpaired markers cause both commands 
 refuse modification and report the conflict. Manual edits inside a valid block are
 reported by `check` and replaced by an explicit `sync`. `sync` uses the safe mutation
 protocol and refuses to overwrite a concurrently changed target.
+
+Instruction maintenance also owns the versioned portable bundle at
+`skills/docgraph`. Its `skill.toml` records `schema_version`, `contract_version`,
+the exact compatible `cli_version`, and the managed payload filenames. The CLI
+embeds that canonical payload. `instructions check` reports the bundle as
+`current`, `missing`, `modified`, or `incompatible`; its JSON result includes a
+top-level `skill` object with `path` and `status`.
+
+`instructions sync --dry-run` includes exact skill-file patches without writing.
+Applying sync creates or replaces only the manifest's CLI-owned files under
+`skills/docgraph`; unrecognized repository-local files are not deleted or
+rewritten. Release archives contain the same bundle and packaging rejects a
+manifest whose CLI version differs from the archive version.
 
 The block tells agents that prose is freely editable, all managed frontmatter changes
 use docgraph operations, generated frontmatter must be synchronized, dependency

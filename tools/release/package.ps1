@@ -33,11 +33,17 @@ $logicLicenses = [IO.Path]::GetFullPath($LogicLicensesPath)
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 $readme = Join-Path $repository "README.md"
 $license = Join-Path $repository "LICENSE"
+$portableSkill = Join-Path $repository "skills\docgraph"
 
-foreach ($required in @($cli, $logicRuntime, $logicLicenses, $readme, $license)) {
+foreach ($required in @($cli, $logicRuntime, $logicLicenses, $readme, $license, $portableSkill)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required release input does not exist: $required"
     }
+}
+$skillManifest = Get-Content -Raw -LiteralPath (Join-Path $portableSkill "skill.toml")
+$escapedVersion = [regex]::Escape($versionNumber)
+if ($skillManifest -notmatch "(?m)^cli_version\s*=\s*`"$escapedVersion`"\s*$") {
+    throw "Portable skill cli_version does not match release version '$versionNumber'."
 }
 
 $reportedVersion = (& $cli --version).Trim()
@@ -65,6 +71,9 @@ try {
     Copy-Item -LiteralPath $cli -Destination (Join-Path $resolvedStaging $cliName)
     Copy-Item -LiteralPath $logicRuntime -Destination (Join-Path $resolvedStaging $runtimeName)
     Copy-Item -LiteralPath $readme, $license -Destination $resolvedStaging
+    $skills = Join-Path $resolvedStaging "skills"
+    New-Item -ItemType Directory -Path $skills | Out-Null
+    Copy-Item -LiteralPath $portableSkill -Destination $skills -Recurse
     $thirdParty = Join-Path $resolvedStaging "THIRD_PARTY_LICENSES\souffle"
     New-Item -ItemType Directory -Force -Path $thirdParty | Out-Null
     if (Test-Path -LiteralPath $logicLicenses -PathType Container) {

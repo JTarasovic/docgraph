@@ -1,0 +1,15 @@
+schema_version = 1
+contract_version = 1
+cli_version = "0.1.0"
+managed_files = [
+  "SKILL.md",
+  "commands.md",
+  "config-authorship.md",
+  "document-authoring.md",
+  "mutations.md",
+  "querying.md",
+  "relationships.md",
+  "repository-maintenance.md",
+  "troubleshooting.md",
+  "workflows.md",
+]

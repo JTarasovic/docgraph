@@ -34,6 +34,16 @@ source = "task:expand-initial-design-conformance"
 predicate = "implements"
 target = "reference:scenarios#s-N6Z4YKP9M0"
 
+[[docgraph_generated.incoming]]
+source = "task:version-portable-agent-skill"
+predicate = "implements"
+target = "reference:scenarios"
+
+[[docgraph_generated.inverses]]
+source = "reference:scenarios"
+type = "implemented_by"
+target = "task:version-portable-agent-skill"
+
 [[docgraph_generated.inverses]]
 source = "reference:scenarios#s-9P22A3H49K"
 type = "implemented_by"
@@ -457,6 +467,8 @@ Verify:
 - managed instruction block updates idempotently
 - `instructions check` fails for missing, stale, or malformed blocks without writing
 - `instructions sync --dry-run` shows the exact prospective patch
+- instruction maintenance reports missing, modified, or incompatible portable
+  skills, previews repair, and preserves repository-local extension files
 - sync preserves user-authored bytes outside the managed block
 - duplicate, nested, reversed, and unpaired markers are refused
 - concurrent edits to an instruction target are not overwritten

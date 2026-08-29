@@ -20,6 +20,10 @@ impl Fixture {
             .join("fixtures")
             .join(name);
         copy_directory(&source, &target);
+        let portable_skill = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("skills/docgraph");
+        copy_directory(&portable_skill, &target.join("skills/docgraph"));
         Self(target)
     }
 
@@ -974,6 +978,52 @@ fn read_commands_recover_an_interrupted_mutation_before_loading_the_graph() {
 #[test]
 fn generated_agent_guidance_is_checked_and_safely_synchronized() {
     let fixture = Fixture::copy("synthetic");
+    assert!(fixture.run(&["instructions", "check"]).status.success());
+
+    let manifest = fixture.0.join("skills/docgraph/skill.toml");
+    let current_version = format!("cli_version = \"{}\"", env!("CARGO_PKG_VERSION"));
+    let incompatible = fs::read_to_string(&manifest)
+        .unwrap()
+        .replace(&current_version, "cli_version = \"9.9.9\"");
+    fs::write(&manifest, incompatible).unwrap();
+    let incompatible_check = fixture.run(&["--json", "instructions", "check"]);
+    assert!(!incompatible_check.status.success());
+    let incompatible_check: Value = serde_json::from_slice(&incompatible_check.stdout).unwrap();
+    assert_eq!(incompatible_check["skill"]["status"], "incompatible");
+    assert!(fixture.run(&["instructions", "sync"]).status.success());
+
+    let skill = fixture.0.join("skills/docgraph/querying.md");
+    fs::remove_file(&skill).unwrap();
+    let missing_check = fixture.run(&["--json", "instructions", "check"]);
+    assert!(!missing_check.status.success());
+    let missing_check: Value = serde_json::from_slice(&missing_check.stdout).unwrap();
+    assert_eq!(missing_check["skill"]["status"], "missing");
+    assert!(fixture.run(&["instructions", "sync"]).status.success());
+
+    let stale_skill = format!("{}\nLocal mutation.\n", fs::read_to_string(&skill).unwrap());
+    fs::write(&skill, &stale_skill).unwrap();
+    let local_skill = fixture.0.join("skills/docgraph/local.md");
+    fs::write(&local_skill, "# Repository-owned extension\n").unwrap();
+    let skill_check = fixture.run(&["--json", "instructions", "check"]);
+    assert!(!skill_check.status.success());
+    let skill_check: Value = serde_json::from_slice(&skill_check.stdout).unwrap();
+    assert_eq!(skill_check["skill"]["status"], "modified");
+
+    let skill_preview = fixture.run(&["instructions", "sync", "--dry-run"]);
+    assert!(skill_preview.status.success());
+    assert!(String::from_utf8_lossy(&skill_preview.stdout).contains("querying.md"));
+    assert_eq!(fs::read_to_string(&skill).unwrap(), stale_skill);
+
+    assert!(fixture.run(&["instructions", "sync"]).status.success());
+    assert!(
+        !fs::read_to_string(&skill)
+            .unwrap()
+            .contains("Local mutation.")
+    );
+    assert_eq!(
+        fs::read_to_string(&local_skill).unwrap(),
+        "# Repository-owned extension\n"
+    );
     assert!(fixture.run(&["instructions", "check"]).status.success());
 
     let agents = fixture.0.join("AGENTS.md");

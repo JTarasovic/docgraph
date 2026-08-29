@@ -45,7 +45,7 @@ try {
     if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) {
         throw "Archive does not place $runtimeName beside $executableName."
     }
-    foreach ($required in @("LICENSE", "README.md", "THIRD_PARTY_LICENSES")) {
+    foreach ($required in @("LICENSE", "README.md", "THIRD_PARTY_LICENSES", "skills/docgraph/skill.toml")) {
         if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $executable) $required))) {
             throw "Archive is missing $required."
         }
@@ -62,6 +62,21 @@ try {
     Copy-Item -LiteralPath $fixture -Destination $workspace -Recurse
     Push-Location $workspace
     try {
+        $missingSkillDetected = $false
+        try {
+            & $executable instructions check *> $null
+        } catch {
+            $missingSkillDetected = $true
+        }
+        if (-not $missingSkillDetected) {
+            throw "A workspace without the portable skill unexpectedly passed instructions check."
+        }
+        & $executable instructions sync --dry-run *> $null
+        if (Test-Path -LiteralPath (Join-Path $workspace "skills/docgraph/SKILL.md")) {
+            throw "Instruction dry-run wrote the portable skill."
+        }
+        & $executable instructions sync *> $null
+        & $executable instructions check *> $null
         & $executable validate *> $null
         & $executable query scalar_values *> $null
         & $executable search "florp" *> $null

@@ -3,10 +3,11 @@ use docgraph_core::{
     Adoption, CanonicalCorpus, CommandConfig, CommandEmbeddingProvider, CommandOperation,
     DerivedState, DiagnosticSeverity, GeneratedBlockStatus, GeneratedFrontmatterIndex, GraphIndex,
     GraphNode, GraphTraversal, InstructionService, InstructionStatus, ManagedChangeValidator,
-    MutationPlan, MutationRequest, MutationService, PropertyConfig, PropertyType, QueryValueType,
-    RelationOrigin, Repository, RepositoryConfig, SCHEMA_VERSION, ScalarValue, SemanticChange,
-    SemanticChangeReviewer, SemanticSearchHit, SemanticSearchMode, SemanticSearchResult,
-    SemanticSection, TraversalDirection, Validator,
+    MutationPlan, MutationRequest, MutationService, PORTABLE_SKILL_PATH, PortableSkillService,
+    PortableSkillStatus, PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository,
+    RepositoryConfig, SCHEMA_VERSION, ScalarValue, SemanticChange, SemanticChangeReviewer,
+    SemanticSearchHit, SemanticSearchMode, SemanticSearchResult, SemanticSection,
+    TraversalDirection, Validator,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -1848,19 +1849,48 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
     let context = Context::load()?;
     let service =
         InstructionService::new(&context.repository, &context.config).map_err(CliError::boxed)?;
+    let skill = PortableSkillService::new(&context.repository).map_err(CliError::boxed)?;
     match action {
         InstructionAction::Sync { dry_run } => {
+            let skill_changes = skill.sync(dry_run).map_err(CliError::boxed)?;
             let changes = service.sync(dry_run).map_err(CliError::boxed)?;
             if json_output {
-                print_json(json!({
-                    "dry_run": dry_run,
-                    "changes": changes.iter().map(|change| json!({
+                let mut output_changes: Vec<_> = skill_changes
+                    .iter()
+                    .map(|change| {
+                        json!({
+                            "path": json_path(&change.path),
+                            "original": change.original,
+                            "intended": change.intended,
+                        })
+                    })
+                    .collect();
+                output_changes.extend(changes.iter().map(|change| {
+                    json!({
                         "path": json_path(&change.path),
                         "original": change.original,
                         "intended": change.intended,
-                    })).collect::<Vec<_>>()
+                    })
+                }));
+                print_json(json!({
+                    "dry_run": dry_run,
+                    "changes": output_changes,
                 }))
             } else {
+                for change in &skill_changes {
+                    if dry_run {
+                        println!(
+                            "{}",
+                            render_text_patch(
+                                &change.path,
+                                change.original.as_deref().unwrap_or_default(),
+                                &change.intended,
+                            )
+                        );
+                    } else {
+                        println!("updated {}", change.path.display());
+                    }
+                }
                 for change in &changes {
                     if dry_run {
                         println!(
@@ -1880,13 +1910,20 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
         }
         InstructionAction::Check => {
             let statuses = service.check().map_err(CliError::boxed)?;
-            let current = statuses
-                .iter()
-                .all(|(_, status)| *status == InstructionStatus::Current);
+            let skill_status = skill.check().map_err(CliError::boxed)?;
+            let current = skill_status == PortableSkillStatus::Current
+                && statuses
+                    .iter()
+                    .all(|(_, status)| *status == InstructionStatus::Current);
             if json_output {
-                print_json(
-                    json!({ "current": current, "targets": statuses.iter().map(|(path, status)| json!({ "path": json_path(path), "status": format!("{status:?}").to_lowercase() })).collect::<Vec<_>>() }),
-                )?;
+                print_json(json!({
+                    "current": current,
+                    "targets": statuses.iter().map(|(path, status)| json!({ "path": json_path(path), "status": format!("{status:?}").to_lowercase() })).collect::<Vec<_>>(),
+                    "skill": {
+                        "path": PORTABLE_SKILL_PATH,
+                        "status": format!("{skill_status:?}").to_lowercase(),
+                    },
+                }))?;
             } else {
                 for (path, status) in statuses {
                     println!(
@@ -1895,11 +1932,17 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
                         format!("{status:?}").to_lowercase()
                     );
                 }
+                println!(
+                    "{PORTABLE_SKILL_PATH}\t{}",
+                    format!("{skill_status:?}").to_lowercase()
+                );
             }
             if current {
                 Ok(())
             } else {
-                Err(CliError::silent("agent instructions are not current"))
+                Err(CliError::silent(
+                    "agent instructions or portable skill are not current",
+                ))
             }
         }
     }

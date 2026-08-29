@@ -18,7 +18,9 @@ Release binaries are published through the repository's GitHub Releases. Choose
 `docgraph-v0.1.0-windows-x86_64.zip` or
 `docgraph-v0.1.0-linux-x86_64.tar.gz`, unpack it, and keep
 the `docgraph` executable beside the adjacent `docgraph-logic-runtime` and
-license files included in that archive. Put the unpacked directory on `PATH`,
+license files included in that archive. The matching portable agent skill is
+included under `skills/docgraph` and is also embedded in the CLI for verified
+repository installation. Put the unpacked directory on `PATH`,
 or invoke the executable by its full path. Each archive has an adjacent
 `.sha256` checksum file. docgraph is distributed under the MIT license; the
 bundled logic runtime retains its own notices under `THIRD_PARTY_LICENSES`.

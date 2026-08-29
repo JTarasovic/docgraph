@@ -59,10 +59,20 @@ source = "task:index-searchable-markdown-content"
 predicate = "implements"
 target = "reference:design#s-FDMHXV5Q4Q"
 
+[[docgraph_generated.incoming]]
+source = "task:version-portable-agent-skill"
+predicate = "implements"
+target = "reference:design"
+
 [[docgraph_generated.inverses]]
 source = "reference:design"
 type = "implemented_by"
 target = "task:expose-complete-ontology-dump"
+
+[[docgraph_generated.inverses]]
+source = "reference:design"
+type = "implemented_by"
+target = "task:version-portable-agent-skill"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-7BBMBXC9RK"
@@ -823,7 +833,11 @@ The owned region is delimited by exact versioned markers:
 
 `docgraph instructions sync` creates or updates only that region and supports
 `--dry-run`; `docgraph instructions check` detects missing, stale, or malformed
-blocks without writing. Content outside a valid marker pair is preserved byte-for-byte.
+blocks without writing. The same commands install and verify the CLI-embedded
+portable skill bundle. Check distinguishes a missing bundle, modified managed
+content, and an incompatible skill/CLI contract. Sync previews and replaces only
+the known managed skill files; additional repository-local files are preserved.
+Content outside a valid marker pair is preserved byte-for-byte.
 Malformed or ambiguous markers cause refusal rather than guessed repair. Manual edits
 inside the managed block are replaced only by an explicit `sync`, which uses the same
 concurrent-change protection as other safe mutations.
@@ -848,7 +862,11 @@ focused inspection.
 
 Skill examples and generated instructions should be tested against fixture repositories wherever practical.
 
-The skill/config/CLI contract should be versioned so stale checked-in guidance can be detected and refreshed.
+The skill manifest records its schema, contract version, CLI version, and managed
+payload. The CLI embeds the matching canonical payload, release archives include
+the same bundle, and package validation rejects a skill version that differs from
+the released CLI. This makes stale checked-in guidance detectable and repairable
+without requiring another source checkout.
 
 <a id="s-B7542FYPRY"></a>
 ## 12. Safe Mutation
