@@ -112,7 +112,10 @@ impl LogicModule {
         let mut calls = Vec::new();
         for clause in clauses(&structural)? {
             let (head, body) = clause.split_once(":-").ok_or_else(|| {
-                LogicError::InvalidRule("each clause must contain a rule body".to_owned())
+                LogicError::InvalidRule(format!(
+                    "each clause must contain a rule body; {} has none",
+                    quote_clause(clause)
+                ))
             })?;
             let (name, arity) = predicate_call(head.trim())?.ok_or_else(|| {
                 LogicError::InvalidRule(
@@ -1364,15 +1367,26 @@ fn mask_strings_and_comments(source: &str) -> Result<String, LogicError> {
     let mut output = String::with_capacity(source.len());
     let mut quote = false;
     let mut escaped = false;
-    let mut comment = false;
+    let mut line_comment = false;
+    let mut block_comment = false;
     let mut characters = source.chars().peekable();
     while let Some(character) = characters.next() {
-        if comment {
+        if line_comment {
             if character == '\n' {
-                comment = false;
+                line_comment = false;
                 output.push(character);
             } else {
                 output.push(' ');
+            }
+            continue;
+        }
+        if block_comment {
+            if character == '*' && characters.peek() == Some(&'/') {
+                block_comment = false;
+                output.push_str("  ");
+                let _ = characters.next();
+            } else {
+                output.push(if character == '\n' { '\n' } else { ' ' });
             }
             continue;
         }
@@ -1388,7 +1402,11 @@ fn mask_strings_and_comments(source: &str) -> Result<String, LogicError> {
             continue;
         }
         if character == '/' && characters.peek() == Some(&'/') {
-            comment = true;
+            line_comment = true;
+            output.push_str("  ");
+            let _ = characters.next();
+        } else if character == '/' && characters.peek() == Some(&'*') {
+            block_comment = true;
             output.push_str("  ");
             let _ = characters.next();
         } else if character == '"' {
@@ -1401,6 +1419,11 @@ fn mask_strings_and_comments(source: &str) -> Result<String, LogicError> {
     if quote {
         return Err(LogicError::InvalidRule(
             "unterminated string literal".to_owned(),
+        ));
+    }
+    if block_comment {
+        return Err(LogicError::InvalidRule(
+            "unterminated block comment; close it with `*/`".to_owned(),
         ));
     }
     Ok(output)
@@ -1423,6 +1446,13 @@ fn reject_unsupported(source: &str) -> Result<(), LogicError> {
         ";",
         "{",
     ];
+    if source.contains('%') {
+        // `%` is a comment marker in some Datalog dialects but not here, and an
+        // unmasked comment body parses as stray clause text further on.
+        return Err(LogicError::InvalidRule(
+            "`%` is not supported; comments use `//` or `/* */`".to_owned(),
+        ));
+    }
     if let Some(token) = forbidden.into_iter().find(|token| source.contains(token)) {
         return Err(LogicError::UnsupportedConstruct(token.to_owned()));
     }
@@ -1434,6 +1464,18 @@ fn reject_unsupported(source: &str) -> Result<(), LogicError> {
     }
     Ok(())
 }
+fn quote_clause(clause: &str) -> String {
+    const LIMIT: usize = 60;
+    let collapsed = clause.split_whitespace().collect::<Vec<_>>().join(" ");
+    let truncated = collapsed
+        .char_indices()
+        .nth(LIMIT)
+        .map_or(collapsed.clone(), |(index, _)| {
+            format!("{}...", &collapsed[..index])
+        });
+    format!("{truncated:?}")
+}
+
 fn clauses(source: &str) -> Result<Vec<&str>, LogicError> {
     if !source.trim().is_empty() && !source.trim_end().ends_with('.') {
         Err(LogicError::InvalidRule(
@@ -1704,6 +1746,47 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn comments_are_masked_before_clauses_are_split() {
+        for comment in [
+            "// a comment with a period.",
+            "/* a block comment with a period. */",
+            "/* a block\n   comment spanning lines. */",
+        ] {
+            let source = format!("{comment}\nall_risk(x) :- entity_type(x, \"risk\").\n");
+            let module =
+                LogicModule::parse(&source).unwrap_or_else(|error| panic!("{comment}: {error}"));
+            assert_eq!(module.predicates["all_risk"], 1);
+        }
+    }
+
+    #[test]
+    fn rejects_percent_comments_with_an_actionable_message() {
+        let error = LogicModule::parse("% a comment with a period.\np(x) :- entity(x).\n")
+            .expect_err("`%` is not part of the supported subset");
+        assert!(error.to_string().contains("//"), "{error}");
+    }
+
+    #[test]
+    fn rejects_unterminated_block_comments() {
+        let error = LogicModule::parse("/* never closed\np(x) :- entity(x).\n")
+            .expect_err("an unclosed block comment swallows the rule");
+        assert!(error.to_string().contains("block comment"), "{error}");
+    }
+
+    #[test]
+    fn percent_inside_a_string_literal_is_not_a_comment() {
+        let module = LogicModule::parse("p(x) :- entity_type(x, \"100% risk\").\n").unwrap();
+        assert_eq!(module.predicates["p"], 1);
+    }
+
+    #[test]
+    fn bodyless_clause_error_names_the_offending_clause() {
+        let error = LogicModule::parse("stray_fact.\np(x) :- entity(x).\n")
+            .expect_err("facts have no body");
+        assert!(error.to_string().contains("stray_fact"), "{error}");
+    }
+
     #[test]
     fn requires_period_terminated_souffle_rules() {
         assert!(matches!(

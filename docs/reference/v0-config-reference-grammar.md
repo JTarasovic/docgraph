@@ -360,6 +360,11 @@ initial workflow state when applicable, and missing section IDs in one recoverab
 mutation. It preserves prose and non-reserved TOML frontmatter and rejects collisions
 with configured managed fields.
 
+Property values are TOML scalars or arrays. A string property also accepts bare
+text, so `--property title=Adopted florp` and `--property 'title="Adopted florp"'`
+both store `Adopted florp`; write `'title="\"quoted\""'` for a value whose own
+text contains quotes.
+
 <a id="s-D4NA13PJ39"></a>
 ## 7. Section Identity
 
@@ -730,6 +735,7 @@ stratified negation, and comparisons. Declarations and I/O are owned by docgraph
 - calls to versioned docgraph built-ins and predicates defined in the same module
 - variables, scalar literals, unification, and basic scalar comparisons
 - conjunction, positive recursion, and safe stratified negation
+- `//` line comments and `/* */` block comments; `%` is not a comment marker
 
 Everything else is rejected during configuration validation: directives, includes,
 components, pragmas, types, and custom functors are not repository syntax.

@@ -2010,7 +2010,10 @@ fn parse_properties(
 
 fn parse_toml_value(raw: &str, property: &PropertyConfig) -> Result<Value, CliError> {
     if property.property_type == PropertyType::String {
-        return Ok(Value::from(raw));
+        // Bare text is the ordinary form, but a TOML string literal is what an
+        // author reaches for when the value needs quoting; accept both rather
+        // than storing the quotes as part of the value.
+        return Ok(parse_string_literal(raw).unwrap_or_else(|| Value::from(raw)));
     }
     let source = format!("value = {raw}");
     let document = source
@@ -2020,6 +2023,13 @@ fn parse_toml_value(raw: &str, property: &PropertyConfig) -> Result<Value, CliEr
         .as_value()
         .cloned()
         .ok_or_else(|| CliError::message("property value must be a TOML scalar or array"))
+}
+
+fn parse_string_literal(raw: &str) -> Option<Value> {
+    let document = format!("value = {raw}")
+        .parse::<toml_edit::DocumentMut>()
+        .ok()?;
+    document["value"].as_value()?.as_str().map(Value::from)
 }
 
 fn split_assignment(value: &str) -> Result<(&str, &str), CliError> {
