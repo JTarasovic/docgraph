@@ -1,0 +1,49 @@
+name: Validate with docgraph
+description: Install a checksum-verified docgraph release and validate a repository corpus.
+author: docgraph contributors
+
+inputs:
+  version:
+    description: Exact docgraph release tag to install, such as v0.1.0.
+    required: true
+  working-directory:
+    description: Repository-relative directory containing the .docgraph configuration.
+    required: false
+    default: .
+  changes:
+    description: Optional Git ref passed to docgraph validate --changes.
+    required: false
+    default: ""
+  token:
+    description: GitHub token that can read the docgraph release; override for cross-repository private access.
+    required: false
+    default: ""
+
+outputs:
+  version:
+    description: Installed docgraph semantic version without the leading v.
+    value: ${{ steps.validate.outputs.version }}
+  executable:
+    description: Absolute path to the installed docgraph executable.
+    value: ${{ steps.validate.outputs.executable }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install and validate with docgraph
+      id: validate
+      shell: pwsh
+      env:
+        DOCGRAPH_ACTION_VERSION: ${{ inputs.version }}
+        DOCGRAPH_ACTION_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        DOCGRAPH_ACTION_CHANGES: ${{ inputs.changes }}
+        DOCGRAPH_ACTION_TOKEN: ${{ inputs.token || github.token }}
+      run: |
+        & "$env:GITHUB_ACTION_PATH/tools/action/validate.ps1" `
+          -Version $env:DOCGRAPH_ACTION_VERSION `
+          -WorkingDirectory $env:DOCGRAPH_ACTION_WORKING_DIRECTORY `
+          -Changes $env:DOCGRAPH_ACTION_CHANGES
+
+branding:
+  icon: check-circle
+  color: blue

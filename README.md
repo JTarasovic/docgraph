@@ -30,6 +30,28 @@ docgraph --version
 docgraph --help
 ```
 
+## GitHub Actions validation
+
+The root composite action installs a checksum-verified released archive and runs
+`docgraph validate` without requiring Rust, mise, or a docgraph source checkout.
+Pin both actions to reviewed full commit SHAs and select the exact docgraph binary
+release explicitly:
+
+```yaml
+permissions:
+  contents: read
+
+steps:
+  - uses: actions/checkout@<full-commit-sha>
+  - uses: JTarasovic/docgraph@<full-commit-sha>
+    with:
+      version: v0.1.0
+      token: ${{ secrets.DOCGRAPH_RELEASE_TOKEN }} # only while releases are private
+```
+
+See [the validation action contract](docs/reference/validation-action.md) for
+working-directory, change-aware validation, supported runners, and outputs.
+
 ## Quickstart
 
 docgraph operates on the configured `docs` corpus in the current repository.

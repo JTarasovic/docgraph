@@ -2,7 +2,7 @@
 
 id = "task:version-portable-agent-skill"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Version and verify the portable agent skill"
