@@ -101,6 +101,11 @@ if ($IsLinux) {
     chmod +x $executable $runtime
 }
 
+# The release runtime is part of the action's verified installation. Point the
+# CLI at it explicitly so a caller's development-only override cannot select a
+# missing or incompatible runtime from the checkout being validated.
+$env:DOCGRAPH_LOGIC_RUNTIME = $runtime
+
 $reportedVersion = (& $executable --version).Trim()
 if ($reportedVersion -ne "docgraph $versionNumber") {
     throw "Installed CLI version '$reportedVersion' does not match '$versionNumber'."
