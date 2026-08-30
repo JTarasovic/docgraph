@@ -2,7 +2,7 @@
 
 id = "issue:bootstrap-docgraph-repositories"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Bootstrap docgraph repositories"
@@ -33,3 +33,12 @@ version-compatible portable skill, create or adopt a minimal project
 configuration, synchronize configured agent-instruction targets, support a dry
 run, and refuse ambiguous or conflicting existing state with actionable
 diagnostics.
+
+<a id="s-9EAV05SBS2"></a>
+## Resolution
+
+Implemented `docgraph init` with fresh-repository and existing-configuration paths,
+complete dry-run output, embedded skill installation, authored-guidance preservation,
+document-root creation, idempotence, and pre-write conflict checks. End-to-end tests
+exercise successful initialization, validation, repeated application, configuration
+adoption, and refusal boundaries.

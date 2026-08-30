@@ -2,7 +2,7 @@
 
 id = "plan:complete-v1-readiness"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Complete v1 readiness"
@@ -83,3 +83,11 @@ Execution order:
 
 Each task closes its corresponding issue only after reference documentation,
 regression coverage, `docgraph validate`, and the repository check suite pass.
+
+<a id="s-1CCQX1AMXK"></a>
+## Result
+
+All five blocker tasks shipped in increasing implementation order. Dependency
+updates are automated, complete ontology inspection is available, validation has a
+reusable released-binary action, the portable skill has a verified version contract,
+and new repositories can initialize that contract with one idempotent command.

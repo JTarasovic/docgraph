@@ -25,6 +25,11 @@ predicate = "implements"
 target = "reference:scenarios#s-N6Z4YKP9M0"
 
 [[docgraph_generated.incoming]]
+source = "task:bootstrap-docgraph-repositories"
+predicate = "implements"
+target = "reference:scenarios"
+
+[[docgraph_generated.incoming]]
 source = "task:expand-initial-design-conformance"
 predicate = "implements"
 target = "reference:scenarios#s-9P22A3H49K"
@@ -38,6 +43,11 @@ target = "reference:scenarios#s-N6Z4YKP9M0"
 source = "task:version-portable-agent-skill"
 predicate = "implements"
 target = "reference:scenarios"
+
+[[docgraph_generated.inverses]]
+source = "reference:scenarios"
+type = "implemented_by"
+target = "task:bootstrap-docgraph-repositories"
 
 [[docgraph_generated.inverses]]
 source = "reference:scenarios"
@@ -461,6 +471,11 @@ Tests: hierarchy, arguments, help text, read-only queries, transitions, relation
 
 Verify:
 
+- initialization in a fresh Git repository previews without writing, creates a
+  minimal valid configuration and document root, installs the embedded skill,
+  preserves authored instruction prose, validates, and is idempotent
+- initialization adopts valid existing configuration byte-for-byte and refuses
+  conflicting options or ambiguous partial `.docgraph` state before writing
 - root skill remains small
 - sibling guides exist for supported task classes
 - generated `AGENTS.md` / `CLAUDE.md` block is current

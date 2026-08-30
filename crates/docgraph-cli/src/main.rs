@@ -1,13 +1,14 @@
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use docgraph_core::{
-    Adoption, CanonicalCorpus, CommandConfig, CommandEmbeddingProvider, CommandOperation,
-    DerivedState, DiagnosticSeverity, GeneratedBlockStatus, GeneratedFrontmatterIndex, GraphIndex,
-    GraphNode, GraphTraversal, InstructionService, InstructionStatus, ManagedChangeValidator,
-    MutationPlan, MutationRequest, MutationService, PORTABLE_SKILL_PATH, PortableSkillService,
-    PortableSkillStatus, PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository,
-    RepositoryConfig, SCHEMA_VERSION, ScalarValue, SemanticChange, SemanticChangeReviewer,
-    SemanticSearchHit, SemanticSearchMode, SemanticSearchResult, SemanticSection,
-    TraversalDirection, Validator,
+    Adoption, AgentInstructionsConfig, CanonicalCorpus, CommandConfig, CommandEmbeddingProvider,
+    CommandOperation, DerivedState, DiagnosticSeverity, DocumentsConfig, FrontmatterConfig,
+    GeneratedBlockStatus, GeneratedFrontmatterIndex, GraphIndex, GraphNode, GraphTraversal,
+    InstructionService, InstructionStatus, ManagedChangeValidator, MutationPlan, MutationRequest,
+    MutationService, PORTABLE_SKILL_PATH, PortableSkillService, PortableSkillStatus, ProjectConfig,
+    PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig,
+    SCHEMA_VERSION, ScalarValue, SemanticChange, SemanticChangeReviewer, SemanticSearchHit,
+    SemanticSearchMode, SemanticSearchResult, SemanticSection, TraversalDirection,
+    ValidationConfig, Validator,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -15,8 +16,10 @@ use serde_json::{Value as JsonValue, json};
 use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt;
-use std::path::PathBuf;
-use std::process::ExitCode;
+use std::fs;
+use std::io::Write;
+use std::path::{Component, Path, PathBuf};
+use std::process::{Command as ProcessCommand, ExitCode};
 use toml_edit::Value;
 
 #[derive(Parser)]
@@ -34,6 +37,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Initialize or verify docgraph repository support.
+    Init {
+        /// Project name for a new configuration. Defaults to the Git worktree name.
+        #[arg(long)]
+        name: Option<String>,
+        /// Document corpus root for a new configuration.
+        #[arg(long, value_name = "PATH")]
+        documents: Option<PathBuf>,
+        /// Agent-instruction target for a new configuration. May be repeated.
+        #[arg(long = "instruction-target", value_name = "PATH")]
+        instruction_targets: Vec<PathBuf>,
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Create, move, or delete managed documents.
     Document {
         #[command(subcommand)]
@@ -378,6 +395,18 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
+        Command::Init {
+            name,
+            documents,
+            instruction_targets,
+            dry_run,
+        } => initialize(
+            name.as_deref(),
+            documents.as_deref(),
+            &instruction_targets,
+            dry_run,
+            cli.json,
+        ),
         Command::Document { action } => match action {
             DocumentAction::Create {
                 path,
@@ -684,6 +713,349 @@ fn run(cli: Cli) -> Result<(), CliError> {
         Command::Frontmatter { action } => frontmatter(action, cli.json),
         Command::Custom(arguments) => custom_command(&arguments, cli.json),
     }
+}
+
+fn initialize(
+    requested_name: Option<&str>,
+    requested_documents: Option<&Path>,
+    requested_targets: &[PathBuf],
+    dry_run: bool,
+    json_output: bool,
+) -> Result<(), CliError> {
+    let root = git_worktree_root()?;
+    let repository = Repository::from_root(&root).map_err(CliError::boxed)?;
+    let project_path = repository.project_file();
+    let config_exists = project_path.is_file();
+
+    let requested_name = match requested_name {
+        Some(name) if name.trim().is_empty() => {
+            return Err(CliError::message("--name cannot be empty"));
+        }
+        Some(name) => Some(name.trim().to_owned()),
+        None => None,
+    };
+
+    let requested_documents = requested_documents
+        .map(|path| normalized_relative_path(path, "document root"))
+        .transpose()?;
+    let requested_targets: Vec<_> = requested_targets
+        .iter()
+        .map(|path| normalized_relative_path(path, "instruction target"))
+        .collect::<Result<_, _>>()?;
+    let mut unique_targets = HashSet::new();
+    if requested_targets
+        .iter()
+        .any(|target| !unique_targets.insert(target.clone()))
+    {
+        return Err(CliError::message(
+            "--instruction-target cannot contain duplicates",
+        ));
+    }
+
+    let mut project_change = None;
+    let config = if config_exists {
+        let config = RepositoryConfig::load(&repository).map_err(|error| {
+            CliError::message(format!(
+                "cannot adopt existing .docgraph/project.toml: {error}"
+            ))
+        })?;
+        if let Some(name) = &requested_name
+            && name != &config.project.name
+        {
+            return Err(CliError::message(format!(
+                "existing project name is {:?}, not requested {:?}",
+                config.project.name, name
+            )));
+        }
+        if let Some(documents) = &requested_documents
+            && documents != &config.project.documents.root
+        {
+            return Err(CliError::message(format!(
+                "existing document root is {}, not requested {}",
+                config.project.documents.root.display(),
+                documents.display()
+            )));
+        }
+        if !requested_targets.is_empty()
+            && requested_targets != config.project.agent_instructions.targets
+        {
+            return Err(CliError::message(
+                "existing instruction targets differ from --instruction-target values",
+            ));
+        }
+        config
+    } else {
+        refuse_ambiguous_config_directory(repository.config_dir())?;
+        let name = requested_name.unwrap_or_else(|| {
+            root.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "docgraph-project".to_owned())
+        });
+        let documents = requested_documents.unwrap_or_else(|| PathBuf::from("docs"));
+        let instruction_targets = if requested_targets.is_empty() {
+            AgentInstructionsConfig::default().targets
+        } else {
+            requested_targets
+        };
+        let source = minimal_project_source(&name, &documents, &instruction_targets)?;
+        project_change = Some(docgraph_core::FileChange {
+            path: PathBuf::from(".docgraph/project.toml"),
+            original: None,
+            intended: Some(source),
+            original_hash: None,
+        });
+        RepositoryConfig {
+            project: ProjectConfig {
+                name,
+                documents: DocumentsConfig {
+                    root: documents,
+                    include: vec!["**/*.md".to_owned()],
+                    exclude: Vec::new(),
+                },
+                frontmatter: FrontmatterConfig::default(),
+                agent_instructions: AgentInstructionsConfig {
+                    targets: instruction_targets,
+                },
+                validation: ValidationConfig::default(),
+                references: Vec::new(),
+                embeddings: None,
+            },
+            entities: BTreeMap::new(),
+            relations: BTreeMap::new(),
+            workflows: BTreeMap::new(),
+            queries: BTreeMap::new(),
+            commands: BTreeMap::new(),
+            logic: None,
+        }
+    };
+
+    let documents_path = repository.root().join(&config.project.documents.root);
+    if documents_path.exists() && !documents_path.is_dir() {
+        return Err(CliError::message(format!(
+            "configured document root is not a directory: {}",
+            documents_path.display()
+        )));
+    }
+    let create_documents = !documents_path.exists();
+
+    let skill = PortableSkillService::new(&repository).map_err(CliError::boxed)?;
+    let skill_changes = skill.sync(true).map_err(CliError::boxed)?;
+    let instructions = InstructionService::new(&repository, &config).map_err(CliError::boxed)?;
+    let instruction_changes = instructions.sync(true).map_err(CliError::boxed)?;
+
+    let mut changes = Vec::new();
+    if let Some(change) = &project_change {
+        changes.push(change.clone());
+    }
+    changes.extend(
+        skill_changes
+            .iter()
+            .map(|change| docgraph_core::FileChange {
+                path: change.path.clone(),
+                original: change.original.clone(),
+                intended: Some(change.intended.clone()),
+                original_hash: None,
+            }),
+    );
+    changes.extend(
+        instruction_changes
+            .iter()
+            .map(|change| docgraph_core::FileChange {
+                path: change.path.clone(),
+                original: change.original.clone(),
+                intended: Some(change.intended.clone()),
+                original_hash: None,
+            }),
+    );
+
+    if !dry_run {
+        if let Some(change) = &project_change {
+            refuse_ambiguous_config_directory(repository.config_dir())?;
+            fs::create_dir_all(repository.config_dir()).map_err(CliError::boxed)?;
+            let mut project = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&project_path)
+                .map_err(|error| {
+                    CliError::message(format!(
+                        "refusing to overwrite {}: {error}",
+                        project_path.display()
+                    ))
+                })?;
+            project
+                .write_all(
+                    change
+                        .intended
+                        .as_deref()
+                        .expect("new project configuration has intended content")
+                        .as_bytes(),
+                )
+                .map_err(CliError::boxed)?;
+            project.sync_all().map_err(CliError::boxed)?;
+        }
+        if create_documents {
+            fs::create_dir_all(&documents_path).map_err(CliError::boxed)?;
+        }
+        skill.sync(false).map_err(CliError::boxed)?;
+        instructions.sync(false).map_err(CliError::boxed)?;
+
+        RepositoryConfig::load(&repository).map_err(CliError::boxed)?;
+        if skill.check().map_err(CliError::boxed)? != PortableSkillStatus::Current
+            || instructions
+                .check()
+                .map_err(CliError::boxed)?
+                .iter()
+                .any(|(_, status)| *status != InstructionStatus::Current)
+        {
+            return Err(CliError::message(
+                "initialization completed with non-current guidance; run docgraph instructions check",
+            ));
+        }
+    }
+
+    print_initialization(
+        repository.root(),
+        config_exists,
+        &changes,
+        create_documents.then_some(config.project.documents.root.as_path()),
+        dry_run,
+        json_output,
+    )
+}
+
+fn git_worktree_root() -> Result<PathBuf, CliError> {
+    let output = ProcessCommand::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .map_err(|error| {
+            CliError::message(format!("cannot run git to locate repository: {error}"))
+        })?;
+    if !output.status.success() {
+        return Err(CliError::message(
+            "docgraph init must run inside a Git worktree",
+        ));
+    }
+    let root = String::from_utf8(output.stdout)
+        .map_err(|_| CliError::message("Git worktree path is not valid UTF-8"))?;
+    fs::canonicalize(root.trim()).map_err(CliError::boxed)
+}
+
+fn normalized_relative_path(path: &Path, label: &str) -> Result<PathBuf, CliError> {
+    if path.is_absolute() {
+        return Err(CliError::message(format!(
+            "{label} must be repository-relative: {}",
+            path.display()
+        )));
+    }
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => normalized.push(value),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(CliError::message(format!(
+                    "{label} cannot escape the repository: {}",
+                    path.display()
+                )));
+            }
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        return Err(CliError::message(format!("{label} cannot be empty")));
+    }
+    Ok(normalized)
+}
+
+fn refuse_ambiguous_config_directory(path: &Path) -> Result<(), CliError> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let entries: Vec<_> = fs::read_dir(path)
+        .map_err(CliError::boxed)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    if entries.is_empty() {
+        Ok(())
+    } else {
+        Err(CliError::message(format!(
+            "{} exists without project.toml and contains {}; move or reconcile that state before init",
+            path.display(),
+            entries.join(", ")
+        )))
+    }
+}
+
+fn minimal_project_source(
+    name: &str,
+    documents: &Path,
+    instruction_targets: &[PathBuf],
+) -> Result<String, CliError> {
+    let documents = documents
+        .to_str()
+        .ok_or_else(|| CliError::message("document root is not valid UTF-8"))?;
+    let mut targets = toml_edit::Array::new();
+    for target in instruction_targets {
+        targets.push(
+            target
+                .to_str()
+                .ok_or_else(|| CliError::message("instruction target is not valid UTF-8"))?,
+        );
+    }
+    Ok(format!(
+        "schema_version = {SCHEMA_VERSION}\n\n[project]\nname = {}\n\n[documents]\nroot = {}\n\n[agent_instructions]\ntargets = {}\n",
+        Value::from(name),
+        Value::from(documents),
+        targets
+    ))
+}
+
+fn print_initialization(
+    root: &Path,
+    adopted: bool,
+    changes: &[docgraph_core::FileChange],
+    created_directory: Option<&Path>,
+    dry_run: bool,
+    json_output: bool,
+) -> Result<(), CliError> {
+    if json_output {
+        return print_json(json!({
+            "root": json_path(root),
+            "adopted": adopted,
+            "dry_run": dry_run,
+            "directories": created_directory.iter().map(|path| json_path(path)).collect::<Vec<_>>(),
+            "changes": changes.iter().map(|change| json!({
+                "path": json_path(&change.path),
+                "original": change.original,
+                "intended": change.intended,
+            })).collect::<Vec<_>>(),
+        }));
+    }
+    if changes.is_empty() && created_directory.is_none() {
+        println!("already initialized {}", root.display());
+        return Ok(());
+    }
+    if dry_run {
+        for change in changes {
+            println!("{}", render_patch(change));
+        }
+        if let Some(path) = created_directory {
+            println!("would create directory {}", path.display());
+        }
+    } else {
+        for change in changes {
+            let action = if change.original.is_some() {
+                "updated"
+            } else {
+                "created"
+            };
+            println!("{action} {}", change.path.display());
+        }
+        if let Some(path) = created_directory {
+            println!("created directory {}", path.display());
+        }
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]

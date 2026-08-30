@@ -60,6 +60,11 @@ predicate = "implements"
 target = "reference:config-grammar#s-GVPQBPMPBJ"
 
 [[docgraph_generated.incoming]]
+source = "task:bootstrap-docgraph-repositories"
+predicate = "implements"
+target = "reference:config-grammar"
+
+[[docgraph_generated.incoming]]
 source = "task:complete-safe-read-mutation-boundary"
 predicate = "implements"
 target = "reference:config-grammar#s-V5R4RB2AP1"
@@ -93,6 +98,11 @@ target = "reference:config-grammar"
 source = "reference:config-grammar"
 type = "affected_by"
 target = "issue:document-create-title-does-not-set-property"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar"
+type = "implemented_by"
+target = "task:bootstrap-docgraph-repositories"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar"
@@ -900,6 +910,7 @@ docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 ## 20. Generic CLI Escape Hatches
 
 ```bash
+docgraph init [--name <name>] [--documents <path>] [--instruction-target <path>]... [--dry-run]
 docgraph describe
 docgraph describe --all [--json]
 docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>] [--dry-run]
@@ -934,6 +945,20 @@ docgraph instructions check
 docgraph frontmatter sync [--dry-run]
 docgraph frontmatter check
 ```
+
+`docgraph init` must run inside a Git worktree. When `.docgraph/project.toml` is
+absent, it creates a minimal schema-versioned project using the worktree directory
+name, `docs`, and the default `AGENTS.md` and `CLAUDE.md` instruction targets unless
+the corresponding options override those values. It also installs the CLI-embedded
+portable skill, synchronizes each configured instruction target without replacing
+authored content, and creates the configured document root when missing.
+
+When a valid project file already exists, `init` adopts it byte-for-byte and only
+converges the skill and instruction targets. Explicit options must equal the existing
+configuration. A nonempty `.docgraph` directory without `project.toml`, invalid
+configuration, paths escaping the worktree, malformed instruction markers, or an
+incompatible skill causes refusal before writes. `--dry-run` reports every file and
+directory change without writing; repeated application to current state is a no-op.
 
 Property values are parsed against the entity type's declared schema. String values
 are passed directly; other scalar and array values use TOML syntax. Both operations

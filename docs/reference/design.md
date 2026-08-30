@@ -35,6 +35,11 @@ predicate = "implements"
 target = "reference:design#s-DRW3RR84VS"
 
 [[docgraph_generated.incoming]]
+source = "task:bootstrap-docgraph-repositories"
+predicate = "implements"
+target = "reference:design"
+
+[[docgraph_generated.incoming]]
 source = "task:complete-safe-read-mutation-boundary"
 predicate = "implements"
 target = "reference:design#s-B7542FYPRY"
@@ -63,6 +68,11 @@ target = "reference:design#s-FDMHXV5Q4Q"
 source = "task:version-portable-agent-skill"
 predicate = "implements"
 target = "reference:design"
+
+[[docgraph_generated.inverses]]
+source = "reference:design"
+type = "implemented_by"
+target = "task:bootstrap-docgraph-repositories"
 
 [[docgraph_generated.inverses]]
 source = "reference:design"
@@ -807,6 +817,13 @@ inspect
 → mutate
 → validate
 ```
+
+Repository onboarding uses the same safe maintenance boundaries. `docgraph init`
+locates the Git worktree, creates a minimal project only when no configuration can be
+adopted, installs the exact CLI-embedded skill contract, and synchronizes configured
+instruction targets while preserving authored bytes. It previews the complete change,
+is idempotent, adopts valid existing configuration without rewriting it, and refuses
+ambiguous or conflicting state before writing.
 
 <a id="s-Q30QTKRZQ6"></a>
 ### 11.2 Generated repository instructions

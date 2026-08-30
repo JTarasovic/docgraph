@@ -1,6 +1,8 @@
 # docgraph
 
-Use docgraph for repositories containing `.docgraph/project.toml`.
+Use docgraph for repository-native document graphs. In an unconfigured Git
+repository, preview `docgraph init --dry-run`, then run `docgraph init` to create
+the minimal configuration and install compatible guidance.
 
 - Inspect the model with `docgraph describe` before changing managed semantics.
 - Edit prose directly. Use docgraph commands for state, relationships, normalization, and generated frontmatter.

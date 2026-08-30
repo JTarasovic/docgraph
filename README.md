@@ -56,9 +56,19 @@ working-directory, change-aware validation, supported runners, and outputs.
 
 ## Quickstart
 
-docgraph operates on the configured `docs` corpus in the current repository.
-Run it from the repository root. A repository must have a `.docgraph/`
-configuration; this repository's `.docgraph/` directory is a working example.
+docgraph operates on the configured Markdown corpus in the current Git repository.
+From the repository root, preview and create the minimal configuration, compatible
+portable skill, agent guidance, and default `docs` directory:
+
+```text
+docgraph init --dry-run
+docgraph init
+```
+
+The default project name is the Git worktree directory name. Use `--name`,
+`--documents`, or repeated `--instruction-target` options to override new-project
+defaults. Existing valid configuration is adopted without rewriting it; conflicting
+options or ambiguous `.docgraph` state are refused.
 
 Inspect the model and validate the complete corpus first:
 

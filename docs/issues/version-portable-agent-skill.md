@@ -2,7 +2,7 @@
 
 id = "issue:version-portable-agent-skill"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Version and verify the portable agent skill"
@@ -46,5 +46,13 @@ preserves repository-local extensions.
 Release archives carry the same bundle, packaging rejects a mismatched skill/CLI
 version, and the release smoke test installs and verifies the skill in a clean
 fixture. Regression coverage exercises every status and repair boundary. The
-issue remains open until repository initialization is implemented and proves it
-uses this embedded installation contract.
+repository initializer now consumes that same embedded installation contract for
+both fresh and already-configured repositories, completing the compatibility path.
+
+<a id="s-SXB9C9HQC7"></a>
+## Resolution
+
+The portable skill has one versioned source, is embedded in and checked against the
+CLI, is included and verified in release archives, and is installed or repaired by
+both instruction maintenance and repository initialization without deleting
+repository-owned extensions.

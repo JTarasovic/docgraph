@@ -9,6 +9,26 @@ static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 struct Fixture(PathBuf);
 
 impl Fixture {
+    fn git(name: &str) -> Self {
+        let sequence = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+        let target = std::env::temp_dir().join(format!(
+            "docgraph-cli-{name}-{}-{sequence}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&target).unwrap();
+        let output = Command::new("git")
+            .current_dir(&target)
+            .args(["init", "--quiet"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git init: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Self(target)
+    }
+
     fn copy(name: &str) -> Self {
         let sequence = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
         let target = std::env::temp_dir().join(format!(
@@ -87,6 +107,128 @@ fn commit_fixture(fixture: &Fixture) {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+}
+
+#[test]
+fn init_previews_bootstraps_and_is_idempotent() {
+    let fixture = Fixture::git("init");
+    let agents = fixture.0.join("AGENTS.md");
+    let authored = "# Repository guidance\n\nKeep this prose.\n";
+    fs::write(&agents, authored).unwrap();
+
+    let preview = fixture.run(&["init", "--name", "example", "--dry-run"]);
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    let preview = String::from_utf8_lossy(&preview.stdout);
+    assert!(preview.contains(".docgraph/project.toml"));
+    assert!(preview.contains("skills/docgraph/SKILL.md"));
+    assert!(preview.contains("AGENTS.md"));
+    assert!(preview.contains("CLAUDE.md"));
+    assert!(preview.contains("would create directory docs"));
+    assert!(!fixture.0.join(".docgraph").exists());
+    assert!(!fixture.0.join("skills").exists());
+    assert!(!fixture.0.join("docs").exists());
+    assert_eq!(fs::read_to_string(&agents).unwrap(), authored);
+
+    let apply = fixture.run(&["init", "--name", "example"]);
+    assert!(
+        apply.status.success(),
+        "{}",
+        String::from_utf8_lossy(&apply.stderr)
+    );
+    let project = fs::read_to_string(fixture.0.join(".docgraph/project.toml")).unwrap();
+    assert!(project.contains("name = \"example\""));
+    assert!(project.contains("root = \"docs\""));
+    assert!(project.contains("targets = [\"AGENTS.md\", \"CLAUDE.md\"]"));
+    assert!(fixture.0.join("docs").is_dir());
+    assert!(fixture.0.join("skills/docgraph/skill.toml").is_file());
+    assert!(fixture.0.join("CLAUDE.md").is_file());
+    let agents_after = fs::read_to_string(&agents).unwrap();
+    assert!(agents_after.starts_with(authored));
+    assert!(agents_after.contains("<!-- docgraph:agent-instructions:v1:begin -->"));
+
+    let check = fixture.run(&["instructions", "check"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let validate = fixture.run(&["validate"]);
+    assert!(
+        validate.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validate.stderr)
+    );
+
+    let second = fixture.run(&["init"]);
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    assert!(String::from_utf8_lossy(&second.stdout).contains("already initialized"));
+    assert_eq!(
+        fs::read_to_string(fixture.0.join(".docgraph/project.toml")).unwrap(),
+        project
+    );
+    assert_eq!(fs::read_to_string(&agents).unwrap(), agents_after);
+}
+
+#[test]
+fn init_refuses_ambiguous_or_conflicting_existing_configuration() {
+    let ambiguous = Fixture::git("init-ambiguous");
+    fs::create_dir_all(ambiguous.0.join(".docgraph")).unwrap();
+    fs::write(ambiguous.0.join(".docgraph/entities.toml"), "").unwrap();
+    let refused = ambiguous.run(&["init"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("exists without project.toml"));
+    assert!(!ambiguous.0.join(".docgraph/project.toml").exists());
+    assert!(!ambiguous.0.join("skills").exists());
+
+    let configured = Fixture::git("init-configured");
+    let first = configured.run(&["init", "--name", "existing"]);
+    assert!(first.status.success());
+    let project_path = configured.0.join(".docgraph/project.toml");
+    let project = fs::read_to_string(&project_path).unwrap();
+    let conflict = configured.run(&["init", "--name", "different"]);
+    assert!(!conflict.status.success());
+    assert!(String::from_utf8_lossy(&conflict.stderr).contains("existing project name"));
+    assert_eq!(fs::read_to_string(project_path).unwrap(), project);
+}
+
+#[test]
+fn init_adopts_existing_configuration_without_rewriting_it() {
+    let fixture = Fixture::git("init-adopt");
+    fs::create_dir_all(fixture.0.join(".docgraph")).unwrap();
+    let project_path = fixture.0.join(".docgraph/project.toml");
+    let project = concat!(
+        "schema_version = 1\n\n",
+        "[project]\nname = \"adopted\"\n\n",
+        "[documents]\nroot = \"knowledge\"\n\n",
+        "[agent_instructions]\ntargets = [\"GUIDANCE.md\"]\n",
+    );
+    fs::write(&project_path, project).unwrap();
+    let guidance = fixture.0.join("GUIDANCE.md");
+    let authored = "# Local guidance\n\nKeep this text.\n";
+    fs::write(&guidance, authored).unwrap();
+
+    let apply = fixture.run(&["init"]);
+    assert!(
+        apply.status.success(),
+        "{}",
+        String::from_utf8_lossy(&apply.stderr)
+    );
+    assert_eq!(fs::read_to_string(project_path).unwrap(), project);
+    assert!(fixture.0.join("knowledge").is_dir());
+    assert!(fixture.0.join("skills/docgraph/skill.toml").is_file());
+    let guidance = fs::read_to_string(guidance).unwrap();
+    assert!(guidance.starts_with(authored));
+    assert!(guidance.contains("<!-- docgraph:agent-instructions:v1:begin -->"));
+    assert!(!fixture.0.join("AGENTS.md").exists());
+    assert!(!fixture.0.join("CLAUDE.md").exists());
 }
 
 #[test]

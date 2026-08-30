@@ -15,6 +15,21 @@ pub struct Repository {
 }
 
 impl Repository {
+    /// Constructs a repository handle for an exact root. Initialization uses
+    /// this before `.docgraph/project.toml` exists; ordinary callers should
+    /// prefer [`Self::discover`].
+    pub fn from_root(root: impl AsRef<Path>) -> Result<Self, DiscoveryError> {
+        let requested = root.as_ref();
+        let root = fs::canonicalize(requested).map_err(|source| DiscoveryError::Access {
+            path: requested.to_path_buf(),
+            source,
+        })?;
+        Ok(Self {
+            config_dir: root.join(CONFIG_DIRECTORY),
+            root,
+        })
+    }
+
     /// Finds `.docgraph/project.toml` at the enclosing Git worktree root. Outside
     /// Git, the nearest ancestor containing the file defines the repository root.
     pub fn discover(start: impl AsRef<Path>) -> Result<Self, DiscoveryError> {
