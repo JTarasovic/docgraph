@@ -38,24 +38,31 @@ Address [GitHub issue #9](https://github.com/JTarasovic/docgraph/issues/9) and
 <a id="s-FCBVZJFHME"></a>
 ## Outcome
 
-Humans can read named-query results and inspect a long document's structure directly,
-while automation retains complete stable structured output.
+Humans can read named-query and query-backed custom-command results and inspect a long
+document's structure directly, while automation retains complete stable structured
+output.
 
 <a id="s-B9GR3QQ3FT"></a>
 ## Scope
 
-- Render non-JSON named-query output as a table using declared column names and types.
+- Render non-JSON named-query and query-backed custom-command output as a table using
+  declared column names and types, including the repository's `docgraph next` command.
 - Preserve the current envelope for `--json` and document its stability contract.
 - Add an outline operation returning section ID, heading, level, parent, and line span.
 - Support a bounded way to inspect section content without returning an entire large
   subtree by default.
+- Use the commit-pinned
+  [measurement plan reproduction](https://github.com/neutrinos-os/neutrinos/blob/dd88eff9c2abd68a756a5009eb9b7a26392d941e/docs/plans/measurement.md)
+  from issue #10 to derive a representative deep-document regression fixture.
 
 <a id="s-GK2ZSPEE1T"></a>
 ## Acceptance
 
-- Default query output is a readable deterministic table for empty, narrow, and wide
-  result sets.
+- Default output from both `docgraph query` and query-backed custom commands is a
+  readable deterministic table for empty, narrow, and wide result sets.
 - JSON output remains machine-readable and contains query, column, and row metadata.
 - A document outline can be obtained without reading or grepping its Markdown file.
 - Outline and bounded-section results preserve stable IDs and hierarchy in text and
   JSON modes.
+- Regression coverage exercises a document comparable in size and hierarchy to the
+  reported measurement plan, not only minimal synthetic sections.
