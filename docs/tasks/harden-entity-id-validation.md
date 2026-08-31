@@ -2,7 +2,7 @@
 
 id = "task:harden-entity-id-validation"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Harden entity ID validation"
@@ -44,6 +44,6 @@ arguments, frontmatter, references, query results, and derived-state keys.
 
 - Spaces, path separators, empty local components, and other disallowed characters are
   rejected before a managed write.
-- Existing valid IDs using letters, digits, dots, underscores, and hyphens continue to
-  work across platforms.
+- Existing valid IDs using RFC 3986 unreserved ASCII characters continue to work
+  across platforms; the local component begins with a letter or digit.
 - Validation and CLI tests exercise both authored files and mutation commands.

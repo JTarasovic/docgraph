@@ -8,6 +8,7 @@ mod embedding;
 mod external;
 mod generated_frontmatter;
 mod graph;
+mod identity;
 mod instructions;
 mod mutation;
 mod repository;

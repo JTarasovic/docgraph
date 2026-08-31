@@ -1,3 +1,4 @@
+use crate::identity::validate_entity_id;
 use crate::{
     ArgumentMode, CommandOperation, DiagnosticSeverity, GeneratedFrontmatterIndex, GraphIndex,
     GraphLocation, GraphNode, PropertyConfig, PropertyType, RelationOrigin, Repository,
@@ -515,15 +516,10 @@ impl<'a> Validator<'a> {
                 );
                 continue;
             };
-            if !entity.id.starts_with(&format!("{}:", entity.entity_type))
-                || entity.id.len() == entity.entity_type.len() + 1
-            {
+            if let Err(error) = validate_entity_id(&entity.id, &entity.entity_type) {
                 self.error(
                     "invalid-entity-id",
-                    format!(
-                        "entity ID {:?} must use <type>:<id> for type {:?}",
-                        entity.id, entity.entity_type
-                    ),
+                    format!("entity ID {:?} {error}", entity.id),
                     (&entity.location).into(),
                 );
             }
@@ -965,6 +961,37 @@ mod tests {
         );
 
         assert!(fixture.validate().is_valid());
+    }
+
+    #[test]
+    fn reports_the_offending_entity_id_local_construct() {
+        for (id, expected) in [
+            ("task:", "empty local component"),
+            ("task:.hidden", "starts with disallowed character '.'"),
+            ("task:has space", "contains disallowed character ' '"),
+            ("task:has/slash", "contains disallowed character '/'"),
+            ("task:has\\slash", "contains disallowed character '\\\\'"),
+            ("task:naïve", "contains disallowed character 'ï'"),
+        ] {
+            let fixture = Fixture::new(&format!(
+                "+++\nid = {id:?}\ntype = \"task\"\nstate = \"open\"\n[properties]\ntitle = \"Ship\"\n+++\n<a id=\"s-83JRT4K2P6\"></a>\n# Task\n"
+            ));
+            let report = fixture.validate();
+            let diagnostic = report
+                .errors()
+                .find(|diagnostic| diagnostic.code == "invalid-entity-id")
+                .unwrap();
+            assert!(
+                diagnostic.message.contains(expected),
+                "{} did not contain {expected:?}",
+                diagnostic.message
+            );
+        }
+
+        let valid = Fixture::new(
+            "+++\nid = \"task:Alpha-2_beta.v3~draft\"\ntype = \"task\"\nstate = \"open\"\n[properties]\ntitle = \"Ship\"\n+++\n<a id=\"s-83JRT4K2P6\"></a>\n# Task\n",
+        );
+        assert!(valid.validate().is_valid());
     }
 
     #[test]

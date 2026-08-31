@@ -362,7 +362,16 @@ requirement:R17
 incident:2026-08-14-api-failure
 ```
 
-The complete string is the canonical identity.
+The complete string is the canonical identity. The prefix must exactly equal the
+declared entity type followed by `:`. The local component uses the portable grammar
+`[A-Za-z0-9][A-Za-z0-9._~-]*`: it starts with an ASCII letter or digit, followed by
+zero or more RFC 3986 unreserved ASCII characters. IDs are case-sensitive.
+
+This grammar keeps canonical IDs usable as unquoted CLI arguments and URL components
+without conflating them with paths, URI fragments, or percent-encoded text. Unicode
+text is not silently normalized into an ID. Existing authored IDs outside the grammar
+remain readable enough to produce an `invalid-entity-id` diagnostic naming the first
+offending construct; create and adoption mutations reject them before writing.
 
 <a id="s-0EHC9MBVXE"></a>
 ## 6. Documents

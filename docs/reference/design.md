@@ -469,6 +469,15 @@ spec:retry
 
 Moving the file must not change identity.
 
+Canonical entity IDs use `<type>:<local>`, where the prefix exactly matches the
+declared entity type and the local component matches
+`[A-Za-z0-9][A-Za-z0-9._~-]*`. This is the RFC 3986 unreserved ASCII set with an
+alphanumeric first-character rule, so IDs remain unambiguous in CLI arguments, URLs,
+frontmatter, references, and derived-state keys. IDs are case-sensitive; Unicode is
+not implicitly normalized or transliterated. Authored violations receive precise
+validation diagnostics, and identity-creating mutations reject violations before a
+managed write.
+
 <a id="s-37AYRK3RZR"></a>
 ### 5.1 Sections
 

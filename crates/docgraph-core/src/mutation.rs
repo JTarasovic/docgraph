@@ -1,3 +1,4 @@
+use crate::identity::validate_entity_id;
 use crate::{
     CanonicalCorpus, CommandEmbeddingProvider, CorpusFile, DerivedState, GraphIndex, GraphNode,
     RelationOrigin, Repository, RepositoryConfig, RepositoryFingerprint, Validator,
@@ -1264,6 +1265,7 @@ fn create_document(
     let entity = config.entities.get(entity_type).ok_or_else(|| {
         MutationError::InvalidRequest(format!("unknown entity type {entity_type:?}"))
     })?;
+    require_valid_entity_id(id, entity_type)?;
     let mut properties = properties.clone();
     if entity.property.contains_key("title") {
         let title_value = toml_edit::Value::from(title.trim());
@@ -1556,6 +1558,7 @@ fn adopt_documents(
         let entity_config = config.entities.get(&adoption.entity_type).ok_or_else(|| {
             MutationError::InvalidRequest(format!("unknown entity type {:?}", adoption.entity_type))
         })?;
+        require_valid_entity_id(&adoption.id, &adoption.entity_type)?;
         let workflow = entity_config
             .workflow
             .as_deref()
@@ -1653,6 +1656,12 @@ fn adopt_document(
         let frontmatter = frame_content(&frontmatter, newline);
         Ok(format!("+++{newline}{frontmatter}+++{newline}{source}"))
     }
+}
+
+fn require_valid_entity_id(id: &str, entity_type: &str) -> Result<(), MutationError> {
+    validate_entity_id(id, entity_type).map_err(|error| {
+        MutationError::InvalidRequest(format!("invalid entity ID {id:?}: {error}"))
+    })
 }
 
 fn relations_mut<'a>(

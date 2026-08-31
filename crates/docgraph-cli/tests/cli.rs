@@ -385,6 +385,87 @@ fn property_repair_unblocks_tightened_enums_without_weakening_validation() {
 }
 
 #[test]
+fn entity_id_local_components_are_portable_and_rejected_before_writes() {
+    let fixture = Fixture::copy("synthetic");
+    let adopted_path = fixture.0.join("docs/adopt-invalid.md");
+    let original = "# Adopt invalid\n";
+    fs::write(&adopted_path, original).unwrap();
+
+    for id in [
+        "florp:",
+        "florp:.hidden",
+        "florp:has/slash",
+        "florp:has space",
+    ] {
+        let output = fixture.run(&[
+            "adopt",
+            "docs/adopt-invalid.md",
+            "--id",
+            id,
+            "--type",
+            "florp",
+            "--dry-run",
+        ]);
+        assert!(!output.status.success(), "invalid ID {id:?} was accepted");
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("invalid entity ID"), "{error}");
+        assert_eq!(fs::read_to_string(&adopted_path).unwrap(), original);
+    }
+    fs::remove_file(&adopted_path).unwrap();
+
+    let created_path = fixture.0.join("docs/created.md");
+    let from_title = fixture.run(&[
+        "document",
+        "create",
+        "docs/created.md",
+        "--id",
+        "florp:Generated Title",
+        "--type",
+        "florp",
+        "--title",
+        "Generated Title",
+    ]);
+    assert!(!from_title.status.success());
+    assert!(String::from_utf8_lossy(&from_title.stderr).contains("disallowed character ' '"));
+    assert!(!created_path.exists());
+
+    let valid = fixture.run(&[
+        "document",
+        "create",
+        "docs/created.md",
+        "--id",
+        "florp:Alpha-2_beta.v3~draft",
+        "--type",
+        "florp",
+        "--title",
+        "Portable ID",
+    ]);
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stderr)
+    );
+    assert!(
+        fs::read_to_string(created_path)
+            .unwrap()
+            .contains("id = \"florp:Alpha-2_beta.v3~draft\"")
+    );
+
+    let authored_path = fixture.0.join("docs/florp.md");
+    let authored = fs::read_to_string(&authored_path).unwrap();
+    fs::write(
+        authored_path,
+        authored.replacen("id = \"florp:1\"", "id = \"florp:has/slash\"", 1),
+    )
+    .unwrap();
+    let validation = fixture.run(&["validate"]);
+    assert!(!validation.status.success());
+    let output = String::from_utf8_lossy(&validation.stdout);
+    assert!(output.contains("invalid-entity-id"), "{output}");
+    assert!(output.contains("disallowed character '/'"), "{output}");
+}
+
+#[test]
 fn document_commands_create_move_and_safely_delete() {
     let fixture = Fixture::copy("synthetic");
     let created = fixture.0.join("docs/created.md");
