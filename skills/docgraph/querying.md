@@ -1,7 +1,12 @@
 # Querying
 
 Use `get`, `neighbors`, `path`, and `search` for generic retrieval. Use
-`docgraph query <name> --arg name=value --json` for configured inference. Structured
+`docgraph query <name> --arg name=value` for a human-readable typed table, or add
+`--json` for the stable query/columns/rows envelope. Query-backed repository commands
+use the same two output modes. Use `docgraph outline <entity>` to enumerate stable
+section IDs, headings, levels, parents, and line spans before reading a long document.
+`docgraph get <stable-section>` returns 40 content lines by default; select another
+positive limit with `--lines` or opt into the complete body with `--all`. Structured
 results distinguish explicit relations, Markdown links, and search matches.
 
 Repository rules in `.docgraph/logic.dl` may call these built-in predicates. The

@@ -945,6 +945,91 @@ fn yaml_frontmatter_is_diagnosed_migrated_then_adopted() {
 }
 
 #[test]
+fn long_document_outline_and_bounded_section_reads_preserve_hierarchy() {
+    let fixture = Fixture::copy("synthetic");
+    let path = fixture.0.join("docs/long-plan.md");
+    let headings = [
+        "Measurement overview",
+        "The finding",
+        "The cost model",
+        "Probe contract",
+        "Invariant tests",
+        "Boot criteria",
+        "Terminology",
+        "Order and rationale",
+        "Excluded work",
+        "Tier value",
+        "Settled decisions",
+    ];
+    let mut source = String::from(
+        "+++\n\nid = \"florp:outline\"\ntype = \"florp\"\nstate = \"queued\"\n\n[properties]\ntitle = \"Long plan\"\n\n+++\n",
+    );
+    for (index, heading) in headings.iter().enumerate() {
+        let marker = if index == 0 { "#" } else { "##" };
+        source.push_str(&format!(
+            "<a id=\"s-{index:010}\"></a>\n{marker} {heading}\n"
+        ));
+        for line in 1..=22 {
+            source.push_str(&format!("Representative detail {index}.{line}.\n"));
+        }
+        source.push('\n');
+    }
+    assert!((270..=310).contains(&source.lines().count()));
+    fs::write(path, source).unwrap();
+
+    let outline = fixture.run(&["--json", "outline", "florp:outline"]);
+    assert!(
+        outline.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&outline.stdout),
+        String::from_utf8_lossy(&outline.stderr)
+    );
+    let outline: Value = serde_json::from_slice(&outline.stdout).unwrap();
+    let sections = outline["sections"].as_array().unwrap();
+    assert_eq!(sections.len(), headings.len());
+    let root = "florp:outline#s-0000000000";
+    assert_eq!(sections[0]["id"], root);
+    assert_eq!(sections[0]["parent"], Value::Null);
+    assert_eq!(sections[0]["level"], 1);
+    assert!(sections[0]["span"]["end_line"].as_u64().unwrap() >= 270);
+    assert!(
+        sections[1..]
+            .iter()
+            .all(|section| section["level"] == 2 && section["parent"] == root)
+    );
+
+    let outline_text = fixture.run(&["outline", "florp:outline"]);
+    assert!(outline_text.status.success());
+    let outline_text = String::from_utf8_lossy(&outline_text.stdout);
+    assert!(outline_text.starts_with("id"));
+    assert!(outline_text.contains("level"));
+    assert!(outline_text.contains("parent"));
+    assert!(outline_text.contains("Measurement overview"));
+
+    let bounded = fixture.run(&["--json", "get", root]);
+    assert!(bounded.status.success());
+    let bounded: Value = serde_json::from_slice(&bounded.stdout).unwrap();
+    assert_eq!(bounded["id"], root);
+    assert_eq!(bounded["parent"], Value::Null);
+    assert_eq!(bounded["content_lines"], 40);
+    assert_eq!(bounded["content_truncated"], true);
+    assert!(bounded["span"]["line_count"].as_u64().unwrap() > 250);
+
+    let bounded_text = fixture.run(&["get", root, "--lines", "3"]);
+    assert!(bounded_text.status.success());
+    let bounded_text = String::from_utf8_lossy(&bounded_text.stdout);
+    assert!(bounded_text.starts_with(root));
+    assert!(bounded_text.contains("parent: (none)"));
+    assert!(bounded_text.contains("content truncated"));
+
+    let complete = fixture.run(&["--json", "get", root, "--all"]);
+    assert!(complete.status.success());
+    let complete: Value = serde_json::from_slice(&complete.stdout).unwrap();
+    assert_eq!(complete["content_truncated"], false);
+    assert_eq!(complete["content_lines"], complete["span"]["line_count"]);
+}
+
+#[test]
 fn structured_describe_validate_and_unavailable_query_are_stable() {
     let fixture = Fixture::copy("synthetic");
 
@@ -1227,6 +1312,21 @@ fn configured_logic_runtime_executes_a_typed_query() {
     assert_eq!(scalars["rows"][0]["boolean"], true);
     assert_eq!(scalars["rows"][0]["text"], "left\tright");
 
+    let scalar_table = fixture.run(&["query", "scalar_values"]);
+    assert!(scalar_table.status.success());
+    let scalar_table = String::from_utf8_lossy(&scalar_table.stdout);
+    assert!(scalar_table.starts_with("integer"));
+    assert!(scalar_table.contains("(integer)"));
+    assert!(scalar_table.contains("(boolean)"));
+    assert!(scalar_table.contains("left\\tright"));
+    assert!(!scalar_table.contains("{\"integer\""));
+
+    let empty_table = fixture.run(&["query", "grommit_targets", "--arg", "florp=florp:3"]);
+    assert!(empty_table.status.success());
+    let empty_table = String::from_utf8_lossy(&empty_table.stdout);
+    assert!(empty_table.starts_with("target"));
+    assert!(empty_table.contains("(string)"));
+
     let document = fixture.0.join("docs/florp.md");
     let before = fs::read_to_string(&document).unwrap();
     let preview = fixture.run(&["property", "set", "florp:1", "count", "8", "--dry-run"]);
@@ -1358,6 +1458,14 @@ fn repository_commands_appear_in_help_and_dispatch_named_queries() {
     let output: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(output["query"], "ready_florps_command");
     assert_eq!(output["rows"][0]["florp"], "florp:1");
+
+    let table = fixture.run(&["florp", "ready"]);
+    assert!(table.status.success());
+    let table = String::from_utf8_lossy(&table.stdout);
+    assert!(table.starts_with("florp"));
+    assert!(table.contains("(entity)"));
+    assert!(table.contains("florp:1"));
+    assert!(!table.contains("{\"florp\""));
 
     let filtered = fixture.run(&["--json", "florp", "ready", "--label", "odd"]);
     assert!(filtered.status.success());

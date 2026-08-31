@@ -914,7 +914,24 @@ invocation is:
 docgraph query task_blockers --arg task=task:184
 ```
 
-`--json` returns a stable envelope whose columns appear in declared output order:
+Without `--json`, named queries render a deterministic table. The first row contains
+the declared output names, the second their declared types, and values follow in
+query-result order. Empty results still print the name, type, and separator rows, so
+their shape remains visible. Tabs, newlines, carriage returns, and backslashes inside
+values are escaped to keep every result on one terminal row. Query-backed repository
+commands use the same renderer.
+
+```text
+blocker  reason
+(entity) (string)
+-------  ----------------
+task:17  awaiting adr:42
+```
+
+`--json` returns the stable machine-readable envelope whose columns appear in
+declared output order. The envelope keys, column metadata, typed JSON scalars, and row
+objects are the compatibility contract for both generic and query-backed repository
+commands:
 
 ```json
 {
@@ -1016,7 +1033,8 @@ docgraph document delete <entity> [--dry-run]
 docgraph section split <stable-section> --at-line <line> --title <title> [--dry-run]
 docgraph section merge <stable-section> --into <stable-section> [--dry-run]
 docgraph section delete <stable-section> [--dry-run]
-docgraph get <entity-or-stable-section>
+docgraph get <entity-or-stable-section> [--lines <count> | --all]
+docgraph outline <entity>
 docgraph search <query>
 docgraph semantic-search <query> [--limit <count>]
 docgraph transition <entity> <state>
@@ -1086,6 +1104,15 @@ and descendants. Merge and delete refuse durable managed references involving a
 retired section or surviving Markdown links targeting one; those references must be
 removed or retargeted first. Section operations use prospective validation, recovery
 journaling, generated-frontmatter convergence, and structured dry-run output.
+
+`outline` lists every stable section in document order without returning section
+content. Text output is a table; `--json` returns `entity`, `document`, and `sections`,
+where each section contains `id`, `heading`, `level`, `parent`, and a one-based `span`
+with start, end, and line count. `get` returns at most 40 lines of stable-section
+content by default, reports whether the content was truncated, and retains the full
+section span and parent identity. `--lines` selects another positive bound and `--all`
+opts into the complete section body. These content options are rejected for entities
+and external identities rather than silently ignored.
 
 <a id="s-RVDXZTQY4X"></a>
 ## 21. Introspection

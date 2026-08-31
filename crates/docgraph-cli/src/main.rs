@@ -88,7 +88,17 @@ enum Command {
         name: Option<String>,
     },
     /// Retrieve an entity or stable section and its direct graph context.
-    Get { reference: String },
+    Get {
+        reference: String,
+        /// Maximum content lines returned for a stable section. Defaults to 40.
+        #[arg(long, value_name = "COUNT", conflicts_with = "all")]
+        lines: Option<usize>,
+        /// Return the complete stable-section content.
+        #[arg(long)]
+        all: bool,
+    },
+    /// List a managed entity's stable-section hierarchy.
+    Outline { entity: String },
     /// Full-text search indexed documents and sections.
     Search {
         query: String,
@@ -612,9 +622,17 @@ fn run(cli: Cli) -> Result<(), CliError> {
             let context = Context::load()?;
             describe(&context.config, all, kind, name.as_deref(), cli.json)
         }
-        Command::Get { reference } => {
+        Command::Get {
+            reference,
+            lines,
+            all,
+        } => {
             let context = Context::load()?;
-            get(&context, &reference, cli.json)
+            get(&context, &reference, lines, all, cli.json)
+        }
+        Command::Outline { entity } => {
+            let context = Context::load()?;
+            outline(&context, &entity, cli.json)
         }
         Command::Search { query, limit } => {
             let context = Context::load()?;
@@ -1720,20 +1738,107 @@ fn command_operation_json(operation: &CommandOperation) -> JsonValue {
     }
 }
 
-fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliError> {
+fn get(
+    context: &Context,
+    reference: &str,
+    lines: Option<usize>,
+    all: bool,
+    json_output: bool,
+) -> Result<(), CliError> {
     let node = resolve_graph_reference(&context.graph, reference)?;
     let value = if let GraphNode::ExternalUri(identity) = &node {
+        if lines.is_some() || all {
+            return Err(CliError::message(
+                "--lines and --all are only supported for stable sections",
+            ));
+        }
         external_context_value(&context.resolve_external(identity, true)?)
+    } else if let GraphNode::Section(index) = &node {
+        let limit = if all { None } else { Some(lines.unwrap_or(40)) };
+        if limit == Some(0) {
+            return Err(CliError::message("--lines must be greater than zero"));
+        }
+        section_context_value(context, *index, limit)
     } else {
+        if lines.is_some() || all {
+            return Err(CliError::message(
+                "--lines and --all are only supported for stable sections",
+            ));
+        }
         node_context_value(context, &node)
     };
     if json_output {
         print_json(value)
+    } else if matches!(node, GraphNode::Section(_)) {
+        print_section_context(&value)
     } else {
         println!(
             "{}",
             serde_json::to_string_pretty(&value).map_err(CliError::boxed)?
         );
+        Ok(())
+    }
+}
+
+fn outline(context: &Context, entity_id: &str, json_output: bool) -> Result<(), CliError> {
+    let entity = context
+        .graph
+        .entities
+        .iter()
+        .find(|entity| entity.id == entity_id)
+        .ok_or_else(|| CliError::message(format!("managed entity {entity_id:?} does not exist")))?;
+    let document = &context.graph.documents[entity.document];
+    let sections: Vec<_> = context
+        .graph
+        .sections
+        .iter()
+        .enumerate()
+        .filter(|(_, section)| section.document == entity.document)
+        .map(|(index, section)| {
+            let line_count = section.location.span.line_count();
+            json!({
+                "id": node_name(&context.graph, &GraphNode::Section(index)),
+                "heading": section.heading,
+                "level": section.level,
+                "parent": section.parent.map(|parent| node_name(&context.graph, &GraphNode::Section(parent))),
+                "span": {
+                    "start_line": section.location.span.start_line,
+                    "end_line": section_end_line(section),
+                    "line_count": line_count,
+                },
+            })
+        })
+        .collect();
+    if json_output {
+        print_json(json!({
+            "entity": entity.id,
+            "document": json_path(&document.path),
+            "sections": sections,
+        }))
+    } else {
+        let columns = [
+            ("id".to_owned(), None),
+            ("level".to_owned(), None),
+            ("parent".to_owned(), None),
+            ("lines".to_owned(), None),
+            ("heading".to_owned(), None),
+        ];
+        let rows = sections
+            .iter()
+            .map(|section| {
+                vec![
+                    section["id"].as_str().unwrap_or_default().to_owned(),
+                    section["level"].to_string(),
+                    section["parent"].as_str().unwrap_or_default().to_owned(),
+                    format!(
+                        "{}-{}",
+                        section["span"]["start_line"], section["span"]["end_line"]
+                    ),
+                    section["heading"].as_str().unwrap_or_default().to_owned(),
+                ]
+            })
+            .collect::<Vec<_>>();
+        println!("{}", render_table(&columns, &rows));
         Ok(())
     }
 }
@@ -1761,35 +1866,7 @@ fn node_context_value(context: &Context, node: &GraphNode) -> JsonValue {
             "relations": relation_context(&context.graph, node),
         })
     } else if let GraphNode::Section(index) = *node {
-        let section = &context.graph.sections[index];
-        let document = &context.graph.documents[section.document];
-        let file = context
-            .corpus
-            .files
-            .iter()
-            .find(|file| file.path == document.path)
-            .expect("graph documents originate in the corpus");
-        let line_count = section.location.span.line_count();
-        let end_line = section
-            .location
-            .span
-            .start_line
-            .saturating_add(line_count.saturating_sub(1));
-        json!({
-            "kind": "section",
-            "id": node_name(&context.graph, node),
-            "heading": section.heading,
-            "level": section.level,
-            "document": json_path(&document.path),
-            "parent": section.parent.map(|parent| node_name(&context.graph, &GraphNode::Section(parent))),
-            "span": {
-                "start_line": section.location.span.start_line,
-                "end_line": end_line,
-                "line_count": line_count,
-            },
-            "content": &file.content[section.location.span.bytes.clone()],
-            "relations": relation_context(&context.graph, node),
-        })
+        section_context_value(context, index, None)
     } else if let GraphNode::Document(index) = *node {
         json!({
             "kind": "document",
@@ -1807,6 +1884,87 @@ fn node_context_value(context: &Context, node: &GraphNode) -> JsonValue {
     } else {
         unreachable!("all graph node kinds are covered")
     }
+}
+
+fn section_context_value(context: &Context, index: usize, line_limit: Option<usize>) -> JsonValue {
+    let section = &context.graph.sections[index];
+    let document = &context.graph.documents[section.document];
+    let file = context
+        .corpus
+        .files
+        .iter()
+        .find(|file| file.path == document.path)
+        .expect("graph documents originate in the corpus");
+    let content = &file.content[section.location.span.bytes.clone()];
+    let (content, content_truncated, returned_lines) = line_limit.map_or_else(
+        || (content, false, content.lines().count()),
+        |limit| bounded_lines(content, limit),
+    );
+    let line_count = section.location.span.line_count();
+    json!({
+        "kind": "section",
+        "id": node_name(&context.graph, &GraphNode::Section(index)),
+        "heading": section.heading,
+        "level": section.level,
+        "document": json_path(&document.path),
+        "parent": section.parent.map(|parent| node_name(&context.graph, &GraphNode::Section(parent))),
+        "span": {
+            "start_line": section.location.span.start_line,
+            "end_line": section_end_line(section),
+            "line_count": line_count,
+        },
+        "content": content,
+        "content_lines": returned_lines,
+        "content_truncated": content_truncated,
+        "relations": relation_context(&context.graph, &GraphNode::Section(index)),
+    })
+}
+
+fn section_end_line(section: &docgraph_core::SectionNode) -> usize {
+    section
+        .location
+        .span
+        .start_line
+        .saturating_add(section.location.span.line_count().saturating_sub(1))
+}
+
+fn bounded_lines(content: &str, limit: usize) -> (&str, bool, usize) {
+    let mut line_count = 0;
+    for (index, byte) in content.bytes().enumerate() {
+        if byte == b'\n' {
+            line_count += 1;
+            if line_count == limit {
+                let end = index + 1;
+                return (&content[..end], end < content.len(), line_count);
+            }
+        }
+    }
+    let returned_lines = line_count + usize::from(!content.is_empty() && !content.ends_with('\n'));
+    (content, false, returned_lines)
+}
+
+fn print_section_context(value: &JsonValue) -> Result<(), CliError> {
+    println!("{}", value["id"].as_str().unwrap_or_default());
+    println!("heading: {}", value["heading"].as_str().unwrap_or_default());
+    println!("level: {}", value["level"]);
+    println!("parent: {}", value["parent"].as_str().unwrap_or("(none)"));
+    println!(
+        "lines: {}-{} (showing {} of {})",
+        value["span"]["start_line"],
+        value["span"]["end_line"],
+        value["content_lines"],
+        value["span"]["line_count"],
+    );
+    println!();
+    let content = value["content"].as_str().unwrap_or_default();
+    print!("{content}");
+    if !content.ends_with('\n') {
+        println!();
+    }
+    if value["content_truncated"].as_bool() == Some(true) {
+        println!("... content truncated; use --all or increase --lines");
+    }
+    Ok(())
 }
 
 fn external_context_value(view: &ExternalEntityView) -> JsonValue {
@@ -2410,28 +2568,53 @@ fn execute_query(
         .map_err(CliError::boxed)?
         .execute(name, inputs)
         .map_err(CliError::boxed)?;
-    let columns: Vec<_> = result
-        .columns
-        .iter()
-        .map(|column| json!({ "name": column.name, "type": query_type_name(column.value_type) }))
-        .collect();
-    let rows: Vec<_> = result
-        .rows
-        .iter()
-        .map(|row| {
-            JsonValue::Object(
-                row.iter()
-                    .map(|(key, value)| (key.clone(), query_value_json(value)))
-                    .collect(),
-            )
-        })
-        .collect();
     if json_output {
+        let columns: Vec<_> = result
+            .columns
+            .iter()
+            .map(
+                |column| json!({ "name": column.name, "type": query_type_name(column.value_type) }),
+            )
+            .collect();
+        let rows: Vec<_> = result
+            .rows
+            .iter()
+            .map(|row| {
+                JsonValue::Object(
+                    row.iter()
+                        .map(|(key, value)| (key.clone(), query_value_json(value)))
+                        .collect(),
+                )
+            })
+            .collect();
         print_json(json!({ "query": result.query, "columns": columns, "rows": rows }))
     } else {
-        for row in rows {
-            println!("{}", serde_json::to_string(&row).map_err(CliError::boxed)?);
-        }
+        let columns = result
+            .columns
+            .iter()
+            .map(|column| {
+                (
+                    column.name.clone(),
+                    Some(query_type_name(column.value_type).to_owned()),
+                )
+            })
+            .collect::<Vec<_>>();
+        let rows = result
+            .rows
+            .iter()
+            .map(|row| {
+                result
+                    .columns
+                    .iter()
+                    .map(|column| {
+                        row.get(&column.name)
+                            .map(query_value_text)
+                            .unwrap_or_default()
+                    })
+                    .collect()
+            })
+            .collect::<Vec<Vec<_>>>();
+        println!("{}", render_table(&columns, &rows));
         Ok(())
     }
 }
@@ -2845,6 +3028,106 @@ fn query_value_json(value: &QueryValue) -> JsonValue {
     }
 }
 
+fn query_value_text(value: &QueryValue) -> String {
+    match value {
+        QueryValue::String(value)
+        | QueryValue::Datetime(value)
+        | QueryValue::Entity(value)
+        | QueryValue::Section(value) => value.clone(),
+        QueryValue::Integer(value) => value.to_string(),
+        QueryValue::Float(value) => value.to_string(),
+        QueryValue::Boolean(value) => value.to_string(),
+    }
+}
+
+fn render_table(columns: &[(String, Option<String>)], rows: &[Vec<String>]) -> String {
+    let display_rows = rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|cell| escape_table_cell(cell))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let type_row = columns
+        .iter()
+        .map(|(_, value_type)| {
+            value_type
+                .as_ref()
+                .map_or_else(String::new, |value_type| format!("({value_type})"))
+        })
+        .collect::<Vec<_>>();
+    let widths = columns
+        .iter()
+        .enumerate()
+        .map(|(index, (name, _))| {
+            display_rows
+                .iter()
+                .filter_map(|row| row.get(index))
+                .chain(std::iter::once(name))
+                .chain(std::iter::once(&type_row[index]))
+                .map(|value| value.chars().count())
+                .max()
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>();
+    let mut output = String::new();
+    push_table_row(
+        &mut output,
+        &columns
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>(),
+        &widths,
+    );
+    output.push('\n');
+    if type_row.iter().any(|value| !value.is_empty()) {
+        push_table_row(
+            &mut output,
+            &type_row.iter().map(String::as_str).collect::<Vec<_>>(),
+            &widths,
+        );
+        output.push('\n');
+    }
+    output.push_str(
+        &widths
+            .iter()
+            .map(|width| "-".repeat(*width))
+            .collect::<Vec<_>>()
+            .join("  "),
+    );
+    for row in &display_rows {
+        output.push('\n');
+        push_table_row(
+            &mut output,
+            &row.iter().map(String::as_str).collect::<Vec<_>>(),
+            &widths,
+        );
+    }
+    output
+}
+
+fn push_table_row(output: &mut String, cells: &[&str], widths: &[usize]) {
+    for (index, width) in widths.iter().enumerate() {
+        if index > 0 {
+            output.push_str("  ");
+        }
+        let cell = cells.get(index).copied().unwrap_or_default();
+        output.push_str(cell);
+        if index + 1 < widths.len() {
+            output.push_str(&" ".repeat(width.saturating_sub(cell.chars().count())));
+        }
+    }
+}
+
+fn escape_table_cell(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n")
+        .replace('\t', "\\t")
+}
+
 fn print_semantic_search(
     context: &Context,
     query: &str,
@@ -2957,5 +3240,32 @@ mod tests {
         let patch = render_patch(&change);
         assert!(patch.contains("-old\n+new"));
         assert!(!patch.contains("+tail"));
+    }
+
+    #[test]
+    fn text_tables_preserve_declared_columns_types_and_empty_shapes() {
+        let columns = [
+            ("id".to_owned(), Some("entity".to_owned())),
+            ("reason".to_owned(), Some("string".to_owned())),
+        ];
+        let populated = render_table(
+            &columns,
+            &[vec!["task:1".to_owned(), "left\tright".to_owned()]],
+        );
+        assert_eq!(
+            populated,
+            "id        reason\n(entity)  (string)\n--------  -----------\ntask:1    left\\tright"
+        );
+        assert_eq!(
+            render_table(&columns, &[]),
+            "id        reason\n(entity)  (string)\n--------  --------"
+        );
+    }
+
+    #[test]
+    fn bounded_section_content_preserves_source_line_endings() {
+        let content = "one\r\ntwo\r\nthree\r\n";
+        assert_eq!(bounded_lines(content, 2), ("one\r\ntwo\r\n", true, 2));
+        assert_eq!(bounded_lines(content, 4), (content, false, 3));
     }
 }

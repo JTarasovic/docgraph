@@ -2,7 +2,7 @@
 
 id = "task:improve-query-and-section-inspection"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Improve query and section inspection"
