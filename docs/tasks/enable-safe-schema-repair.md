@@ -2,7 +2,7 @@
 
 id = "task:enable-safe-schema-repair"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Enable safe schema repair"

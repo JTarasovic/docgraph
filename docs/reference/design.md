@@ -956,23 +956,32 @@ refresh index
 
 If prospective validation fails, canonical files remain unchanged.
 
+An explicit property-repair mutation is the narrow exception when a schema change has
+already made the canonical corpus invalid. It compares error multisets keyed by path,
+code, and message and proceeds only when the prospective multiset is a strict subset
+of the original: the mutation removes at least one error and introduces, transforms,
+or duplicates none. Ordinary mutations continue to require a fully valid prospective
+repository.
+
 The lock serializes docgraph mutations within a worktree. Hash verification prevents
 the tool from overwriting affected files changed since inspection. The repository
 fingerprint covers only canonical graph inputs, so changes elsewhere in the worktree
 do not delay a mutation. If another canonical input changes, docgraph reloads the
 complete graph, reapplies the patch, and validates the new candidate. It continues
-when that candidate remains valid and otherwise aborts without writing. Retries are
-bounded so continuous edits cannot starve the operation indefinitely.
+only when the original validation policy still holds and otherwise aborts without
+writing. Retries are bounded so continuous edits cannot starve the operation
+indefinitely.
 
-The recovery journal records the original and intended state of every affected path,
-including path absence for creates and deletes,
-and the canonical-input fingerprint. Recovery classifies each affected file as
-original, intended, or unknown. It may automatically roll forward only when no file
-is unknown and the intended result validates against the current complete graph. If
-a file matches neither journaled state, recovery stops without overwriting it and
-reports the files requiring manual resolution. An interrupted mutation is handled
-before another mutation or query proceeds. The journal and lock are per-worktree
-derived state and are not committed.
+The recovery journal records the validation policy, the original and intended state
+of every affected path (including path absence for creates and deletes), and the
+canonical-input fingerprint. Recovery classifies each affected file as original,
+intended, or unknown. It may automatically roll forward only when no file is unknown
+and the intended result satisfies the journaled validation policy against the current
+complete graph. Repair recovery reconstructs both complete corpora and repeats the
+strict error-reduction proof. If a file matches neither journaled state, recovery
+stops without overwriting it and reports the files requiring manual resolution. An
+interrupted mutation is handled before another mutation or query proceeds. The
+journal and lock are per-worktree derived state and are not committed.
 
 The derived database is updated only after the canonical files are replaced. It
 records a repository fingerprint, and a query must refresh or reject an index whose

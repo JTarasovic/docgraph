@@ -286,6 +286,105 @@ fn adopt_previews_then_manages_an_existing_document() {
 }
 
 #[test]
+fn property_repair_unblocks_tightened_enums_without_weakening_validation() {
+    let fixture = Fixture::copy("synthetic");
+    let entities_path = fixture.0.join(".docgraph/entities.toml");
+    let entities = fs::read_to_string(&entities_path).unwrap();
+    fs::write(
+        &entities_path,
+        format!(
+            "{entities}\n[entity.florp.property.impact]\ntype = \"string\"\nrequired = true\nvalues = [\"critical\"]\n"
+        ),
+    )
+    .unwrap();
+    for (name, impact) in [
+        ("florp.md", "high"),
+        ("florp-two.md", "high"),
+        ("florp-three.md", "critical"),
+    ] {
+        let path = fixture.0.join("docs").join(name);
+        let source = fs::read_to_string(&path).unwrap();
+        fs::write(
+            path,
+            source.replacen(
+                "[properties]\n",
+                &format!("[properties]\nimpact = \"{impact}\"\n"),
+                1,
+            ),
+        )
+        .unwrap();
+    }
+
+    let strict = fixture.run(&["property", "set", "florp:1", "impact", "critical"]);
+    assert!(!strict.status.success());
+    assert!(
+        String::from_utf8_lossy(&strict.stderr)
+            .contains("florp:2\" property \"impact\" does not match")
+    );
+
+    let first_path = fixture.0.join("docs/florp.md");
+    let before = fs::read_to_string(&first_path).unwrap();
+    let preview = fixture.run(&[
+        "property",
+        "set",
+        "florp:1",
+        "impact",
+        "critical",
+        "--repair",
+        "--dry-run",
+    ]);
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    assert_eq!(fs::read_to_string(&first_path).unwrap(), before);
+
+    let first = fixture.run(&[
+        "property", "set", "florp:1", "impact", "critical", "--repair",
+    ]);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let still_invalid = fixture.run(&["validate"]);
+    assert!(!still_invalid.status.success());
+    assert!(String::from_utf8_lossy(&still_invalid.stdout).contains("florp:2"));
+
+    let transforms_error = fixture.run(&["property", "unset", "florp:2", "impact", "--repair"]);
+    assert!(!transforms_error.status.success());
+    assert!(
+        String::from_utf8_lossy(&transforms_error.stderr)
+            .contains("would introduce or worsen validation errors")
+    );
+
+    let second = fixture.run(&[
+        "property", "set", "florp:2", "impact", "critical", "--repair",
+    ]);
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    let valid = fixture.run(&["validate"]);
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stdout)
+    );
+
+    let unnecessary = fixture.run(&[
+        "property", "set", "florp:1", "impact", "critical", "--repair",
+    ]);
+    assert!(!unnecessary.status.success());
+    assert!(
+        String::from_utf8_lossy(&unnecessary.stderr)
+            .contains("repository has no existing validation errors")
+    );
+}
+
+#[test]
 fn document_commands_create_move_and_safely_delete() {
     let fixture = Fixture::copy("synthetic");
     let created = fixture.0.join("docs/created.md");

@@ -142,9 +142,22 @@ impl MutationService {
     }
 
     pub fn plan(&self, request: &MutationRequest) -> Result<MutationPlan, MutationError> {
+        self.plan_with_validation(request, false)
+    }
+
+    pub fn plan_repair(&self, request: &MutationRequest) -> Result<MutationPlan, MutationError> {
+        self.plan_with_validation(request, true)
+    }
+
+    fn plan_with_validation(
+        &self,
+        request: &MutationRequest,
+        repair: bool,
+    ) -> Result<MutationPlan, MutationError> {
+        validate_repair_request(request, repair)?;
         let corpus = CanonicalCorpus::load(&self.repository, &self.config)
             .map_err(|error| MutationError::Corpus(error.to_string()))?;
-        self.plan_against(request, &corpus)
+        self.plan_against(request, &corpus, repair)
     }
 
     pub fn apply(
@@ -152,8 +165,26 @@ impl MutationService {
         request: &MutationRequest,
         dry_run: bool,
     ) -> Result<MutationPlan, MutationError> {
+        self.apply_with_validation(request, dry_run, false)
+    }
+
+    pub fn apply_repair(
+        &self,
+        request: &MutationRequest,
+        dry_run: bool,
+    ) -> Result<MutationPlan, MutationError> {
+        self.apply_with_validation(request, dry_run, true)
+    }
+
+    fn apply_with_validation(
+        &self,
+        request: &MutationRequest,
+        dry_run: bool,
+        repair: bool,
+    ) -> Result<MutationPlan, MutationError> {
+        validate_repair_request(request, repair)?;
         if dry_run {
-            return self.plan(request);
+            return self.plan_with_validation(request, repair);
         }
         fs::create_dir_all(&self.state.paths.directory)
             .map_err(|source| MutationError::io(&self.state.paths.directory, source))?;
@@ -164,7 +195,7 @@ impl MutationService {
         // changes that occurred between inspection and mutation.
         let current = CanonicalCorpus::load(&self.repository, &self.config)
             .map_err(|error| MutationError::Corpus(error.to_string()))?;
-        let plan = self.plan_against(request, &current)?;
+        let plan = self.plan_against(request, &current, repair)?;
         if plan.is_empty() {
             let graph = GraphIndex::build(&current, &self.config);
             self.state
@@ -184,7 +215,7 @@ impl MutationService {
             }
         }
 
-        let journal = Journal::from_plan(&plan);
+        let journal = Journal::from_plan(&plan, repair);
         let journal_source = toml_edit::ser::to_string(&journal)
             .map_err(|error| MutationError::Journal(error.to_string()))?;
         fs::write(&self.state.paths.recovery_journal, journal_source)
@@ -238,6 +269,7 @@ impl MutationService {
         &self,
         request: &MutationRequest,
         corpus: &CanonicalCorpus,
+        repair: bool,
     ) -> Result<MutationPlan, MutationError> {
         let graph = GraphIndex::build(corpus, &self.config);
         let mut contents: BTreeMap<PathBuf, String> = corpus
@@ -576,7 +608,11 @@ impl MutationService {
             &candidate,
             &candidate_graph,
         );
-        if !report.is_valid() {
+        if repair {
+            let original_report =
+                Validator::validate_corpus(&self.repository, &self.config, corpus, &graph);
+            validate_repair_reports(&original_report, &report)?;
+        } else if !report.is_valid() {
             return Err(MutationError::ProspectiveValidation(
                 report
                     .errors()
@@ -642,22 +678,38 @@ impl MutationService {
         }
         let corpus = CanonicalCorpus::load(&self.repository, &self.config)
             .map_err(|error| MutationError::Corpus(error.to_string()))?;
-        let mut contents: BTreeMap<_, _> = corpus
+        let mut original_contents: BTreeMap<_, _> = corpus
             .files
             .iter()
             .map(|file| (file.path.clone(), file.content.clone()))
             .collect();
+        let mut intended_contents = original_contents.clone();
         for file in &journal.file {
             if let Some(intended) = &file.intended {
-                contents.insert(file.path.clone(), intended.clone());
+                intended_contents.insert(file.path.clone(), intended.clone());
             } else {
-                contents.remove(&file.path);
+                intended_contents.remove(&file.path);
+            }
+            if let Some(original) = &file.original {
+                original_contents.insert(file.path.clone(), original.clone());
+            } else {
+                original_contents.remove(&file.path);
             }
         }
-        let candidate = candidate_corpus(&corpus, &contents)?;
+        let candidate = candidate_corpus(&corpus, &intended_contents)?;
         let graph = GraphIndex::build(&candidate, &self.config);
         let report = Validator::validate_corpus(&self.repository, &self.config, &candidate, &graph);
-        if !report.is_valid() {
+        if journal.repair {
+            let original = candidate_corpus(&corpus, &original_contents)?;
+            let original_graph = GraphIndex::build(&original, &self.config);
+            let original_report = Validator::validate_corpus(
+                &self.repository,
+                &self.config,
+                &original,
+                &original_graph,
+            );
+            validate_repair_reports(&original_report, &report)?;
+        } else if !report.is_valid() {
             return Err(MutationError::ProspectiveValidation(
                 report
                     .errors()
@@ -675,6 +727,73 @@ impl MutationService {
             .map_err(|source| MutationError::io(&self.state.paths.recovery_journal, source))?;
         Ok(())
     }
+}
+
+fn validate_repair_request(request: &MutationRequest, repair: bool) -> Result<(), MutationError> {
+    if repair
+        && !matches!(
+            request,
+            MutationRequest::SetEntityProperty { .. }
+                | MutationRequest::RemoveEntityProperty { .. }
+        )
+    {
+        return Err(MutationError::InvalidRequest(
+            "repair validation is only supported for entity property mutations".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_repair_reports(
+    original: &crate::ValidationReport,
+    prospective: &crate::ValidationReport,
+) -> Result<(), MutationError> {
+    let original_errors = validation_error_multiset(original);
+    let prospective_errors = validation_error_multiset(prospective);
+    if original_errors.is_empty() {
+        return Err(MutationError::UnsafeRepair(
+            "the repository has no existing validation errors; omit --repair".to_owned(),
+        ));
+    }
+
+    let introduced: Vec<_> = prospective_errors
+        .iter()
+        .filter(|(diagnostic, count)| {
+            original_errors.get(*diagnostic).copied().unwrap_or(0) < **count
+        })
+        .map(|((path, code, message), _)| format!("{}: {code}: {message}", path.display()))
+        .collect();
+    if !introduced.is_empty() {
+        return Err(MutationError::UnsafeRepair(format!(
+            "the mutation would introduce or worsen validation errors: {}",
+            introduced.join("; ")
+        )));
+    }
+
+    let original_count: usize = original_errors.values().sum();
+    let prospective_count: usize = prospective_errors.values().sum();
+    if prospective_count >= original_count {
+        return Err(MutationError::UnsafeRepair(format!(
+            "the mutation must strictly reduce the validation error count (before: {original_count}, after: {prospective_count})"
+        )));
+    }
+    Ok(())
+}
+
+fn validation_error_multiset(
+    report: &crate::ValidationReport,
+) -> BTreeMap<(PathBuf, &'static str, String), usize> {
+    let mut errors = BTreeMap::new();
+    for diagnostic in report.errors() {
+        *errors
+            .entry((
+                diagnostic.location.path.clone(),
+                diagnostic.code,
+                diagnostic.message.clone(),
+            ))
+            .or_insert(0) += 1;
+    }
+    errors
 }
 
 fn unique_entity<'a>(
@@ -1645,6 +1764,8 @@ fn acquire_state_lock(path: &Path) -> Result<StateLock, MutationError> {
 #[derive(Debug, Deserialize, Serialize)]
 struct Journal {
     fingerprint: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    repair: bool,
     file: Vec<JournalFile>,
 }
 
@@ -1656,9 +1777,10 @@ struct JournalFile {
 }
 
 impl Journal {
-    fn from_plan(plan: &MutationPlan) -> Self {
+    fn from_plan(plan: &MutationPlan, repair: bool) -> Self {
         Self {
             fingerprint: plan.fingerprint.to_string(),
+            repair,
             file: plan
                 .changes
                 .iter()
@@ -1685,6 +1807,7 @@ pub enum MutationError {
         to: String,
     },
     ProspectiveValidation(Vec<String>),
+    UnsafeRepair(String),
     ConcurrentEdit(PathBuf),
     CanonicalInputsChanged,
     Locked(PathBuf),
@@ -1730,6 +1853,7 @@ impl fmt::Display for MutationError {
                 "prospective repository is invalid: {}",
                 errors.join("; ")
             ),
+            Self::UnsafeRepair(message) => write!(formatter, "unsafe repair: {message}"),
             Self::ConcurrentEdit(path) => {
                 write!(formatter, "{} changed during mutation", path.display())
             }
@@ -1810,6 +1934,39 @@ mod tests {
             .unwrap();
             Self(root)
         }
+
+        fn tighten_impact_enum(&self) {
+            fs::write(
+                self.0.join(".docgraph/entities.toml"),
+                "[entity.task]\ndescription = \"Task\"\nworkflow = \"task\"\n[entity.task.property.impact]\ntype = \"string\"\nrequired = true\nvalues = [\"critical\", \"high\"]\n",
+            )
+            .unwrap();
+            for name in ["one.md", "two.md"] {
+                let path = self.0.join("docs").join(name);
+                let source = fs::read_to_string(&path).unwrap();
+                fs::write(
+                    &path,
+                    source.replace(
+                        "state = \"open\"\n",
+                        "state = \"open\"\n\n[properties]\nimpact = \"high\"\n",
+                    ),
+                )
+                .unwrap();
+            }
+            MutationService::open(&self.0)
+                .unwrap()
+                .apply(&MutationRequest::SyncFrontmatter, false)
+                .unwrap();
+            let entities = fs::read_to_string(self.0.join(".docgraph/entities.toml")).unwrap();
+            fs::write(
+                self.0.join(".docgraph/entities.toml"),
+                entities.replace(
+                    "values = [\"critical\", \"high\"]",
+                    "values = [\"critical\"]",
+                ),
+            )
+            .unwrap();
+        }
     }
 
     impl Drop for Fixture {
@@ -1841,6 +1998,114 @@ mod tests {
         assert!(after.contains("[docgraph_generated]\nschema_version = 1"));
         assert!(!service.state.paths.recovery_journal.exists());
         assert!(service.state.paths.index.exists());
+    }
+
+    #[test]
+    fn property_repair_strictly_reduces_existing_validation_errors() {
+        let fixture = Fixture::new();
+        fixture.tighten_impact_enum();
+        let service = MutationService::open(&fixture.0).unwrap();
+        let request = MutationRequest::SetEntityProperty {
+            entity: "task:1".to_owned(),
+            property: "impact".to_owned(),
+            value: toml_edit::Value::from("critical"),
+        };
+
+        assert!(matches!(
+            service.plan(&request),
+            Err(MutationError::ProspectiveValidation(_))
+        ));
+        let before = fs::read_to_string(fixture.0.join("docs/one.md")).unwrap();
+        let preview = service.apply_repair(&request, true).unwrap();
+        assert!(!preview.is_empty());
+        assert_eq!(
+            fs::read_to_string(fixture.0.join("docs/one.md")).unwrap(),
+            before
+        );
+
+        service.apply_repair(&request, false).unwrap();
+        assert!(
+            fs::read_to_string(fixture.0.join("docs/one.md"))
+                .unwrap()
+                .contains("impact = \"critical\"")
+        );
+        assert!(
+            fs::read_to_string(fixture.0.join("docs/two.md"))
+                .unwrap()
+                .contains("impact = \"high\"")
+        );
+
+        let no_progress = MutationRequest::SetEntityProperty {
+            entity: "task:2".to_owned(),
+            property: "impact".to_owned(),
+            value: toml_edit::Value::from("high"),
+        };
+        assert!(matches!(
+            service.plan_repair(&no_progress),
+            Err(MutationError::UnsafeRepair(_))
+        ));
+        let transforms_error = MutationRequest::RemoveEntityProperty {
+            entity: "task:2".to_owned(),
+            property: "impact".to_owned(),
+        };
+        assert!(matches!(
+            service.plan_repair(&transforms_error),
+            Err(MutationError::UnsafeRepair(_))
+        ));
+
+        let final_repair = MutationRequest::SetEntityProperty {
+            entity: "task:2".to_owned(),
+            property: "impact".to_owned(),
+            value: toml_edit::Value::from("critical"),
+        };
+        service.apply_repair(&final_repair, false).unwrap();
+        assert!(
+            Validator::validate_corpus(
+                &service.repository,
+                &service.config,
+                &CanonicalCorpus::load(&service.repository, &service.config).unwrap(),
+                &GraphIndex::build(
+                    &CanonicalCorpus::load(&service.repository, &service.config).unwrap(),
+                    &service.config,
+                ),
+            )
+            .is_valid()
+        );
+        assert!(matches!(
+            service.plan_repair(&final_repair),
+            Err(MutationError::UnsafeRepair(_))
+        ));
+    }
+
+    #[test]
+    fn recovery_rolls_forward_an_interrupted_property_repair() {
+        let fixture = Fixture::new();
+        fixture.tighten_impact_enum();
+        let service = MutationService::open(&fixture.0).unwrap();
+        let request = MutationRequest::SetEntityProperty {
+            entity: "task:1".to_owned(),
+            property: "impact".to_owned(),
+            value: toml_edit::Value::from("critical"),
+        };
+        let plan = service.plan_repair(&request).unwrap();
+        fs::create_dir_all(&service.state.paths.directory).unwrap();
+        fs::write(
+            &service.state.paths.recovery_journal,
+            toml_edit::ser::to_string(&Journal::from_plan(&plan, true)).unwrap(),
+        )
+        .unwrap();
+        let first = &plan.changes[0];
+        write_file_state(&fixture.0.join(&first.path), first.intended.as_deref()).unwrap();
+
+        service.recover_pending().unwrap();
+
+        for change in &plan.changes {
+            assert_eq!(
+                read_optional_file(&fixture.0.join(&change.path)).unwrap(),
+                change.intended
+            );
+        }
+        assert!(!service.state.paths.recovery_journal.exists());
     }
 
     #[test]
@@ -2079,7 +2344,7 @@ mod tests {
         let plan = service.plan(&create).unwrap();
         fs::write(
             &service.state.paths.recovery_journal,
-            toml_edit::ser::to_string(&Journal::from_plan(&plan)).unwrap(),
+            toml_edit::ser::to_string(&Journal::from_plan(&plan, false)).unwrap(),
         )
         .unwrap();
         let created = plan
@@ -2099,7 +2364,7 @@ mod tests {
         let plan = service.plan(&delete).unwrap();
         fs::write(
             &service.state.paths.recovery_journal,
-            toml_edit::ser::to_string(&Journal::from_plan(&plan)).unwrap(),
+            toml_edit::ser::to_string(&Journal::from_plan(&plan, false)).unwrap(),
         )
         .unwrap();
         fs::remove_file(fixture.0.join("docs/three.md")).unwrap();
@@ -2377,7 +2642,7 @@ mod tests {
         fs::create_dir_all(&service.state.paths.directory).unwrap();
         fs::write(
             &service.state.paths.recovery_journal,
-            toml_edit::ser::to_string(&Journal::from_plan(&plan)).unwrap(),
+            toml_edit::ser::to_string(&Journal::from_plan(&plan, false)).unwrap(),
         )
         .unwrap();
         let first = &plan.changes[0];
@@ -2413,7 +2678,7 @@ mod tests {
         fs::create_dir_all(&service.state.paths.directory).unwrap();
         fs::write(
             &service.state.paths.recovery_journal,
-            toml_edit::ser::to_string(&Journal::from_plan(&plan)).unwrap(),
+            toml_edit::ser::to_string(&Journal::from_plan(&plan, false)).unwrap(),
         )
         .unwrap();
         let conflict = &plan.changes[0];

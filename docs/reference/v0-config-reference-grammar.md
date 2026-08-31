@@ -981,8 +981,8 @@ docgraph search <query>
 docgraph semantic-search <query> [--limit <count>]
 docgraph transition <entity> <state>
 docgraph workflow initialize <entity-type> [--dry-run]
-docgraph property set <entity> <property> <value>
-docgraph property unset <entity> <property>
+docgraph property set <entity> <property> <value> [--repair] [--dry-run]
+docgraph property unset <entity> <property> [--repair] [--dry-run]
 docgraph relate <source> <relation> <target>
 docgraph unrelate <source> <relation> <target>
 docgraph neighbors <entity-or-stable-section> [--all]
@@ -1018,6 +1018,15 @@ directory change without writing; repeated application to current state is a no-
 Property values are parsed against the entity type's declared schema. String values
 are passed directly; other scalar and array values use TOML syntax. Both operations
 support `--dry-run` and the standard structured output envelope.
+
+Property mutations normally require the complete prospective repository to be valid.
+`--repair` is an explicit exception for a repository that already has validation
+errors after a schema change. It accepts the mutation only when the prospective error
+multiset is a strict subset of the original error multiset: at least one error must be
+removed, and no error may be introduced, transformed, or duplicated. Diagnostic
+identity comprises path, code, and message. A successful repair may leave unrelated
+pre-existing errors for later repair; using `--repair` on a valid repository or for a
+mutation that makes no progress is rejected.
 
 When an entity type declares a `title` property, `document create --title` populates
 it as well as the document heading. A conflicting explicit title property is
@@ -1095,17 +1104,21 @@ and validates the complete candidate state before writing and refuses to overwri
 an affected file changed since inspection. Immediately before writing it compares a
 fingerprint of canonical graph inputs. Non-canonical worktree changes are ignored. If
 another canonical input changed, the tool reloads the complete graph, reapplies the
-patch, and revalidates with a bounded retry; it continues only if the new candidate
-is valid.
+patch, and revalidates with a bounded retry. Ordinary mutations continue only if the
+new candidate is valid. A property mutation explicitly requested with `--repair`
+continues only if it still strictly reduces the reloaded repository's error multiset
+without introducing or worsening an error.
 
 Before replacing files through temporary files, the tool records a recovery journal
 containing the canonical-input fingerprint and the original and intended state of
 each affected path, including absence for creates and deletes. Recovery may
 automatically roll forward only when every affected
-file still matches one of those states and the intended result validates against the
-current complete graph. If a file matches neither state, recovery must not overwrite
-it and must report that manual resolution is required. Interrupted mutations are
-handled before later operations proceed.
+file still matches one of those states and the intended result satisfies the validation
+policy recorded by the journal. Repair recovery reconstructs both the original and
+intended complete corpora from the journal and repeats the strict error-reduction
+proof. If a file matches neither state, recovery must not overwrite it and must report
+that manual resolution is required. Interrupted mutations are handled before later
+operations proceed.
 
 The derived index is refreshed after canonical files are replaced. Queries must not
 silently use an index whose recorded repository fingerprint differs from the current

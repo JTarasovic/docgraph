@@ -1846,12 +1846,18 @@ enum PropertyAction {
         entity: String,
         property: String,
         value: String,
+        /// Allow this mutation only when it strictly reduces existing validation errors.
+        #[arg(long)]
+        repair: bool,
         #[arg(long)]
         dry_run: bool,
     },
     Unset {
         entity: String,
         property: String,
+        /// Allow this mutation only when it strictly reduces existing validation errors.
+        #[arg(long)]
+        repair: bool,
         #[arg(long)]
         dry_run: bool,
     },
@@ -2049,18 +2055,20 @@ fn mutate(request: MutationRequest, dry_run: bool, json_output: bool) -> Result<
 }
 
 fn property(action: PropertyAction, json_output: bool) -> Result<(), CliError> {
-    let (entity, property, raw_value, dry_run) = match action {
+    let (entity, property, raw_value, repair, dry_run) = match action {
         PropertyAction::Set {
             entity,
             property,
             value,
+            repair,
             dry_run,
-        } => (entity, property, Some(value), dry_run),
+        } => (entity, property, Some(value), repair, dry_run),
         PropertyAction::Unset {
             entity,
             property,
+            repair,
             dry_run,
-        } => (entity, property, None, dry_run),
+        } => (entity, property, None, repair, dry_run),
     };
     let context = Context::load()?;
     let node = context
@@ -2097,7 +2105,15 @@ fn property(action: PropertyAction, json_output: bool) -> Result<(), CliError> {
             })
         },
     )?;
-    mutate(request, dry_run, json_output)
+    if repair {
+        let service = MutationService::open(".").map_err(CliError::boxed)?;
+        let plan = service
+            .apply_repair(&request, dry_run)
+            .map_err(CliError::boxed)?;
+        print_plan(&plan, dry_run, json_output)
+    } else {
+        mutate(request, dry_run, json_output)
+    }
 }
 
 fn review(reference: &str, json_output: bool) -> Result<(), CliError> {
