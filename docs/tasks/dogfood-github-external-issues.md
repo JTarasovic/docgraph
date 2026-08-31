@@ -2,7 +2,7 @@
 
 id = "task:dogfood-github-external-issues"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Conform and dogfood GitHub external issues"
@@ -53,3 +53,11 @@ issue documents merely to make the dogfood scenario pass.
 - Retrieval labels remote provenance and freshness consistently.
 - A warm cache remains useful offline and an empty cache preserves external identities.
 - No remote mutation or duplicate local issue record is required.
+
+<a id="s-Z11Z2HE7NP"></a>
+## Result
+
+Configured the repository's GitHub source and credential-helper path, then exercised
+all ten open reports through `docgraph next`. Exact retrieval, context, full-text
+search, and semantic fallback return derived records from GitHub without local issue
+documents or remote mutation; automated provider tests remain network-independent.

@@ -2,7 +2,7 @@
 
 id = "task:define-external-entity-source-contract"
 type = "task"
-state = "ready"
+state = "done"
 
 [properties]
 title = "Define the external entity source contract"
@@ -76,3 +76,10 @@ no forge-specific changes in graph construction or retrieval.
 - Generic code consumes provider-neutral records and errors.
 - Configuration never persists credentials in canonical or derived repository data.
 - The contract defines the facts repository logic may explicitly map into workflows.
+
+<a id="s-GCBE1WGXW0"></a>
+## Result
+
+Implemented the provider-neutral record, capability, error, freshness, trust, and
+configuration contract. A fake source proves deterministic offline identity plus
+live, cached, stale, and identity-only behavior without forge-specific graph code.

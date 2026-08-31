@@ -111,6 +111,19 @@ Use `docgraph search "term"`, `docgraph get <entity>`, `docgraph neighbors
 full command and configuration reference, see
 [`docs/reference/v0-config-reference-grammar.md`](docs/reference/v0-config-reference-grammar.md).
 
+Configured external entity sources can enrich canonical forge identities without
+copying remote content into Markdown. For GitHub, add an `external_entities` source
+to `.docgraph/project.toml`; public reads need no token, while authenticated or
+higher-rate-limit reads use the environment variable named by `token_env` (for
+example `GITHUB_TOKEN`). Private repositories may instead configure an explicit
+credential helper such as `token_command = ["gh", "auth", "token"]`; the returned
+token is held in memory only. `get` refreshes one requested identity and project queries or
+search refresh the configured repository with one bounded request after the cache
+TTL. Warm cache entries remain available offline and are labeled stale when refresh
+fails; an empty cache still preserves the canonical external identity. Delete the
+per-worktree docgraph state at any time to rebuild derived data without losing
+authored semantics.
+
 ## Safe editing boundary
 
 Markdown prose is directly editable. Managed identity, properties, workflow

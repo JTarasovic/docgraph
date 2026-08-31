@@ -2,7 +2,7 @@
 
 id = "plan:deliver-external-entity-sources"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Deliver external entity sources"
@@ -208,3 +208,12 @@ ordinary retrieval commands, and continue using its stable external identity whe
 network or credentials are unavailable. No remote content becomes canonical, no live
 network is required by conformance tests, and the ten current reports remain hosted
 only in GitHub.
+
+<a id="s-73Q3RX06Q9"></a>
+## Result
+
+Delivered the provider-neutral source boundary, per-worktree external cache, read-only
+GitHub issue source, exact/context/text/vector retrieval integration, and restricted
+logic facts. This repository explicitly maps its open GitHub reports into `next_work`;
+all ten reports remain canonical only in GitHub, while deterministic conformance tests
+run without live network access.

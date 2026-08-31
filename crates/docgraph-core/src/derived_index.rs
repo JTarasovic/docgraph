@@ -1,7 +1,7 @@
 use crate::{
-    CanonicalCorpus, EmbeddingConfig, EmbeddingError, EmbeddingFallback, EmbeddingProvider,
-    GraphIndex, GraphNode, RelationOrigin, RepositoryFingerprint, SemanticSearchHit,
-    SemanticSearchMode, SemanticSearchResult,
+    CanonicalCorpus, DerivedExternalEntity, EmbeddingConfig, EmbeddingError, EmbeddingFallback,
+    EmbeddingProvider, GraphIndex, GraphNode, RelationOrigin, RepositoryFingerprint,
+    SemanticSearchHit, SemanticSearchMode, SemanticSearchResult,
 };
 use docgraph_markdown::searchable_markdown;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -116,11 +116,22 @@ pub struct DerivedSearchHit {
     pub snippet: String,
 }
 
+#[cfg(test)]
 pub(crate) fn build(
     path: &Path,
     fingerprint: RepositoryFingerprint,
     corpus: &CanonicalCorpus,
     graph: &GraphIndex,
+) -> rusqlite::Result<()> {
+    build_with_external(path, fingerprint, corpus, graph, &[])
+}
+
+pub(crate) fn build_with_external(
+    path: &Path,
+    fingerprint: RepositoryFingerprint,
+    corpus: &CanonicalCorpus,
+    graph: &GraphIndex,
+    external: &[DerivedExternalEntity],
 ) -> rusqlite::Result<()> {
     initialize_sqlite_vec()?;
     let mut connection = Connection::open(path)?;
@@ -131,8 +142,35 @@ pub(crate) fn build(
         "INSERT INTO metadata(key, value) VALUES ('fingerprint', ?1)",
         [fingerprint.to_string()],
     )?;
-    populate(&transaction, corpus, graph)?;
+    transaction.execute(
+        "INSERT INTO metadata(key, value) VALUES ('external_fingerprint', ?1)",
+        [external_fingerprint(external)],
+    )?;
+    populate(&transaction, corpus, graph, external)?;
     transaction.commit()
+}
+
+pub(crate) fn recorded_external_fingerprint(path: &Path) -> rusqlite::Result<Option<String>> {
+    initialize_sqlite_vec()?;
+    let connection = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    metadata(&connection, "external_fingerprint")
+}
+
+pub(crate) fn external_fingerprint(external: &[DerivedExternalEntity]) -> String {
+    let mut records: Vec<_> = external.iter().collect();
+    records.sort_by(|left, right| left.record.identity.cmp(&right.record.identity));
+    let mut hasher = blake3::Hasher::new();
+    for record in records {
+        hasher.update(record.record.identity.as_bytes());
+        hasher.update(&[0]);
+        hasher.update(
+            serde_json::to_string(&record.record)
+                .expect("external records serialize")
+                .as_bytes(),
+        );
+        hasher.update(&[0xff]);
+    }
+    hasher.finalize().to_hex().to_string()
 }
 
 pub(crate) fn recorded_fingerprint(path: &Path) -> rusqlite::Result<Option<RepositoryFingerprint>> {
@@ -481,6 +519,7 @@ fn populate(
     transaction: &Transaction<'_>,
     corpus: &CanonicalCorpus,
     graph: &GraphIndex,
+    external: &[DerivedExternalEntity],
 ) -> rusqlite::Result<()> {
     for (document_key, document) in graph.documents.iter().enumerate() {
         transaction.execute(
@@ -613,6 +652,28 @@ fn populate(
                 params![relation_key as i64, name, value.to_string()],
             )?;
         }
+    }
+    for entity in external {
+        let record = &entity.record;
+        let attributes = record
+            .attributes
+            .iter()
+            .map(|(name, value)| format!("{name}: {value}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let content = format!(
+            "{}\n{}\nstate: {}\nauthor: {}\n{}",
+            record.title,
+            record.body,
+            record.state,
+            record.author.as_deref().unwrap_or_default(),
+            attributes,
+        );
+        let content_hash = blake3::hash(content.as_bytes());
+        transaction.execute(
+            "INSERT INTO search_entries(node, content, content_hash) VALUES (?1, ?2, ?3)",
+            params![record.identity, content, content_hash.as_bytes()],
+        )?;
     }
     Ok(())
 }
@@ -753,7 +814,42 @@ mod tests {
         assert!(hits[0].snippet.contains("Exponential backoff"));
         assert!(structured_hits.is_empty());
 
+        let external_database = database.with_extension("external.sqlite");
+        let external = DerivedExternalEntity {
+            record: crate::ExternalEntityRecord {
+                identity: "github:issue:github.test/owner/repo:7".to_owned(),
+                provider: "github".to_owned(),
+                remote_kind: "issue".to_owned(),
+                title: "External retry defect".to_owned(),
+                body: "Remote-only backpressure token".to_owned(),
+                state: "open".to_owned(),
+                author: Some("octo".to_owned()),
+                created_at: None,
+                updated_at: None,
+                url: "https://github.test/owner/repo/issues/7".to_owned(),
+                attributes: BTreeMap::new(),
+            },
+            fetched_at: 100,
+            freshness: crate::ExternalFreshness::Fresh,
+            provider_version: None,
+        };
+        build_with_external(
+            &external_database,
+            fingerprint,
+            &corpus,
+            &graph,
+            std::slice::from_ref(&external),
+        )
+        .unwrap();
+        let external_hits = search(&external_database, "backpressure", 5).unwrap();
+        assert_eq!(external_hits[0].node, external.record.identity);
+        assert_eq!(
+            recorded_external_fingerprint(&external_database).unwrap(),
+            Some(external_fingerprint(&[external]))
+        );
+
         fs::remove_file(database).unwrap();
+        fs::remove_file(external_database).unwrap();
     }
 
     struct RecordingProvider {

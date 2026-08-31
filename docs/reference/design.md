@@ -583,22 +583,42 @@ remote issue or change content does not become canonical repository Markdown.
 <a id="s-WCDD32CNPK"></a>
 ### 6.3.1 Derived external reference data
 
-A future external-entity source may resolve a canonical external identity into a
-provider-neutral record containing its kind, title, body, state, author, timestamps,
-URL, and provider-defined attributes. Implementations may expose read, search, and
-mutation capabilities independently; reference normalization must not depend on any
-of them.
+An external-entity source resolves a canonical external identity into a
+provider-neutral `ExternalEntityRecord`. The record contains canonical identity,
+provider, remote kind, title, body, state, author, created and updated timestamps,
+URL, and provider-defined string attributes. Sources advertise read, repository
+search, and mutation capabilities independently. Reference normalization is a
+separate offline operation and never depends on source registration, credentials,
+cache state, or network access.
 
-Fetched records belong in the per-worktree derived store with provider, identity,
-fetch time, and freshness metadata. They may contribute to `get`, `context`, search,
-and vector retrieval, but must be labeled as derived so callers can distinguish them
-from repository-authored facts. Provider state must not satisfy repository workflows
-or validation rules unless repository logic explicitly maps it.
+Read and search results use provider-neutral success and failure classes. Successful
+reads return a record, an unchanged result for conditional refresh, or a deleted
+result. Failures distinguish unsupported capabilities, authentication, rate limits,
+timeouts, unavailable networks, missing records, and malformed responses. Output
+reports the source provider, fetch time, provider version when supplied, freshness,
+fallback mode, and any actionable failure.
 
-Missing credentials, unavailable networks, unsupported capabilities, stale cache
-entries, and deleted remote objects must degrade to the canonical external identity.
-The repository graph remains valid and usable offline, and deleting the derived
-store loses no authored information.
+Fetched records belong in a separate per-worktree derived cache keyed by the full
+canonical identity, including provider, host, repository, kind, and remote key.
+Fresh cached data may satisfy a read. When refresh fails, stale cached data remains
+available and is labeled stale; without cached data the bare canonical identity is
+returned. A confirmed deletion removes the cached record but preserves the identity.
+The cache and search index are disposable, and neither contributes to canonical
+corpus fingerprints.
+
+Derived records may contribute to `get`, `context`, full-text search, and vector
+retrieval, but are labeled untrusted and non-canonical. Restricted repository logic
+may read only provider-neutral identity, provider, kind, state, title, URL, freshness,
+and string-attribute facts. Remote content cannot become Markdown, agent instructions,
+validation evidence, workflow state, or typed relationship authority. Provider state
+affects project workflows only through explicit repository-authored logic.
+
+The built-in GitHub source is read-only. It reads issue identities and lists a bounded
+repository issue corpus, distinguishes pull requests returned by issue-shaped APIs,
+uses conditional requests, and supports GitHub.com plus explicitly configured GitHub
+Enterprise API roots. Authentication is supplied through a configured
+environment-variable name or an explicit credential-helper command executed without
+a shell; credential values are held in memory and never persisted.
 
 <a id="s-ZDNCXK183C"></a>
 ### 6.4 Deterministic resolution

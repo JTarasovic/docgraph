@@ -1,5 +1,5 @@
 use crate::{Repository, SCHEMA_VERSION};
-use serde::{Deserialize, Deserializer, de};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
@@ -41,6 +41,7 @@ impl RepositoryConfig {
         let logic_path = repository.config_dir().join("logic.dl");
         let logic = read_optional_text(&logic_path)?;
         validate_embedding_config(&project_path, project_file.embeddings.as_ref())?;
+        validate_external_entities_config(&project_path, &project_file.external_entities)?;
 
         Ok(Self {
             project: ProjectConfig {
@@ -51,6 +52,7 @@ impl RepositoryConfig {
                 validation: project_file.validation,
                 references: resolve_git_references(repository, project_file.references)?,
                 embeddings: project_file.embeddings,
+                external_entities: project_file.external_entities,
             },
             entities: entities.entity,
             relations: relations.relation,
@@ -94,6 +96,96 @@ pub struct ProjectConfig {
     pub validation: ValidationConfig,
     pub references: Vec<GitReferenceConfig>,
     pub embeddings: Option<EmbeddingConfig>,
+    pub external_entities: ExternalEntitiesConfig,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ExternalEntitiesConfig {
+    pub cache_ttl_seconds: u64,
+    pub source: Vec<ExternalSourceConfig>,
+}
+
+impl Default for ExternalEntitiesConfig {
+    fn default() -> Self {
+        Self {
+            cache_ttl_seconds: 300,
+            source: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalSourceConfig {
+    pub provider: String,
+    pub host: String,
+    #[serde(default)]
+    pub api_url: Option<String>,
+    #[serde(default)]
+    pub token_env: Option<String>,
+    #[serde(default)]
+    pub token_command: Vec<String>,
+    #[serde(default = "default_external_timeout_seconds")]
+    pub timeout_seconds: u64,
+}
+
+fn default_external_timeout_seconds() -> u64 {
+    10
+}
+
+fn validate_external_entities_config(
+    path: &Path,
+    config: &ExternalEntitiesConfig,
+) -> Result<(), ConfigLoadError> {
+    if config.cache_ttl_seconds == 0 {
+        return Err(ConfigLoadError::Invalid {
+            path: path.to_path_buf(),
+            message: "external_entities.cache_ttl_seconds must be positive".to_owned(),
+        });
+    }
+    let mut identities = std::collections::BTreeSet::new();
+    for source in &config.source {
+        if source.provider.trim().is_empty()
+            || source.host.trim().is_empty()
+            || source.timeout_seconds == 0
+            || source
+                .token_env
+                .as_ref()
+                .is_some_and(|name| name.trim().is_empty())
+            || source
+                .token_command
+                .first()
+                .is_some_and(|command| command.trim().is_empty())
+        {
+            return Err(ConfigLoadError::Invalid {
+                path: path.to_path_buf(),
+                message: "external entity sources require non-empty provider and host, a positive timeout_seconds, and non-empty token_env and token_command executable values when present".to_owned(),
+            });
+        }
+        if source.provider != "github" {
+            return Err(ConfigLoadError::Invalid {
+                path: path.to_path_buf(),
+                message: format!(
+                    "unsupported external entity source provider {:?}",
+                    source.provider
+                ),
+            });
+        }
+        if !identities.insert((
+            source.provider.to_ascii_lowercase(),
+            source.host.to_ascii_lowercase(),
+        )) {
+            return Err(ConfigLoadError::Invalid {
+                path: path.to_path_buf(),
+                message: format!(
+                    "duplicate external entity source for {}/{}",
+                    source.provider, source.host
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -426,6 +518,8 @@ struct ProjectFile {
     references: RawReferencesConfig,
     #[serde(default)]
     embeddings: Option<EmbeddingConfig>,
+    #[serde(default)]
+    external_entities: ExternalEntitiesConfig,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -856,6 +950,38 @@ description = "Work is complete"
             config.project.agent_instructions.targets,
             [PathBuf::from("AGENTS.md"), PathBuf::from("CLAUDE.md")]
         );
+    }
+
+    #[test]
+    fn loads_external_source_configuration_without_credentials() {
+        let fixture = Fixture::new();
+        fixture.write(
+            "project.toml",
+            r#"schema_version = 1
+[project]
+name = "example"
+[documents]
+root = "docs"
+[external_entities]
+cache_ttl_seconds = 60
+[[external_entities.source]]
+provider = "github"
+host = "github.example.com"
+api_url = "https://github.example.com/api/v3"
+token_env = "GITHUB_TOKEN"
+token_command = ["gh", "auth", "token"]
+timeout_seconds = 4
+"#,
+        );
+
+        let config = fixture.load().unwrap();
+
+        assert_eq!(config.project.external_entities.cache_ttl_seconds, 60);
+        let source = &config.project.external_entities.source[0];
+        assert_eq!(source.provider, "github");
+        assert_eq!(source.host, "github.example.com");
+        assert_eq!(source.token_env.as_deref(), Some("GITHUB_TOKEN"));
+        assert_eq!(source.token_command, ["gh", "auth", "token"]);
     }
 
     #[test]

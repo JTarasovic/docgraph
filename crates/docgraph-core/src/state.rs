@@ -1,7 +1,7 @@
 use crate::{
-    CanonicalCorpus, DerivedSearchHit, EmbeddingConfig, EmbeddingError, EmbeddingProvider,
-    GraphIndex, Repository, RepositoryFingerprint, SCHEMA_VERSION, SemanticSearchResult,
-    derived_index,
+    CanonicalCorpus, DerivedExternalEntity, DerivedSearchHit, EmbeddingConfig, EmbeddingError,
+    EmbeddingProvider, GraphIndex, Repository, RepositoryFingerprint, SCHEMA_VERSION,
+    SemanticSearchResult, derived_index,
 };
 use std::error::Error;
 use std::fmt;
@@ -41,6 +41,7 @@ pub struct DerivedStatePaths {
     pub fingerprint: PathBuf,
     pub mutation_lock: PathBuf,
     pub recovery_journal: PathBuf,
+    pub external_cache: PathBuf,
 }
 
 impl DerivedStatePaths {
@@ -83,6 +84,7 @@ impl DerivedStatePaths {
             fingerprint: directory.join("fingerprint"),
             mutation_lock: directory.join("mutation.lock"),
             recovery_journal: directory.join("recovery.toml"),
+            external_cache: directory.join("external.sqlite"),
             directory,
         })
     }
@@ -170,6 +172,16 @@ impl DerivedState {
         graph: &GraphIndex,
         embeddings: Option<(&EmbeddingConfig, &dyn EmbeddingProvider)>,
     ) -> Result<(), DerivedStateError> {
+        self.refresh_with_external(corpus, graph, &[], embeddings)
+    }
+
+    pub fn refresh_with_external(
+        &self,
+        corpus: &CanonicalCorpus,
+        graph: &GraphIndex,
+        external: &[DerivedExternalEntity],
+        embeddings: Option<(&EmbeddingConfig, &dyn EmbeddingProvider)>,
+    ) -> Result<(), DerivedStateError> {
         fs::create_dir_all(&self.paths.directory).map_err(|source| DerivedStateError::Io {
             path: self.paths.directory.clone(),
             source,
@@ -185,12 +197,11 @@ impl DerivedState {
                 });
             }
         }
-        derived_index::build(&temporary, corpus.fingerprint, corpus, graph).map_err(|source| {
-            DerivedStateError::Sqlite {
+        derived_index::build_with_external(&temporary, corpus.fingerprint, corpus, graph, external)
+            .map_err(|source| DerivedStateError::Sqlite {
                 path: temporary.clone(),
                 source,
-            }
-        })?;
+            })?;
         if let Some((config, provider)) = embeddings
             && let Err(error) = derived_index::index_vectors(
                 &temporary,
@@ -240,11 +251,31 @@ impl DerivedState {
         graph: &GraphIndex,
         embeddings: Option<(&EmbeddingConfig, &dyn EmbeddingProvider)>,
     ) -> Result<(), DerivedStateError> {
+        self.ensure_fresh_with_external(corpus, graph, &[], embeddings)
+    }
+
+    pub fn ensure_fresh_with_external(
+        &self,
+        corpus: &CanonicalCorpus,
+        graph: &GraphIndex,
+        external: &[DerivedExternalEntity],
+        embeddings: Option<(&EmbeddingConfig, &dyn EmbeddingProvider)>,
+    ) -> Result<(), DerivedStateError> {
+        let external_matches = || {
+            derived_index::recorded_external_fingerprint(&self.paths.index)
+                .map(|recorded| {
+                    recorded.as_deref() == Some(&derived_index::external_fingerprint(external))
+                })
+                .unwrap_or(false)
+        };
         match self.status(corpus.fingerprint) {
-            Ok(IndexStatus::Fresh) => Ok(()),
+            Ok(IndexStatus::Fresh) if external_matches() => Ok(()),
+            Ok(IndexStatus::Fresh) => {
+                self.refresh_with_external(corpus, graph, external, embeddings)
+            }
             Ok(IndexStatus::Missing | IndexStatus::Stale { .. })
             | Err(DerivedStateError::CorruptMetadata { .. } | DerivedStateError::Sqlite { .. }) => {
-                self.refresh_with_embeddings(corpus, graph, embeddings)
+                self.refresh_with_external(corpus, graph, external, embeddings)
             }
             Err(error) => Err(error),
         }

@@ -2,7 +2,7 @@
 
 id = "task:add-github-external-entity-source"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Add the GitHub external entity source"
@@ -73,3 +73,11 @@ unless the source contract explicitly selects a command-backed integration.
 - Conditional refresh avoids unnecessary reads when supported.
 - Provider failures degrade through the cache and identity rules.
 - Tests use a controlled HTTP or command boundary and never require live GitHub.
+
+<a id="s-EJQ7HJM8JB"></a>
+## Result
+
+Added a bounded read-only GitHub HTTP source for GitHub.com and configured Enterprise
+API roots. It supports public access, environment or credential-helper authentication,
+conditional reads, issue normalization, pull-request discrimination, and typed
+provider failures; controlled local HTTP tests require no live service.

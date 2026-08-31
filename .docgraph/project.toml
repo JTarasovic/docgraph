@@ -10,6 +10,16 @@ exclude = ["research/**"]
 [agent_instructions]
 targets = ["AGENTS.md"]
 
+[external_entities]
+cache_ttl_seconds = 300
+
+[[external_entities.source]]
+provider = "github"
+host = "github.com"
+token_env = "GITHUB_TOKEN"
+token_command = ["gh", "auth", "token"]
+timeout_seconds = 10
+
 [query.milestone_blockers]
 description = "Explain unresolved blockers for a milestone."
 predicate = "milestone_blockers"

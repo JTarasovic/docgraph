@@ -5,8 +5,9 @@
 //! process. The engine is distributed as an opaque companion executable.
 
 use docgraph_core::{
-    ArgumentMode, GraphIndex, GraphNode, NamedQueryConfig, PropertyConfig, PropertyType,
-    QueryArgumentConfig, QueryValueType, RelationOrigin, RepositoryConfig, ScalarType,
+    ArgumentMode, DerivedExternalEntity, ExternalFreshness, GraphIndex, GraphNode,
+    NamedQueryConfig, PropertyConfig, PropertyType, QueryArgumentConfig, QueryValueType,
+    RelationOrigin, RepositoryConfig, ScalarType,
 };
 use rusqlite::types::Value as SqlValue;
 use rusqlite::{Connection, params_from_iter};
@@ -50,6 +51,35 @@ const BUILTINS: &[Builtin] = &[
         &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
     ),
     Builtin::new("document", &[EngineType::Symbol]),
+    Builtin::new("external_entity", &[EngineType::Symbol]),
+    Builtin::new(
+        "external_entity_provider",
+        &[EngineType::Symbol, EngineType::Symbol],
+    ),
+    Builtin::new(
+        "external_entity_kind",
+        &[EngineType::Symbol, EngineType::Symbol],
+    ),
+    Builtin::new(
+        "external_entity_state",
+        &[EngineType::Symbol, EngineType::Symbol],
+    ),
+    Builtin::new(
+        "external_entity_title",
+        &[EngineType::Symbol, EngineType::Symbol],
+    ),
+    Builtin::new(
+        "external_entity_url",
+        &[EngineType::Symbol, EngineType::Symbol],
+    ),
+    Builtin::new(
+        "external_entity_freshness",
+        &[EngineType::Symbol, EngineType::Symbol],
+    ),
+    Builtin::new(
+        "external_entity_attribute",
+        &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
+    ),
 ];
 
 const PROPERTY_SYMBOL_TYPES: [EngineType; 3] =
@@ -252,10 +282,19 @@ pub struct QueryEngine<'a> {
     graph: &'a GraphIndex,
     logic: LogicModule,
     predicate_types: BTreeMap<String, Vec<EngineType>>,
+    external: &'a [DerivedExternalEntity],
 }
 
 impl<'a> QueryEngine<'a> {
     pub fn new(config: &'a RepositoryConfig, graph: &'a GraphIndex) -> Result<Self, QueryError> {
+        Self::new_with_external(config, graph, &[])
+    }
+
+    pub fn new_with_external(
+        config: &'a RepositoryConfig,
+        graph: &'a GraphIndex,
+        external: &'a [DerivedExternalEntity],
+    ) -> Result<Self, QueryError> {
         let logic = LogicModule::parse(config.logic.as_deref().unwrap_or_default())?;
         logic.validate_queries(&config.queries)?;
         let predicate_types = infer_predicate_types(&logic, &config.queries)?;
@@ -264,6 +303,7 @@ impl<'a> QueryEngine<'a> {
             graph,
             logic,
             predicate_types,
+            external,
         })
     }
 
@@ -498,7 +538,7 @@ impl<'a> QueryEngine<'a> {
 
     fn reference_value_exists(&self, value: &QueryValue) -> bool {
         match value {
-            QueryValue::Entity(id) => self.graph.entities.iter().any(|entity| entity.id == *id),
+            QueryValue::Entity(id) => self.entity_exists(id),
             QueryValue::Section(id) => section_exists(self.graph, id),
             QueryValue::Datetime(value) => datetime_is_valid(value),
             _ => true,
@@ -528,10 +568,7 @@ impl<'a> QueryEngine<'a> {
                 .filter(|value| datetime_is_valid(value))
                 .map(QueryValue::Datetime),
             QueryValueType::Entity => row.get::<_, String>(index).ok().and_then(|value| {
-                self.graph
-                    .entities
-                    .iter()
-                    .any(|entity| entity.id == value)
+                self.entity_exists(&value)
                     .then_some(QueryValue::Entity(value))
             }),
             QueryValueType::Section => {
@@ -639,7 +676,54 @@ impl<'a> QueryEngine<'a> {
                 );
             }
         }
+        for external in self.external {
+            let record = &external.record;
+            facts
+                .get_mut("external_entity")
+                .unwrap()
+                .push(vec![SqlValue::Text(record.identity.clone())]);
+            for (name, value) in [
+                ("external_entity_provider", record.provider.as_str()),
+                ("external_entity_kind", record.remote_kind.as_str()),
+                ("external_entity_state", record.state.as_str()),
+                ("external_entity_title", record.title.as_str()),
+                ("external_entity_url", record.url.as_str()),
+                (
+                    "external_entity_freshness",
+                    match external.freshness {
+                        ExternalFreshness::Fresh => "fresh",
+                        ExternalFreshness::Stale => "stale",
+                    },
+                ),
+            ] {
+                facts.get_mut(name).unwrap().push(vec![
+                    SqlValue::Text(record.identity.clone()),
+                    SqlValue::Text(value.to_owned()),
+                ]);
+            }
+            for (name, value) in &record.attributes {
+                facts
+                    .get_mut("external_entity_attribute")
+                    .unwrap()
+                    .push(vec![
+                        SqlValue::Text(record.identity.clone()),
+                        SqlValue::Text(name.clone()),
+                        SqlValue::Text(value.clone()),
+                    ]);
+            }
+        }
         facts
+    }
+
+    fn entity_exists(&self, identity: &str) -> bool {
+        self.graph
+            .entities
+            .iter()
+            .any(|entity| entity.id == identity)
+            || self
+                .external
+                .iter()
+                .any(|entity| entity.record.identity == identity)
     }
 }
 
@@ -1745,6 +1829,15 @@ mod tests {
                 "{source}"
             );
         }
+    }
+
+    #[test]
+    fn accepts_provider_neutral_external_entity_facts() {
+        let module = LogicModule::parse(
+            "actionable(x) :- external_entity(x), external_entity_provider(x, \"github\"), external_entity_kind(x, \"issue\"), external_entity_state(x, \"open\"), external_entity_title(x, title), external_entity_url(x, url), external_entity_freshness(x, freshness), external_entity_attribute(x, \"repository\", \"owner/repo\").\n",
+        )
+        .unwrap();
+        assert_eq!(module.predicate_arity("actionable"), Some(1));
     }
     #[test]
     fn comments_are_masked_before_clauses_are_split() {

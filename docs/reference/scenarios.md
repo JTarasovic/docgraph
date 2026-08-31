@@ -449,6 +449,19 @@ and labeled provider fallback.
 
 Agents should not reconstruct semantic context through filesystem search.
 
+External-entity conformance uses fake provider sources or controlled local HTTP
+servers. It covers capability advertisement, deterministic identity parsing, live and
+conditional reads, fresh and stale cache use, identity-only fallback, missing
+credentials, authentication failure, rate limiting, timeout, unavailable network,
+malformed response, confirmed deletion, pull-request discrimination, and complete
+derived-state deletion. Automated tests never require a live forge.
+
+Retrieval conformance proves that `get`, `context`, full-text search, and semantic
+search preserve the same external identity and label records as derived, untrusted,
+fresh or stale. Logic conformance exposes only provider-neutral external facts and
+proves that repository-authored rules—not remote state by itself—control whether a
+remote record appears in project-level work discovery.
+
 Tests must distinguish explicit semantic relations, deterministic inferred facts,
 informational Markdown links, and search results in structured output. Informational
 links and search matches must not change semantic validity, workflow state, or

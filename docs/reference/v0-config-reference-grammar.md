@@ -665,6 +665,38 @@ They implement a common offline normalization interface and include the host in
 canonical identities. Future forge-backed entity sources may enrich those identities
 for retrieval without making remote content canonical or required for graph use.
 
+<a id="s-3MQG5HQA1C"></a>
+### External entity sources
+
+External enrichment is opt-in and separate from reference normalization:
+
+```toml
+[external_entities]
+cache_ttl_seconds = 300
+
+[[external_entities.source]]
+provider = "github"
+host = "github.com"
+token_env = "GITHUB_TOKEN"
+token_command = ["gh", "auth", "token"] # optional credential helper
+timeout_seconds = 10
+# api_url = "https://github.example.com/api/v3"
+```
+
+`cache_ttl_seconds` and `timeout_seconds` are positive integers. A source identity is
+the case-insensitive pair of provider and host and may occur only once. `token_env`
+names an environment variable and never contains a credential. If that variable is
+unset, optional `token_command` runs directly without a shell and reads one token from
+standard output; the token is held in memory and never persisted. `api_url` overrides
+the default GitHub.com or GitHub Enterprise API root. The first implementation
+accepts `github`; unknown source providers are rejected until their implementations
+are installed.
+
+Sources advertise read, repository-search, and mutation capabilities independently.
+The GitHub source advertises read and repository search only. Provider recognition,
+canonical identity parsing, graph construction, validation, and repository-only
+retrieval continue to work with no source configuration or network access.
+
 <a id="s-DGPPPW92CX"></a>
 ### Embedding providers
 
@@ -716,7 +748,10 @@ Naked hexadecimal strings are ambiguous. A naked candidate may be recognized as 
 
 Reference parsing, normalization, indexing, and validation must function without network access.
 
-Future provider integrations may enrich external nodes, but enrichment is outside the reference grammar and must not be required for core operation.
+Configured provider integrations may enrich external nodes as disposable derived
+data, but enrichment is not required for core operation. Fresh cache entries are used
+without network access. Failed refresh uses explicitly stale cache entries or the bare
+canonical identity; unknown remote state is never guessed.
 
 <a id="s-MTVEFXHGWD"></a>
 ## 15. Workflows

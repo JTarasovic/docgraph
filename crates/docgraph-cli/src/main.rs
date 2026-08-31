@@ -1,14 +1,15 @@
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use docgraph_core::{
     Adoption, AgentInstructionsConfig, CanonicalCorpus, CommandConfig, CommandEmbeddingProvider,
-    CommandOperation, DerivedState, DiagnosticSeverity, DocumentsConfig, FrontmatterConfig,
-    GeneratedBlockStatus, GeneratedFrontmatterIndex, GraphIndex, GraphNode, GraphTraversal,
-    InstructionService, InstructionStatus, ManagedChangeValidator, MutationPlan, MutationRequest,
-    MutationService, PORTABLE_SKILL_PATH, PortableSkillService, PortableSkillStatus, ProjectConfig,
-    PropertyConfig, PropertyType, QueryValueType, RelationOrigin, Repository, RepositoryConfig,
-    SCHEMA_VERSION, ScalarValue, SemanticChange, SemanticChangeReviewer, SemanticSearchHit,
-    SemanticSearchMode, SemanticSearchResult, SemanticSection, TraversalDirection,
-    ValidationConfig, Validator,
+    CommandOperation, DerivedExternalEntity, DerivedState, DiagnosticSeverity, DocumentsConfig,
+    ExternalEntityCache, ExternalEntityService, ExternalEntityView, ExternalIdentity,
+    FrontmatterConfig, GeneratedBlockStatus, GeneratedFrontmatterIndex, GithubExternalEntitySource,
+    GraphIndex, GraphNode, GraphTraversal, InstructionService, InstructionStatus,
+    ManagedChangeValidator, MutationPlan, MutationRequest, MutationService, PORTABLE_SKILL_PATH,
+    PortableSkillService, PortableSkillStatus, ProjectConfig, PropertyConfig, PropertyType,
+    QueryValueType, RelationOrigin, Repository, RepositoryConfig, SCHEMA_VERSION, ScalarValue,
+    SemanticChange, SemanticChangeReviewer, SemanticSearchHit, SemanticSearchMode,
+    SemanticSearchResult, SemanticSection, TraversalDirection, ValidationConfig, Validator,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -20,6 +21,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
+use std::time::SystemTime;
 use toml_edit::Value;
 
 #[derive(Parser)]
@@ -356,18 +358,98 @@ impl Context {
     }
 
     fn ensure_derived(&self) -> Result<DerivedState, CliError> {
+        let external = self.external_records(true)?;
+        self.ensure_derived_with_external(&external)
+    }
+
+    fn ensure_derived_with_external(
+        &self,
+        external: &[DerivedExternalEntity],
+    ) -> Result<DerivedState, CliError> {
         let state = DerivedState::discover(&self.repository).map_err(CliError::boxed)?;
         if let Some(config) = &self.config.project.embeddings {
             let provider = CommandEmbeddingProvider::new(config);
             state
-                .ensure_fresh_with_embeddings(&self.corpus, &self.graph, Some((config, &provider)))
+                .ensure_fresh_with_external(
+                    &self.corpus,
+                    &self.graph,
+                    external,
+                    Some((config, &provider)),
+                )
                 .map_err(CliError::boxed)?;
         } else {
             state
-                .ensure_fresh(&self.corpus, &self.graph)
+                .ensure_fresh_with_external(&self.corpus, &self.graph, external, None)
                 .map_err(CliError::boxed)?;
         }
         Ok(state)
+    }
+
+    fn external_service(&self) -> Result<ExternalEntityService, CliError> {
+        let state = DerivedState::discover(&self.repository).map_err(CliError::boxed)?;
+        Ok(ExternalEntityService::new(
+            ExternalEntityCache::new(state.paths.external_cache),
+            self.config.project.external_entities.cache_ttl_seconds,
+        ))
+    }
+
+    fn external_records(&self, refresh: bool) -> Result<Vec<DerivedExternalEntity>, CliError> {
+        let service = self.external_service()?;
+        if refresh {
+            for reference in &self.config.project.references {
+                let Some(source_config) =
+                    self.config
+                        .project
+                        .external_entities
+                        .source
+                        .iter()
+                        .find(|source| {
+                            source.provider == reference.provider
+                                && source.host.eq_ignore_ascii_case(&reference.host)
+                        })
+                else {
+                    continue;
+                };
+                if source_config.provider == "github"
+                    && let Ok(source) = GithubExternalEntitySource::new(source_config)
+                {
+                    let _ = service.refresh_repository(reference, &source, SystemTime::now());
+                }
+            }
+        }
+        service.cached(SystemTime::now()).map_err(CliError::boxed)
+    }
+
+    fn resolve_external(
+        &self,
+        identity: &str,
+        refresh: bool,
+    ) -> Result<ExternalEntityView, CliError> {
+        let service = self.external_service()?;
+        let parsed = ExternalIdentity::parse(identity);
+        let source = if refresh {
+            parsed.as_ref().and_then(|identity| {
+                self.config
+                    .project
+                    .external_entities
+                    .source
+                    .iter()
+                    .find(|source| {
+                        source.provider == identity.provider
+                            && source.host.eq_ignore_ascii_case(&identity.host)
+                    })
+                    .and_then(|source| GithubExternalEntitySource::new(source).ok())
+            })
+        } else {
+            None
+        };
+        Ok(service.resolve(
+            identity,
+            source
+                .as_ref()
+                .map(|source| source as &dyn docgraph_core::ExternalEntitySource),
+            SystemTime::now(),
+        ))
     }
 }
 
@@ -541,13 +623,20 @@ fn run(cli: Cli) -> Result<(), CliError> {
                             "node": hit.node,
                             "score": hit.score,
                             "snippet": hit.snippet,
+                            "external": external_hit_metadata(&context, &hit.node),
                         })
                     })
                     .collect();
                 print_json(json!({ "query": query, "rows": rows }))
             } else {
                 for hit in hits {
-                    println!("{:.3}\t{}\t{}", hit.score, hit.node, hit.snippet);
+                    println!(
+                        "{:.3}\t{}\t{}\t{}",
+                        hit.score,
+                        hit.node,
+                        external_hit_label(&context, &hit.node),
+                        hit.snippet
+                    );
                 }
                 Ok(())
             }
@@ -576,7 +665,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
                         .collect(),
                 }
             };
-            print_semantic_search(&query, &result, cli.json)
+            print_semantic_search(&context, &query, &result, cli.json)
         }
         Command::Transition {
             entity,
@@ -681,6 +770,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
             all,
         } => {
             let context = Context::load()?;
+            let _ = context.external_records(true)?;
             expanded_context(&context, &reference, depth, all, cli.json)
         }
         Command::Path {
@@ -819,6 +909,7 @@ fn initialize(
                 validation: ValidationConfig::default(),
                 references: Vec::new(),
                 embeddings: None,
+                external_entities: docgraph_core::ExternalEntitiesConfig::default(),
             },
             entities: BTreeMap::new(),
             relations: BTreeMap::new(),
@@ -1358,6 +1449,22 @@ fn describe(
                     docgraph_core::EmbeddingFallback::Error => "error",
                 },
             })),
+            "external_entities": {
+                "cache_ttl_seconds": config.project.external_entities.cache_ttl_seconds,
+                "sources": config.project.external_entities.source.iter().map(|source| json!({
+                    "provider": source.provider,
+                    "host": source.host,
+                    "api_url": source.api_url,
+                    "token_env": source.token_env,
+                    "token_command": source.token_command,
+                    "timeout_seconds": source.timeout_seconds,
+                    "capabilities": {
+                        "read": source.provider == "github",
+                        "search": source.provider == "github",
+                        "mutate": false,
+                    },
+                })).collect::<Vec<_>>(),
+            },
         }),
         (Some(DescribeKind::Type), Some(name)) => {
             let item = config
@@ -1543,6 +1650,10 @@ fn complete_description_json(config: &RepositoryConfig) -> JsonValue {
                     docgraph_core::EmbeddingFallback::Error => "error",
                 },
             })),
+            "external_entities": {
+                "cache_ttl_seconds": config.project.external_entities.cache_ttl_seconds,
+                "sources": config.project.external_entities.source,
+            },
             "logic_configured": config.logic.is_some(),
         },
         "entity_types": entity_types,
@@ -1575,7 +1686,11 @@ fn command_operation_json(operation: &CommandOperation) -> JsonValue {
 
 fn get(context: &Context, reference: &str, json_output: bool) -> Result<(), CliError> {
     let node = resolve_graph_reference(&context.graph, reference)?;
-    let value = node_context_value(context, &node);
+    let value = if let GraphNode::ExternalUri(identity) = &node {
+        external_context_value(&context.resolve_external(identity, true)?)
+    } else {
+        node_context_value(context, &node)
+    };
     if json_output {
         print_json(value)
     } else {
@@ -1646,8 +1761,11 @@ fn node_context_value(context: &Context, node: &GraphNode) -> JsonValue {
             "document": json_path(&context.graph.documents[index].path),
             "relations": relation_context(&context.graph, node),
         })
-    } else if matches!(node, GraphNode::ExternalUri(_)) {
-        json!({ "kind": "external", "id": node_name(&context.graph, node) })
+    } else if let GraphNode::ExternalUri(identity) = node {
+        context.resolve_external(identity, false).map_or_else(
+            |_| json!({ "kind": "external", "id": identity, "fallback": "identity_only" }),
+            |view| external_context_value(&view),
+        )
     } else if matches!(node, GraphNode::Unresolved(_)) {
         json!({ "kind": "unresolved", "id": node_name(&context.graph, node) })
     } else {
@@ -1655,9 +1773,57 @@ fn node_context_value(context: &Context, node: &GraphNode) -> JsonValue {
     }
 }
 
+fn external_context_value(view: &ExternalEntityView) -> JsonValue {
+    json!({
+        "kind": "external",
+        "id": view.identity,
+        "canonical": false,
+        "provenance": "derived_external",
+        "trusted": false,
+        "fallback": view.fallback,
+        "record": view.record,
+        "error": view.error,
+    })
+}
+
+fn external_hit_metadata(context: &Context, identity: &str) -> Option<JsonValue> {
+    ExternalIdentity::parse(identity).map(|_| {
+        context.resolve_external(identity, false).map_or_else(
+            |_| json!({ "provenance": "derived_external", "fallback": "identity_only" }),
+            |view| {
+                json!({
+                    "provenance": "derived_external",
+                    "trusted": false,
+                    "fallback": view.fallback,
+                    "provider": view.record.as_ref().map(|record| &record.record.provider),
+                    "freshness": view.record.as_ref().map(|record| record.freshness),
+                    "fetched_at": view.record.as_ref().map(|record| record.fetched_at),
+                    "url": view.record.as_ref().map(|record| &record.record.url),
+                    "error": view.error,
+                })
+            },
+        )
+    })
+}
+
+fn external_hit_label(context: &Context, identity: &str) -> String {
+    external_hit_metadata(context, identity).map_or_else(String::new, |metadata| {
+        let fallback = metadata["fallback"].as_str().unwrap_or("identity_only");
+        let freshness = metadata["freshness"].as_str().unwrap_or("unknown");
+        format!("derived_external:{fallback}:{freshness}")
+    })
+}
+
 fn resolve_graph_reference(graph: &GraphIndex, reference: &str) -> Result<GraphNode, CliError> {
     if graph.entities.iter().any(|entity| entity.id == reference) {
         return Ok(GraphNode::Entity(reference.to_owned()));
+    }
+    if graph.relations.iter().any(|relation| {
+        matches!(&relation.source, GraphNode::ExternalUri(identity) if identity == reference)
+            || matches!(&relation.target, GraphNode::ExternalUri(identity) if identity == reference)
+    }) || ExternalIdentity::parse(reference).is_some()
+    {
+        return Ok(GraphNode::ExternalUri(reference.to_owned()));
     }
     graph
         .sections
@@ -2187,7 +2353,8 @@ fn execute_query(
             "query received an unknown or duplicate input",
         ));
     }
-    let result = QueryEngine::new(&context.config, &context.graph)
+    let external = context.external_records(true)?;
+    let result = QueryEngine::new_with_external(&context.config, &context.graph, &external)
         .map_err(CliError::boxed)?
         .execute(name, inputs)
         .map_err(CliError::boxed)?;
@@ -2537,14 +2704,20 @@ fn render_text_patch(path: &std::path::Path, original: &str, intended: &str) -> 
 
 fn refresh_derived(context: &Context) -> Result<(), CliError> {
     let state = DerivedState::discover(&context.repository).map_err(CliError::boxed)?;
+    let external = context.external_records(false)?;
     if let Some(config) = &context.config.project.embeddings {
         let provider = CommandEmbeddingProvider::new(config);
         state
-            .refresh_with_embeddings(&context.corpus, &context.graph, Some((config, &provider)))
+            .refresh_with_external(
+                &context.corpus,
+                &context.graph,
+                &external,
+                Some((config, &provider)),
+            )
             .map_err(CliError::boxed)
     } else {
         state
-            .refresh(&context.corpus, &context.graph)
+            .refresh_with_external(&context.corpus, &context.graph, &external, None)
             .map_err(CliError::boxed)
     }
 }
@@ -2614,6 +2787,7 @@ fn query_value_json(value: &QueryValue) -> JsonValue {
 }
 
 fn print_semantic_search(
+    context: &Context,
     query: &str,
     result: &SemanticSearchResult,
     json_output: bool,
@@ -2631,6 +2805,7 @@ fn print_semantic_search(
                     "node": hit.node,
                     "score": hit.score,
                     "snippet": hit.snippet,
+                    "external": external_hit_metadata(context, &hit.node),
                 })
             })
             .collect();
@@ -2647,7 +2822,13 @@ fn print_semantic_search(
             println!("mode={mode}");
         }
         for hit in &result.hits {
-            println!("{:.3}\t{}\t{}", hit.score, hit.node, hit.snippet);
+            println!(
+                "{:.3}\t{}\t{}\t{}",
+                hit.score,
+                hit.node,
+                external_hit_label(context, &hit.node),
+                hit.snippet
+            );
         }
         Ok(())
     }

@@ -2,7 +2,7 @@
 
 id = "task:persist-derived-external-entities"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Persist derived external entity records"
@@ -78,3 +78,11 @@ networks, missing records, and malformed provider responses must remain distingu
 - Offline reads use labeled cached data or the canonical identity without failing the graph.
 - Derived-store deletion and rebuild preserve all canonical semantics.
 - Tests use deterministic clocks and fake sources rather than live services.
+
+<a id="s-1X73784HZW"></a>
+## Result
+
+Added a separate per-worktree SQLite external cache with collision-safe canonical
+keys, query and record freshness metadata, conditional tokens, stale fallback, and
+disposable rebuild semantics. The canonical corpus fingerprint remains independent
+of external refresh state.

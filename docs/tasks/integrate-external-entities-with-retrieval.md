@@ -2,7 +2,7 @@
 
 id = "task:integrate-external-entities-with-retrieval"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Integrate external entities with retrieval"
@@ -59,3 +59,11 @@ must avoid turning graph-only reads into unbounded network fan-out.
 - Stale and unavailable states are visible in structured and human-readable output.
 - Search refreshes incrementally and does not duplicate records after cache updates.
 - Repository-only retrieval remains deterministic and usable offline.
+
+<a id="s-55573EACNA"></a>
+## Result
+
+External records now enrich exact and contextual retrieval with explicit provenance,
+trust, freshness, and fallback fields. Full-text and semantic indexes consume the
+same cache snapshot by content hash, preserve stable identities, and avoid duplicate
+rows when the cache changes.

@@ -2,7 +2,7 @@
 
 id = "task:map-external-issues-into-project-work"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Map external issues into project work"
@@ -63,3 +63,11 @@ is unavailable, but an unknown state must not be guessed to be open or closed.
 - Closed remote issues leave the actionable set after refresh without mutating canonical files.
 - Unavailable or stale state is represented honestly and follows documented repository policy.
 - No local issue mirror is required for project-level discovery.
+
+<a id="s-AT2BSYAVM5"></a>
+## Result
+
+Added provider-neutral external facts to restricted repository logic. This repository
+explicitly maps open GitHub issue records from `JTarasovic/docgraph` into `next_work`;
+unknown records have no state fact, while fresh and honestly labeled stale cache facts
+remain queryable without changing local workflows.

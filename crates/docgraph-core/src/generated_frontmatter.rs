@@ -354,6 +354,7 @@ mod tests {
                 validation: crate::ValidationConfig::default(),
                 references: Vec::new(),
                 embeddings: None,
+                external_entities: crate::ExternalEntitiesConfig::default(),
             },
             entities: Default::default(),
             relations: Default::default(),
