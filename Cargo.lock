@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "docgraph-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "docgraph-core",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "docgraph-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "docgraph-markdown",
@@ -279,7 +279,7 @@ dependencies = [
 
 [[package]]
 name = "docgraph-logic"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docgraph-core",
  "rusqlite",
@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "docgraph-markdown"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "getrandom 0.4.3",
  "pulldown-cmark",

@@ -36,7 +36,7 @@ actionable diagnostic.
 Inputs:
 
 - `version` is required and must be an exact semantic release tag such as
-  `v0.1.0`. Floating versions are rejected.
+  `v0.2.0`. Floating versions are rejected.
 - `working-directory` defaults to `.` relative to `github.workspace`.
 - `changes` optionally supplies the Git ref for `docgraph validate --changes`.
 - `token` defaults to the workflow token. Public releases need no additional
@@ -58,7 +58,7 @@ steps:
   - uses: actions/checkout@<full-commit-sha>
   - uses: JTarasovic/docgraph@<full-commit-sha>
     with:
-      version: v0.1.0
+      version: v0.2.0
       token: ${{ secrets.DOCGRAPH_RELEASE_TOKEN }} # only while releases are private
 ```
 
