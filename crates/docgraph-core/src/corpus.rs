@@ -14,6 +14,7 @@ const PARSER_REVISION: u32 = 2;
 
 #[derive(Clone, Debug)]
 pub struct CanonicalCorpus {
+    pub repository_root: PathBuf,
     pub files: Vec<CorpusFile>,
     pub fingerprint: RepositoryFingerprint,
 }
@@ -118,7 +119,11 @@ impl CanonicalCorpus {
             });
         }
         let fingerprint = fingerprint(repository, &files)?;
-        Ok(Self { files, fingerprint })
+        Ok(Self {
+            repository_root: repository.root().to_path_buf(),
+            files,
+            fingerprint,
+        })
     }
 
     fn load_incremental(
@@ -189,7 +194,11 @@ impl CanonicalCorpus {
         }
 
         let fingerprint = fingerprint(repository, &files)?;
-        Ok(Self { files, fingerprint })
+        Ok(Self {
+            repository_root: repository.root().to_path_buf(),
+            files,
+            fingerprint,
+        })
     }
 }
 

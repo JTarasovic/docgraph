@@ -733,6 +733,7 @@ mod tests {
         let parsed = ParsedDocument::parse(&content).unwrap();
         let section_span = parsed.headings[0].section_span.clone();
         let corpus = CanonicalCorpus {
+            repository_root: PathBuf::new(),
             files: vec![CorpusFile {
                 path: path.clone(),
                 content: content.clone(),
@@ -890,6 +891,7 @@ mod tests {
         let section_hash = *blake3::hash(content[span.bytes.clone()].as_bytes()).as_bytes();
         let fingerprint = RepositoryFingerprint::from_hex(&"2".repeat(64)).unwrap();
         let corpus = CanonicalCorpus {
+            repository_root: PathBuf::new(),
             files: vec![CorpusFile {
                 path: path.clone(),
                 content: content.clone(),

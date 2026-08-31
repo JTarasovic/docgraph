@@ -281,7 +281,7 @@ impl GraphIndex {
             }
         }
 
-        let resolver = Resolver::new(&graph);
+        let resolver = Resolver::new(&graph, &corpus.repository_root);
         let relations = raw_relations
             .into_iter()
             .map(|raw| {
@@ -450,13 +450,14 @@ fn table_location(
 
 struct Resolver<'a> {
     graph: &'a GraphIndex,
+    repository_root: &'a Path,
     documents: HashMap<PathBuf, usize>,
     entities: HashMap<&'a str, Vec<usize>>,
     sections: HashMap<(usize, &'a str), Vec<usize>>,
 }
 
 impl<'a> Resolver<'a> {
-    fn new(graph: &'a GraphIndex) -> Self {
+    fn new(graph: &'a GraphIndex, repository_root: &'a Path) -> Self {
         let documents = graph
             .documents
             .iter()
@@ -481,6 +482,7 @@ impl<'a> Resolver<'a> {
         }
         Self {
             graph,
+            repository_root,
             documents,
             entities,
             sections,
@@ -497,15 +499,24 @@ impl<'a> Resolver<'a> {
             ReferenceTarget::CurrentDocumentSection(id) => self.section(source_document, &id, raw),
             ReferenceTarget::RelativeDocument { path, section } => {
                 let source = &self.graph.documents[source_document].path;
-                let Some(path) = normalize_relative(source, &path) else {
+                let Some(decoded) = percent_decode_path(&path) else {
                     return GraphNode::Unresolved(raw.to_owned());
                 };
-                let Some(document) = self.documents.get(&path).copied() else {
+                let Some(path) = normalize_relative(source, &decoded) else {
                     return GraphNode::Unresolved(raw.to_owned());
                 };
-                section.map_or(GraphNode::Document(document), |id| {
-                    self.section(document, &id, raw)
-                })
+                if let Some(document) = self.documents.get(&path).copied() {
+                    return section.map_or(GraphNode::Document(document), |id| {
+                        self.section(document, &id, raw)
+                    });
+                }
+                if section.is_none() && self.repository_root.join(&path).is_file() {
+                    return GraphNode::ExternalUri(format!(
+                        "repo:{}",
+                        path.to_string_lossy().replace('\\', "/")
+                    ));
+                }
+                GraphNode::Unresolved(raw.to_owned())
             }
             ReferenceTarget::CanonicalEntity { id, section } => {
                 let Some(documents) = self.entities.get(id.as_str()) else {
@@ -550,6 +561,33 @@ fn normalize_relative(source: &Path, raw: &str) -> Option<PathBuf> {
         }
     }
     Some(normalized)
+}
+
+fn percent_decode_path(raw: &str) -> Option<String> {
+    let bytes = raw.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let high = *bytes.get(index + 1)?;
+            let low = *bytes.get(index + 2)?;
+            decoded.push(hex_value(high)? * 16 + hex_value(low)?);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -671,5 +709,42 @@ mod tests {
             link.target,
             GraphNode::Unresolved("./adr.md#s-7K3M9Q2W".to_owned())
         );
+    }
+
+    #[test]
+    fn resolves_bare_and_repository_relative_markdown_links() {
+        let fixture = Fixture::new();
+        fs::write(fixture.0.join("LICENSE"), "license").unwrap();
+        fs::write(fixture.0.join("docs/space file.txt"), "artifact").unwrap();
+        let task_path = fixture.0.join("docs/task.md");
+        let source = fs::read_to_string(&task_path).unwrap();
+        fs::write(
+            task_path,
+            format!(
+                "{source}\n[Bare](adr.md) [Explicit](./adr.md) [License](../LICENSE) [Encoded](space%20file.txt) [Missing](missing.md) [Escape](../../outside.md)\n"
+            ),
+        )
+        .unwrap();
+
+        let graph = fixture.build();
+        let markdown_targets: Vec<_> = graph
+            .relations
+            .iter()
+            .filter(|relation| relation.origin == RelationOrigin::MarkdownLink)
+            .map(|relation| &relation.target)
+            .collect();
+        assert_eq!(
+            markdown_targets
+                .iter()
+                .filter(|target| matches!(target, GraphNode::Document(0)))
+                .count(),
+            2
+        );
+        assert!(markdown_targets.contains(&&GraphNode::ExternalUri("repo:LICENSE".to_owned())));
+        assert!(markdown_targets.contains(&&GraphNode::ExternalUri(
+            "repo:docs/space file.txt".to_owned()
+        )));
+        assert!(markdown_targets.contains(&&GraphNode::Unresolved("missing.md".to_owned())));
+        assert!(markdown_targets.contains(&&GraphNode::Unresolved("../../outside.md".to_owned())));
     }
 }

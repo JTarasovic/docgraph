@@ -730,12 +730,20 @@ reusable vectors. The command is invoked directly, without a shell.
 Resolution is deterministic:
 
 1. `#...` matching a stable section ID resolves within the current document.
-2. `./...` or `../...` resolves relative to the source file.
+2. Bare paths, `./...`, and `../...` resolve relative to the source file. Percent
+   escapes are decoded before repository path normalization.
 3. Canonical repository entity IDs resolve by identity.
 4. Canonical entity plus `#section` resolves entity then section.
 5. Configured provider syntax normalizes recognized external shorthand.
 6. Absolute URI remains external.
-7. Otherwise unresolved.
+7. A normalized path that names an existing repository file is retained as an
+   informational repository link even when it is outside the documents root.
+8. Otherwise unresolved.
+
+Relative resolution cannot escape the repository. A managed document plus stable
+section fragment resolves to that section; a missing file, malformed percent escape,
+invalid stable-section fragment, or escaping path remains unresolved and is eligible
+for `broken-internal-link` diagnostics.
 
 Context-sensitive shorthand must not override an unambiguous canonical repository reference.
 

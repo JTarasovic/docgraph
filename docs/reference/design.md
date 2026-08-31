@@ -641,6 +641,12 @@ Reference resolution must be deterministic:
 5. external URI
 6. unresolved reference
 
+Bare and explicitly dotted relative paths have identical source-directory semantics.
+Percent-encoded path bytes are decoded before normalization. Existing files anywhere
+inside the repository are valid informational link targets even when they are outside
+the managed document corpus; missing files, repository escapes, and invalid fragments
+remain unresolved.
+
 Provider context may be inferred from Git remotes, but repositories must be able to configure it explicitly for mirrors, multiple remotes, and self-hosted services.
 
 Ambiguous references must not be guessed.

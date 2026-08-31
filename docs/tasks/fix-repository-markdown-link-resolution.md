@@ -2,7 +2,7 @@
 
 id = "task:fix-repository-markdown-link-resolution"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Fix repository Markdown link resolution"

@@ -460,6 +460,7 @@ mod tests {
 
         assert_eq!(state.status(first).unwrap(), IndexStatus::Missing);
         let corpus = CanonicalCorpus {
+            repository_root: repository.root().to_path_buf(),
             files: Vec::new(),
             fingerprint: first,
         };
@@ -489,6 +490,7 @@ mod tests {
         let state = DerivedState::discover(&repository).unwrap();
         let current = fingerprint('1');
         let corpus = CanonicalCorpus {
+            repository_root: repository.root().to_path_buf(),
             files: Vec::new(),
             fingerprint: current,
         };

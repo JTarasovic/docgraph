@@ -112,7 +112,13 @@ impl ReferenceClassifier {
             return ReferenceTarget::ExternalUri(raw.to_owned());
         }
 
-        ReferenceTarget::Unresolved(raw.to_owned())
+        match (section, parse_section(section)) {
+            (Some(_), None) => ReferenceTarget::Unresolved(raw.to_owned()),
+            (_, section) => ReferenceTarget::RelativeDocument {
+                path: base.to_owned(),
+                section,
+            },
+        }
     }
 
     fn provider_identity(&self, raw: &str) -> Option<String> {
@@ -241,7 +247,10 @@ mod tests {
         );
         assert_eq!(
             classifier.classify("possibly-retry"),
-            ReferenceTarget::Unresolved("possibly-retry".to_owned())
+            ReferenceTarget::RelativeDocument {
+                path: "possibly-retry".to_owned(),
+                section: None,
+            }
         );
     }
 
@@ -294,7 +303,10 @@ mod tests {
         );
         assert_eq!(
             classifier.classify("a5c3785"),
-            ReferenceTarget::Unresolved("a5c3785".to_owned())
+            ReferenceTarget::RelativeDocument {
+                path: "a5c3785".to_owned(),
+                section: None,
+            }
         );
         assert!(matches!(
             classifier.classify("task:123"),

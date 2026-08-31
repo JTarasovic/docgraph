@@ -1721,6 +1721,7 @@ fn candidate_corpus(
         })
         .collect::<Result<Vec<_>, MutationError>>()?;
     Ok(CanonicalCorpus {
+        repository_root: original.repository_root.clone(),
         files,
         fingerprint: original.fingerprint,
     })
