@@ -856,6 +856,95 @@ fn adopt_batch_manages_multiple_unnormalized_documents() {
 }
 
 #[test]
+fn yaml_frontmatter_is_diagnosed_migrated_then_adopted() {
+    let fixture = Fixture::copy("synthetic");
+    let path = fixture.0.join("docs/yaml.md");
+    let source = "---\ntitle: YAML title\ntags: [one, two]\nnested:\n  owner: team\n---\n\n# YAML document\n";
+    fs::write(&path, source).unwrap();
+
+    let validation = fixture.run(&["--json", "validate"]);
+    assert!(!validation.status.success());
+    let validation: Value = serde_json::from_slice(&validation.stdout).unwrap();
+    let diagnostics = validation["diagnostics"].as_array().unwrap();
+    assert!(diagnostics.iter().any(|item| {
+        item["code"] == "yaml-frontmatter"
+            && item["message"]
+                .as_str()
+                .unwrap()
+                .contains("frontmatter migrate")
+    }));
+    assert!(!diagnostics.iter().any(|item| {
+        item["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("title: YAML title")
+    }));
+
+    let adopt = fixture.run(&[
+        "adopt",
+        "docs/yaml.md",
+        "--id",
+        "florp:yaml",
+        "--type",
+        "florp",
+    ]);
+    assert!(!adopt.status.success());
+    assert!(String::from_utf8_lossy(&adopt.stderr).contains("frontmatter migrate"));
+
+    let preview = fixture.run(&["frontmatter", "migrate", "docs/yaml.md", "--dry-run"]);
+    assert!(
+        preview.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&preview.stdout),
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    assert!(String::from_utf8_lossy(&preview.stdout).contains("+++"));
+    assert_eq!(fs::read_to_string(&path).unwrap(), source);
+
+    assert!(
+        fixture
+            .run(&["frontmatter", "migrate", "docs/yaml.md"])
+            .status
+            .success()
+    );
+    let migrated = fs::read_to_string(&path).unwrap();
+    assert!(migrated.starts_with("+++\n"));
+    assert!(migrated.contains("title = \"YAML title\""));
+    let migrated_frontmatter = migrated
+        .split("+++")
+        .nth(1)
+        .unwrap()
+        .parse::<toml_edit::DocumentMut>()
+        .unwrap();
+    assert_eq!(
+        migrated_frontmatter["nested"]["owner"].as_str(),
+        Some("team")
+    );
+
+    assert!(fixture.run(&["normalize"]).status.success());
+    assert!(
+        fixture
+            .run(&[
+                "adopt",
+                "docs/yaml.md",
+                "--id",
+                "florp:yaml",
+                "--type",
+                "florp",
+                "--property",
+                "title=YAML document",
+            ])
+            .status
+            .success()
+    );
+    let get = fixture.run(&["--json", "get", "florp:yaml"]);
+    assert!(get.status.success());
+    let get: Value = serde_json::from_slice(&get.stdout).unwrap();
+    assert_eq!(get["properties"]["title"], "YAML document");
+    assert!(fixture.run(&["validate"]).status.success());
+}
+
+#[test]
 fn structured_describe_validate_and_unavailable_query_are_stable() {
     let fixture = Fixture::copy("synthetic");
 

@@ -11,6 +11,12 @@ pub struct Frontmatter {
     pub content_span: SourceSpan,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct YamlFrontmatter {
+    pub span: SourceSpan,
+    pub content_span: SourceSpan,
+}
+
 impl Frontmatter {
     pub fn document(&self) -> &Document<String> {
         &self.document
@@ -55,11 +61,22 @@ impl fmt::Display for FrontmatterError {
 
 impl Error for FrontmatterError {}
 
-pub(crate) fn parse(source: &str) -> Result<(Option<Frontmatter>, usize), FrontmatterError> {
-    let Some(open_end) = delimiter_end(source, 0) else {
-        return Ok((None, 0));
-    };
+pub(crate) fn parse(
+    source: &str,
+) -> Result<(Option<Frontmatter>, Option<YamlFrontmatter>, usize), FrontmatterError> {
+    if let Some(open_end) = delimiter_end(source, 0, "+++") {
+        return parse_toml(source, open_end);
+    }
+    if let Some(open_end) = delimiter_end(source, 0, "---") {
+        return parse_yaml_region(source, open_end);
+    }
+    Ok((None, None, 0))
+}
 
+fn parse_toml(
+    source: &str,
+    open_end: usize,
+) -> Result<(Option<Frontmatter>, Option<YamlFrontmatter>, usize), FrontmatterError> {
     let mut cursor = open_end;
     while cursor <= source.len() {
         let line_end = source[cursor..]
@@ -92,6 +109,7 @@ pub(crate) fn parse(source: &str) -> Result<(Option<Frontmatter>, usize), Frontm
                     span: SourceSpan::new(source, 0..line_end),
                     content_span: SourceSpan::new(source, open_end..cursor),
                 }),
+                None,
                 line_end,
             ));
         }
@@ -108,16 +126,50 @@ pub(crate) fn parse(source: &str) -> Result<(Option<Frontmatter>, usize), Frontm
     })
 }
 
+fn parse_yaml_region(
+    source: &str,
+    open_end: usize,
+) -> Result<(Option<Frontmatter>, Option<YamlFrontmatter>, usize), FrontmatterError> {
+    let mut cursor = open_end;
+    while cursor <= source.len() {
+        let line_end = source[cursor..]
+            .find('\n')
+            .map_or(source.len(), |relative| cursor + relative + 1);
+        let content_end = source[cursor..line_end]
+            .trim_end_matches(['\r', '\n'])
+            .len()
+            + cursor;
+        if matches!(&source[cursor..content_end], "---" | "...") {
+            return Ok((
+                None,
+                Some(YamlFrontmatter {
+                    span: SourceSpan::new(source, 0..line_end),
+                    content_span: SourceSpan::new(source, open_end..cursor),
+                }),
+                line_end,
+            ));
+        }
+        if line_end == source.len() {
+            break;
+        }
+        cursor = line_end;
+    }
+    Err(FrontmatterError {
+        span: SourceSpan::new(source, 0..open_end),
+        message: "unclosed YAML frontmatter; expected a closing --- or ... line; docgraph frontmatter is TOML in +++ fences; run `docgraph frontmatter migrate`".to_owned(),
+    })
+}
+
 /// Adds one blank line inside each frontmatter delimiter without changing the TOML body.
 pub fn frame_content(content: &str, newline: &str) -> String {
     let body = content.trim_matches(['\r', '\n']);
     format!("{newline}{body}{newline}{newline}")
 }
 
-fn delimiter_end(source: &str, start: usize) -> Option<usize> {
-    if source[start..].starts_with("+++\r\n") {
+fn delimiter_end(source: &str, start: usize, delimiter: &str) -> Option<usize> {
+    if source[start..].starts_with(&format!("{delimiter}\r\n")) {
         Some(start + 5)
-    } else if source[start..].starts_with("+++\n") {
+    } else if source[start..].starts_with(&format!("{delimiter}\n")) {
         Some(start + 4)
     } else {
         None

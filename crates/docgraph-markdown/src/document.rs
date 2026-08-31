@@ -1,10 +1,11 @@
 use crate::frontmatter::{anchor_on_line, parse as parse_frontmatter};
-use crate::{Frontmatter, FrontmatterError, SourceSpan, StableSectionId};
+use crate::{Frontmatter, FrontmatterError, SourceSpan, StableSectionId, YamlFrontmatter};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 #[derive(Clone, Debug)]
 pub struct ParsedDocument {
     pub frontmatter: Option<Frontmatter>,
+    pub yaml_frontmatter: Option<YamlFrontmatter>,
     pub body_offset: usize,
     pub headings: Vec<Heading>,
     pub links: Vec<MarkdownLink>,
@@ -36,7 +37,7 @@ struct BuildingHeading {
 
 impl ParsedDocument {
     pub fn parse(source: &str) -> Result<Self, FrontmatterError> {
-        let (frontmatter, body_offset) = parse_frontmatter(source)?;
+        let (frontmatter, yaml_frontmatter, body_offset) = parse_frontmatter(source)?;
         let options = markdown_options();
 
         let mut headings = Vec::new();
@@ -44,7 +45,8 @@ impl ParsedDocument {
         let mut building_heading: Option<BuildingHeading> = None;
         let mut current_section = None;
 
-        for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
+        for (event, range) in Parser::new_ext(&source[body_offset..], options).into_offset_iter() {
+            let range = (range.start + body_offset)..(range.end + body_offset);
             match event {
                 Event::Start(Tag::Heading { level, .. }) => {
                     let index = headings.len();
@@ -107,6 +109,7 @@ impl ParsedDocument {
 
         Ok(Self {
             frontmatter,
+            yaml_frontmatter,
             body_offset,
             headings,
             links,
@@ -303,6 +306,31 @@ run_retry_loop();
         let error = ParsedDocument::parse(source).unwrap_err();
 
         assert_eq!(error.span.start_line, 2);
+    }
+
+    #[test]
+    fn recognizes_yaml_frontmatter_without_parsing_it_as_markdown() {
+        let source = "---\ntitle: YAML title\ntags: [one, two]\n---\n\n# Actual heading\n";
+
+        let document = ParsedDocument::parse(source).unwrap();
+
+        let yaml = document.yaml_frontmatter.as_ref().unwrap();
+        assert_eq!(
+            &source[yaml.content_span.bytes.clone()],
+            "title: YAML title\ntags: [one, two]\n"
+        );
+        assert_eq!(document.body_offset, yaml.span.bytes.end);
+        assert_eq!(document.headings.len(), 1);
+        assert_eq!(document.headings[0].title, "Actual heading");
+        assert_eq!(document.headings[0].heading_span.start_line, 6);
+    }
+
+    #[test]
+    fn reports_unclosed_yaml_frontmatter_with_the_migration_command() {
+        let error = ParsedDocument::parse("---\ntitle: Unclosed\n# Heading\n").unwrap_err();
+
+        assert!(error.message.contains("YAML frontmatter"));
+        assert!(error.message.contains("docgraph frontmatter migrate"));
     }
 
     #[test]

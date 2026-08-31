@@ -409,6 +409,12 @@ Markdown remains ordinary Markdown.
 
 Structured project state lives in frontmatter. TOML is the leading candidate because Rust supports reliable parsing and format-preserving edits.
 
+An opening `---` YAML frontmatter region is recognized as migration input rather than
+Markdown. Validation names the format mismatch, and a previewable, journaled batch
+migration converts losslessly representable YAML mappings to canonical `+++` TOML
+before normalization or adoption. Ambiguous or non-representable YAML is refused
+atomically.
+
 ```toml
 +++
 

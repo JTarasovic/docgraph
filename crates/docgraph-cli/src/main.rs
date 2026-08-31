@@ -263,6 +263,13 @@ enum FrontmatterAction {
         dry_run: bool,
     },
     Check,
+    /// Convert YAML frontmatter to docgraph TOML frontmatter atomically.
+    Migrate {
+        #[arg(value_name = "PATH")]
+        paths: Vec<PathBuf>,
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2572,6 +2579,13 @@ fn frontmatter(action: FrontmatterAction, json_output: bool) -> Result<(), CliEr
             } else {
                 Err(CliError::silent("generated frontmatter is not current"))
             }
+        }
+        FrontmatterAction::Migrate { paths, dry_run } => {
+            let service = MutationService::open(".").map_err(CliError::boxed)?;
+            let plan = service
+                .apply_repair(&MutationRequest::MigrateYamlFrontmatter { paths }, dry_run)
+                .map_err(CliError::boxed)?;
+            print_plan(&plan, dry_run, json_output)
         }
     }
 }

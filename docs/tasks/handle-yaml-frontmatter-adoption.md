@@ -2,7 +2,7 @@
 
 id = "task:handle-yaml-frontmatter-adoption"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Handle YAML frontmatter during adoption"

@@ -89,6 +89,9 @@ pub enum MutationRequest {
         entity: String,
         property: String,
     },
+    MigrateYamlFrontmatter {
+        paths: Vec<PathBuf>,
+    },
     Normalize,
     SyncFrontmatter,
 }
@@ -542,6 +545,15 @@ impl MutationService {
                 })?;
                 contents.insert(path.clone(), edited);
             }
+            MutationRequest::MigrateYamlFrontmatter { paths } => {
+                migrate_yaml_frontmatter(
+                    &self.repository,
+                    &self.config,
+                    corpus,
+                    &mut contents,
+                    paths,
+                )?;
+            }
             MutationRequest::Normalize => {
                 let mut reserved: BTreeSet<StableSectionId> = graph
                     .sections
@@ -736,10 +748,12 @@ fn validate_repair_request(request: &MutationRequest, repair: bool) -> Result<()
             request,
             MutationRequest::SetEntityProperty { .. }
                 | MutationRequest::RemoveEntityProperty { .. }
+                | MutationRequest::MigrateYamlFrontmatter { .. }
         )
     {
         return Err(MutationError::InvalidRequest(
-            "repair validation is only supported for entity property mutations".to_owned(),
+            "repair validation is only supported for entity property or YAML-frontmatter migrations"
+                .to_owned(),
         ));
     }
     Ok(())
@@ -1603,6 +1617,11 @@ fn adopt_document(
 ) -> Result<String, MutationError> {
     let parsed = ParsedDocument::parse(source)
         .map_err(|error| MutationError::InvalidRequest(error.to_string()))?;
+    if parsed.yaml_frontmatter.is_some() {
+        return Err(MutationError::InvalidRequest(
+            "YAML frontmatter found; run `docgraph frontmatter migrate` before adoption".to_owned(),
+        ));
+    }
     let managed_fields = [
         config.project.frontmatter.id.as_str(),
         config.project.frontmatter.entity_type.as_str(),
@@ -1655,6 +1674,97 @@ fn adopt_document(
         let frontmatter = document.to_string().replace('\n', newline);
         let frontmatter = frame_content(&frontmatter, newline);
         Ok(format!("+++{newline}{frontmatter}+++{newline}{source}"))
+    }
+}
+
+fn migrate_yaml_frontmatter(
+    repository: &Repository,
+    config: &RepositoryConfig,
+    corpus: &CanonicalCorpus,
+    contents: &mut BTreeMap<PathBuf, String>,
+    requested: &[PathBuf],
+) -> Result<(), MutationError> {
+    let targets: BTreeSet<PathBuf> = if requested.is_empty() {
+        corpus
+            .files
+            .iter()
+            .filter(|file| file.document.yaml_frontmatter.is_some())
+            .map(|file| file.path.clone())
+            .collect()
+    } else {
+        requested
+            .iter()
+            .map(|path| managed_document_path(repository, config, path))
+            .collect::<Result<_, _>>()?
+    };
+    if targets.is_empty() {
+        return Err(MutationError::InvalidRequest(
+            "no YAML-fronted documents were found in the configured corpus".to_owned(),
+        ));
+    }
+    for path in targets {
+        let file = corpus
+            .files
+            .iter()
+            .find(|file| file.path == path)
+            .ok_or_else(|| {
+                MutationError::InvalidRequest(format!(
+                    "document {:?} is not in the configured corpus",
+                    path.display()
+                ))
+            })?;
+        let yaml = file.document.yaml_frontmatter.as_ref().ok_or_else(|| {
+            MutationError::InvalidRequest(format!(
+                "document {:?} does not have YAML frontmatter",
+                path.display()
+            ))
+        })?;
+        let source = contents.get(&path).expect("corpus content exists");
+        let yaml_source = &source[yaml.content_span.bytes.clone()];
+        let value: serde_json::Value = serde_yaml_ng::from_str(yaml_source).map_err(|error| {
+            MutationError::InvalidRequest(format!(
+                "cannot migrate YAML frontmatter in {:?}: {error}",
+                path.display()
+            ))
+        })?;
+        if !value.is_object() {
+            return Err(MutationError::InvalidRequest(format!(
+                "cannot migrate YAML frontmatter in {:?}: the root must be a mapping with string keys",
+                path.display()
+            )));
+        }
+        if json_contains_null(&value) {
+            return Err(MutationError::InvalidRequest(format!(
+                "cannot migrate YAML frontmatter in {:?}: YAML null has no lossless TOML representation",
+                path.display()
+            )));
+        }
+        let document = toml_edit::ser::to_document(&value).map_err(|error| {
+            MutationError::InvalidRequest(format!(
+                "cannot migrate YAML frontmatter in {:?} without data loss: {error}",
+                path.display()
+            ))
+        })?;
+        let newline = if source.contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
+        let rendered = document.to_string().replace('\n', newline);
+        let rendered = frame_content(&rendered, newline);
+        let mut migrated = format!("+++{newline}{rendered}+++{newline}");
+        migrated.push_str(&source[yaml.span.bytes.end..]);
+        contents.insert(path, migrated);
+    }
+    Ok(())
+}
+
+fn json_contains_null(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => true,
+        serde_json::Value::Array(values) => values.iter().any(json_contains_null),
+        serde_json::Value::Object(values) => values.values().any(json_contains_null),
+        _ => false,
     }
 }
 
@@ -2443,6 +2553,105 @@ mod tests {
             );
         }
         assert!(service.plan(&request).unwrap().is_empty());
+    }
+
+    #[test]
+    fn yaml_frontmatter_migration_is_previewable_lossless_and_adoptable() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("docs/yaml.md");
+        let source = "---\ntitle: YAML title\ntags: [one, two]\npublished: 2026-08-31\nnested:\n  owner: team\n---\n\n<a id=\"s-9D9KQWAJ82\"></a>\n# YAML document\n";
+        fs::write(&path, source).unwrap();
+        let service = MutationService::open(&fixture.0).unwrap();
+        let request = MutationRequest::MigrateYamlFrontmatter { paths: Vec::new() };
+
+        let preview = service.apply_repair(&request, true).unwrap();
+        let intended = preview
+            .changes
+            .iter()
+            .find(|change| change.path == Path::new("docs/yaml.md"))
+            .unwrap()
+            .intended
+            .as_deref()
+            .unwrap();
+        assert!(intended.starts_with("+++\n"));
+        assert!(intended.contains("title = \"YAML title\""));
+        assert!(intended.contains("tags = [\"one\", \"two\"]"));
+        assert!(intended.contains("published = \"2026-08-31\""));
+        let migrated_frontmatter = intended
+            .split("+++")
+            .nth(1)
+            .unwrap()
+            .parse::<DocumentMut>()
+            .unwrap();
+        assert_eq!(
+            migrated_frontmatter["nested"]["owner"].as_str(),
+            Some("team")
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+
+        service.apply_repair(&request, false).unwrap();
+        let migrated = fs::read_to_string(&path).unwrap();
+        assert!(migrated.starts_with("+++\n"));
+        assert!(
+            ParsedDocument::parse(&migrated)
+                .unwrap()
+                .yaml_frontmatter
+                .is_none()
+        );
+
+        service
+            .apply(
+                &MutationRequest::Adopt {
+                    path: PathBuf::from("docs/yaml.md"),
+                    id: "task:yaml".to_owned(),
+                    entity_type: "task".to_owned(),
+                    properties: BTreeMap::new(),
+                },
+                false,
+            )
+            .unwrap();
+        let adopted = fs::read_to_string(path).unwrap();
+        assert!(adopted.contains("id = \"task:yaml\""));
+        assert!(adopted.contains("title = \"YAML title\""));
+    }
+
+    #[test]
+    fn yaml_frontmatter_migration_refuses_lossy_or_malformed_batches_without_writes() {
+        let fixture = Fixture::new();
+        let good_path = fixture.0.join("docs/good-yaml.md");
+        let bad_path = fixture.0.join("docs/bad-yaml.md");
+        let good = "---\ntitle: Good\n---\n<a id=\"s-9D9KQWAJ82\"></a>\n# Good\n";
+        let null = "---\ntitle: null\n---\n<a id=\"s-4D8Q6SJEF0\"></a>\n# Null\n";
+        fs::write(&good_path, good).unwrap();
+        fs::write(&bad_path, null).unwrap();
+
+        let error = MutationService::open(&fixture.0)
+            .unwrap()
+            .apply_repair(
+                &MutationRequest::MigrateYamlFrontmatter { paths: Vec::new() },
+                true,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("YAML null"));
+        assert_eq!(fs::read_to_string(&good_path).unwrap(), good);
+        assert_eq!(fs::read_to_string(&bad_path).unwrap(), null);
+
+        let malformed = "---\ntitle: [unterminated\n---\n<a id=\"s-4D8Q6SJEF0\"></a>\n# Bad\n";
+        fs::write(&bad_path, malformed).unwrap();
+        let error = MutationService::open(&fixture.0)
+            .unwrap()
+            .apply_repair(
+                &MutationRequest::MigrateYamlFrontmatter { paths: Vec::new() },
+                true,
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cannot migrate YAML frontmatter")
+        );
+        assert_eq!(fs::read_to_string(&good_path).unwrap(), good);
+        assert_eq!(fs::read_to_string(&bad_path).unwrap(), malformed);
     }
 
     #[test]

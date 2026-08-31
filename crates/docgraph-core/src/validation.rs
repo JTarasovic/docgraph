@@ -88,6 +88,19 @@ impl<'a> Validator<'a> {
         graph: &'a GraphIndex,
     ) -> ValidationReport {
         let mut report = Self::validate(repository, config, graph);
+        for file in &corpus.files {
+            if let Some(frontmatter) = &file.document.yaml_frontmatter {
+                report.diagnostics.push(ValidationDiagnostic {
+                    severity: DiagnosticSeverity::Error,
+                    code: "yaml-frontmatter",
+                    message: "YAML frontmatter found; docgraph frontmatter is TOML in +++ fences; run `docgraph frontmatter migrate`".to_owned(),
+                    location: ValidationLocation {
+                        path: file.path.clone(),
+                        span: Some(frontmatter.span.clone()),
+                    },
+                });
+            }
+        }
         let projections = GeneratedFrontmatterIndex::new(graph, config);
         let entity_locations: HashMap<_, ValidationLocation> = graph
             .entities

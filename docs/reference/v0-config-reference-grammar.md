@@ -1039,6 +1039,7 @@ docgraph instructions sync [--dry-run]
 docgraph instructions check
 docgraph frontmatter sync [--dry-run]
 docgraph frontmatter check
+docgraph frontmatter migrate [PATH]... [--dry-run]
 ```
 
 `docgraph init` must run inside a Git worktree. When `.docgraph/project.toml` is
@@ -1228,6 +1229,27 @@ authored directly.
 `docgraph frontmatter sync` inserts or replaces the reserved table structurally and
 supports `--dry-run`. `frontmatter check` is read-only. Missing, malformed, stale, or
 unsupported generated tables fail validation. Other frontmatter is preserved.
+
+Documents beginning with YAML frontmatter in `---` fences are recognized before
+Markdown heading parsing. Validation reports `yaml-frontmatter`, identifies TOML in
+`+++` fences as the canonical representation, and points to `docgraph frontmatter
+migrate`. Normalization and adoption refuse to write until migration removes that
+diagnostic, so YAML keys cannot be mistaken for setext headings or TOML syntax.
+
+`frontmatter migrate` accepts zero or more configured-corpus paths; zero paths selects
+all YAML-fronted documents. It converts the selected set in one dry-runnable,
+recoverable mutation. The YAML root must be a mapping with string keys. Strings,
+booleans, TOML-representable numbers, arrays, nested mappings, and date-like strings
+are preserved as TOML data; nulls, malformed YAML, non-string keys, tags, and values
+without a lossless TOML representation are refused before any file is written. YAML
+comments and presentation style are not data-model values and are not retained.
+
+Migration uses strict error-reduction validation: every selected YAML diagnostic must
+be removed without introducing or worsening another diagnostic. This allows migration
+to precede `normalize` and `adopt` in an already-invalid imported corpus while
+preventing partial or semantics-changing conversion. The ordinary mutation lock,
+optimistic hashes, recovery journal, and generated-frontmatter convergence apply to
+the complete batch.
 
 <a id="s-C8KEVFRV5J"></a>
 ## 24. Config Validation
