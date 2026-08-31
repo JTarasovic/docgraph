@@ -45,6 +45,11 @@ predicate = "implements"
 target = "reference:config-grammar#s-D6B9JYV06F"
 
 [[docgraph_generated.incoming]]
+source = "plan:deliver-external-entity-sources"
+predicate = "implements"
+target = "reference:config-grammar#s-6RGFEKP4CT"
+
+[[docgraph_generated.incoming]]
 source = "plan:project-aware-commands"
 predicate = "implements"
 target = "reference:config-grammar#s-3B3J65MSQN"
@@ -78,6 +83,11 @@ target = "reference:config-grammar#s-KNXSZ8RYR4"
 source = "task:complete-section-relation-roundtrip"
 predicate = "implements"
 target = "reference:config-grammar#s-Q9K2W13EGT"
+
+[[docgraph_generated.incoming]]
+source = "task:define-external-entity-source-contract"
+predicate = "implements"
+target = "reference:config-grammar#s-6RGFEKP4CT"
 
 [[docgraph_generated.incoming]]
 source = "task:expose-complete-ontology-dump"
@@ -118,6 +128,16 @@ target = "task:version-portable-agent-skill"
 source = "reference:config-grammar#s-3B3J65MSQN"
 type = "implemented_by"
 target = "plan:project-aware-commands"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-6RGFEKP4CT"
+type = "implemented_by"
+target = "plan:deliver-external-entity-sources"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-6RGFEKP4CT"
+type = "implemented_by"
+target = "task:define-external-entity-source-contract"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-D6B9JYV06F"

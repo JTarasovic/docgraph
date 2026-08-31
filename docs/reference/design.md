@@ -25,6 +25,11 @@ predicate = "implements"
 target = "reference:design#s-DRW3RR84VS"
 
 [[docgraph_generated.incoming]]
+source = "plan:deliver-external-entity-sources"
+predicate = "implements"
+target = "reference:design#s-WCDD32CNPK"
+
+[[docgraph_generated.incoming]]
 source = "plan:project-aware-commands"
 predicate = "implements"
 target = "reference:design#s-DAR1R6WHJE"
@@ -43,6 +48,11 @@ target = "reference:design"
 source = "task:complete-safe-read-mutation-boundary"
 predicate = "implements"
 target = "reference:design#s-B7542FYPRY"
+
+[[docgraph_generated.incoming]]
+source = "task:define-external-entity-source-contract"
+predicate = "implements"
+target = "reference:design#s-WCDD32CNPK"
 
 [[docgraph_generated.incoming]]
 source = "task:expose-complete-ontology-dump"
@@ -128,6 +138,16 @@ target = "issue:search-index-includes-structured-frontmatter"
 source = "reference:design#s-FDMHXV5Q4Q"
 type = "implemented_by"
 target = "task:index-searchable-markdown-content"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-WCDD32CNPK"
+type = "implemented_by"
+target = "plan:deliver-external-entity-sources"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-WCDD32CNPK"
+type = "implemented_by"
+target = "task:define-external-entity-source-contract"
 
 [[docgraph_generated.backlinks]]
 source = "reference:config-grammar#s-P73QA8YDQB"
