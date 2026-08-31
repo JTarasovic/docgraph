@@ -21,6 +21,10 @@ type = "datetime"
 type = "array"
 items = "string"
 
+[entity.florp.property.related]
+type = "array"
+items = "string"
+
 [entity.grommit]
 description = "A second unfamiliar entity type with an independent workflow."
 workflow = "grommit"

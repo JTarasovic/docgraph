@@ -927,7 +927,8 @@ block; it is not a separate generated file.
 Detailed ontology remains dynamically queryable through `docgraph describe`.
 `docgraph describe --all` returns the complete configured repository model in a
 single stable JSON document, while the bare and scoped forms support compact and
-focused inspection.
+focused inspection. Bare and complete output both expose the versioned built-in
+logic-predicate vocabulary with arities, ordered argument names, and value shapes.
 
 <a id="s-Y4QFB1ZND8"></a>
 ### 11.4 Tested documentation

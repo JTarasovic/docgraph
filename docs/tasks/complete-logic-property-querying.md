@@ -2,7 +2,7 @@
 
 id = "task:complete-logic-property-querying"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Complete logic property querying and discovery"
@@ -45,7 +45,7 @@ without probing validation errors.
 <a id="s-3MBTXMGAQ1"></a>
 ## Scope
 
-- Add flat facts for array membership and entity-valued properties without introducing
+- Confirm flat facts for array membership and entity-valued joins without introducing
   list terms or weakening declared property typing.
 - Include the complete base-predicate vocabulary in structured `describe` output.
 - Generate or maintain the same vocabulary in the portable querying/config guidance.
@@ -54,8 +54,8 @@ without probing validation errors.
 <a id="s-C6QAM3ZBZ4"></a>
 ## Acceptance
 
-- Queries can test array membership, detect empty arrays, and join entity-valued
-  properties.
+- Queries can test array membership, detect empty arrays, and join property values to
+  entity identities.
 - `docgraph describe` exposes all built-ins with arity and argument information.
 - The shipped skill/reference material explains each predicate with a minimal example.
 - Validation and logic-runtime tests cover supported and rejected property shapes.

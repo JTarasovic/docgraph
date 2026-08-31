@@ -33,11 +33,13 @@ Workflows:
 
 Named queries:
 - `docgraph query florp_details --arg florp=<value>` — Returns typed entity properties and expanded array items.
+- `docgraph query florps_without_labels` — Returns florps whose labels array is absent or empty.
 - `docgraph query grommit_confidence --arg florp=<value>` — Returns a typed relation property.
 - `docgraph query grommit_targets --arg florp=<value>` — Targets grommitted by a florp.
 - `docgraph query reachable_florps --arg source=<value>` — Returns the transitive precedence closure from a florp.
 - `docgraph query ready_florps` — Returns florps with no incoming precedence edge.
 - `docgraph query ready_florps_command [--arg label=<value>]` — Returns ready florps, optionally filtered by label.
+- `docgraph query related_florps --arg source=<value>` — Joins string array members to entity identities.
 - `docgraph query scalar_values` — Exercises typed result transport.
 
 Repository commands:

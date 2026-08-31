@@ -54,6 +54,21 @@ arguments = [
   { name = "label", mode = "output", type = "string" },
 ]
 
+[query.florps_without_labels]
+description = "Returns florps whose labels array is absent or empty."
+predicate = "florp_without_labels"
+arguments = [
+  { name = "florp", mode = "output", type = "entity" },
+]
+
+[query.related_florps]
+description = "Joins string array members to entity identities."
+predicate = "related_florp"
+arguments = [
+  { name = "source", mode = "input", type = "entity" },
+  { name = "target", mode = "output", type = "entity" },
+]
+
 [query.reachable_florps]
 description = "Returns the transitive precedence closure from a florp."
 predicate = "reachable_florp"

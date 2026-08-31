@@ -1432,6 +1432,10 @@ fn describe(
             "workflows": config.workflows.keys().collect::<Vec<_>>(),
             "queries": config.queries.keys().collect::<Vec<_>>(),
             "commands": config.commands.keys().collect::<Vec<_>>(),
+            "logic": {
+                "configured": config.logic.is_some(),
+                "predicates": logic_predicates_json(),
+            },
             "reference_providers": config.project.references.iter().map(|reference| json!({
                 "provider": reference.provider,
                 "host": reference.host,
@@ -1661,7 +1665,32 @@ fn complete_description_json(config: &RepositoryConfig) -> JsonValue {
         "workflows": workflows,
         "queries": queries,
         "commands": commands,
+        "logic": {
+            "configured": config.logic.is_some(),
+            "predicates": logic_predicates_json(),
+        },
     })
+}
+
+fn logic_predicates_json() -> JsonValue {
+    JsonValue::Array(
+        docgraph_logic::builtin_predicates()
+            .map(|predicate| {
+                debug_assert_eq!(predicate.arguments.len(), predicate.value_shapes.len());
+                let arguments = predicate
+                    .arguments
+                    .iter()
+                    .zip(predicate.value_shapes)
+                    .map(|(name, shape)| json!({ "name": name, "shape": shape }))
+                    .collect::<Vec<_>>();
+                json!({
+                    "name": predicate.name,
+                    "arity": arguments.len(),
+                    "arguments": arguments,
+                })
+            })
+            .collect(),
+    )
 }
 
 fn command_operation_json(operation: &CommandOperation) -> JsonValue {

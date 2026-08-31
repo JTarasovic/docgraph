@@ -851,6 +851,14 @@ relation_property_boolean[source, predicate, target, key, value]
 relation_property_datetime[source, predicate, target, key, value]
 section[id, document, heading]
 document[path]
+external_entity[id]
+external_entity_provider[id, provider]
+external_entity_kind[id, kind]
+external_entity_state[id, state]
+external_entity_title[id, title]
+external_entity_url[id, url]
+external_entity_freshness[id, freshness]
+external_entity_attribute[id, key, value]
 ```
 
 These built-in names are reserved and may be called but not defined by repository
@@ -862,6 +870,21 @@ predicate for their item type and emit one fact per item. `relation` and the
 `relation_property_*` predicates expose only explicit managed relations and
 deterministic derivatives configured by the repository, such as inverses. v0 does
 not expose informational Markdown links to repository logic.
+
+For example, a string-array property can be enumerated, tested for no members after
+the entity variable is grounded, or joined to the entity relation when its values
+contain entity IDs:
+
+```text
+label(Id, Label) :- entity_property_string(Id, "labels", Label).
+unlabelled(Id) :- entity(Id), !entity_property_string(Id, "labels", _).
+related(Source, Target) :- entity_property_string(Source, "related", Target), entity(Target).
+```
+
+`docgraph describe` and `docgraph describe --all` expose the same complete list at
+`logic.predicates`. Each entry contains `name`, `arity`, and ordered `arguments`;
+each argument has a semantic `name` and `shape`. Shapes are `entity`, `section`,
+`document`, `reference`, `string`, `integer`, `float`, `boolean`, or `datetime`.
 
 <a id="s-9QEQNY5QWN"></a>
 ## 18. Named Queries
@@ -1083,9 +1106,10 @@ Structured JSON output must also be available.
 Its stable JSON object contains `schema_version`, complete project settings,
 entity-type property schemas (including allowed values and array item types),
 relation endpoints, inverses and properties, workflow states and transitions,
-named-query signatures, and repository-command operations. Bare `docgraph
-describe` remains the compact inventory; the scoped `describe <kind> <name>`
-forms remain available for focused inspection.
+named-query signatures, repository-command operations, and the complete built-in
+logic-predicate vocabulary with arities, argument names, and value shapes. Bare
+`docgraph describe` includes the same logic vocabulary in its compact inventory;
+the scoped `describe <kind> <name>` forms remain available for focused inspection.
 
 <a id="s-V5R4RB2AP1"></a>
 ## 22. Mutations

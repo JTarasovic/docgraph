@@ -861,6 +861,16 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
     let describe: Value = serde_json::from_slice(&describe.stdout).unwrap();
     assert_eq!(describe["project"], "Synthetic ontology conformance");
     assert_eq!(describe["entity_types"][0], "florp");
+    let predicates = describe["logic"]["predicates"].as_array().unwrap();
+    let string_property = predicates
+        .iter()
+        .find(|predicate| predicate["name"] == "entity_property_string")
+        .unwrap();
+    assert_eq!(string_property["arity"], 3);
+    assert_eq!(string_property["arguments"][0]["name"], "id");
+    assert_eq!(string_property["arguments"][0]["shape"], "entity");
+    assert_eq!(string_property["arguments"][2]["name"], "value");
+    assert_eq!(string_property["arguments"][2]["shape"], "string");
 
     let complete = fixture.run(&["--json", "describe", "--all"]);
     assert!(
@@ -904,6 +914,11 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
         "transition"
     );
     assert_eq!(complete["project"]["logic_configured"], true);
+    assert_eq!(complete["logic"]["configured"], true);
+    assert_eq!(
+        complete["logic"]["predicates"],
+        describe["logic"]["predicates"]
+    );
 
     let readable = fixture.run(&["describe", "--all"]);
     assert!(readable.status.success());
@@ -1076,6 +1091,32 @@ fn configured_logic_runtime_executes_a_typed_query() {
     assert_eq!(details["rows"][0]["score"], 2.5);
     assert_eq!(details["rows"][0]["enabled"], true);
     assert_eq!(details["rows"][0]["observed"], "2026-08-26T12:30:00Z");
+
+    let empty = fixture.run(&["--json", "query", "florps_without_labels"]);
+    assert!(empty.status.success());
+    let empty: Value = serde_json::from_slice(&empty.stdout).unwrap();
+    let mut empty_ids = empty["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["florp"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    empty_ids.sort_unstable();
+    assert_eq!(empty_ids, ["florp:2", "florp:3"]);
+
+    let related = fixture.run(&[
+        "--json",
+        "query",
+        "related_florps",
+        "--arg",
+        "source=florp:1",
+    ]);
+    assert!(related.status.success());
+    let related: Value = serde_json::from_slice(&related.stdout).unwrap();
+    assert_eq!(
+        related["rows"],
+        serde_json::json!([{ "target": "florp:2" }])
+    );
 
     let scalars = fixture.run(&["--json", "query", "scalar_values"]);
     assert!(

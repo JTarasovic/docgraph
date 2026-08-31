@@ -26,59 +26,130 @@ const RUNTIME_OVERRIDE: &str = "DOCGRAPH_LOGIC_RUNTIME";
 const RESULT_RELATION: &str = "__docgraph_result";
 const VALIDATION_RELATION: &str = "__docgraph_validation";
 const BUILTINS: &[Builtin] = &[
-    Builtin::new("entity", &[EngineType::Symbol]),
-    Builtin::new("entity_type", &[EngineType::Symbol, EngineType::Symbol]),
-    Builtin::new("entity_state", &[EngineType::Symbol, EngineType::Symbol]),
+    Builtin::new("entity", &[EngineType::Symbol], &["id"], &["entity"]),
+    Builtin::new(
+        "entity_type",
+        &[EngineType::Symbol, EngineType::Symbol],
+        &["id", "type"],
+        &["entity", "string"],
+    ),
+    Builtin::new(
+        "entity_state",
+        &[EngineType::Symbol, EngineType::Symbol],
+        &["id", "state"],
+        &["entity", "string"],
+    ),
     Builtin::new(
         "relation",
         &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
+        &["source", "predicate", "target"],
+        &["reference", "string", "reference"],
     ),
-    Builtin::new("entity_property_string", &PROPERTY_SYMBOL_TYPES),
-    Builtin::new("entity_property_integer", &PROPERTY_NUMBER_TYPES),
-    Builtin::new("entity_property_float", &PROPERTY_FLOAT_TYPES),
-    Builtin::new("entity_property_boolean", &PROPERTY_NUMBER_TYPES),
-    Builtin::new("entity_property_datetime", &PROPERTY_SYMBOL_TYPES),
-    Builtin::new("relation_property_string", &RELATION_PROPERTY_SYMBOL_TYPES),
-    Builtin::new("relation_property_integer", &RELATION_PROPERTY_NUMBER_TYPES),
-    Builtin::new("relation_property_float", &RELATION_PROPERTY_FLOAT_TYPES),
-    Builtin::new("relation_property_boolean", &RELATION_PROPERTY_NUMBER_TYPES),
+    Builtin::property(
+        "entity_property_string",
+        &PROPERTY_SYMBOL_TYPES,
+        &["entity", "string", "string"],
+    ),
+    Builtin::property(
+        "entity_property_integer",
+        &PROPERTY_NUMBER_TYPES,
+        &["entity", "string", "integer"],
+    ),
+    Builtin::property(
+        "entity_property_float",
+        &PROPERTY_FLOAT_TYPES,
+        &["entity", "string", "float"],
+    ),
+    Builtin::property(
+        "entity_property_boolean",
+        &PROPERTY_NUMBER_TYPES,
+        &["entity", "string", "boolean"],
+    ),
+    Builtin::property(
+        "entity_property_datetime",
+        &PROPERTY_SYMBOL_TYPES,
+        &["entity", "string", "datetime"],
+    ),
+    Builtin::relation_property(
+        "relation_property_string",
+        &RELATION_PROPERTY_SYMBOL_TYPES,
+        &["reference", "string", "reference", "string", "string"],
+    ),
+    Builtin::relation_property(
+        "relation_property_integer",
+        &RELATION_PROPERTY_NUMBER_TYPES,
+        &["reference", "string", "reference", "string", "integer"],
+    ),
+    Builtin::relation_property(
+        "relation_property_float",
+        &RELATION_PROPERTY_FLOAT_TYPES,
+        &["reference", "string", "reference", "string", "float"],
+    ),
+    Builtin::relation_property(
+        "relation_property_boolean",
+        &RELATION_PROPERTY_NUMBER_TYPES,
+        &["reference", "string", "reference", "string", "boolean"],
+    ),
     Builtin::new(
         "relation_property_datetime",
         &RELATION_PROPERTY_SYMBOL_TYPES,
+        &["source", "predicate", "target", "key", "value"],
+        &["reference", "string", "reference", "string", "datetime"],
     ),
     Builtin::new(
         "section",
         &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
+        &["id", "document", "heading"],
+        &["section", "document", "string"],
     ),
-    Builtin::new("document", &[EngineType::Symbol]),
-    Builtin::new("external_entity", &[EngineType::Symbol]),
+    Builtin::new("document", &[EngineType::Symbol], &["path"], &["document"]),
+    Builtin::new(
+        "external_entity",
+        &[EngineType::Symbol],
+        &["id"],
+        &["entity"],
+    ),
     Builtin::new(
         "external_entity_provider",
         &[EngineType::Symbol, EngineType::Symbol],
+        &["id", "provider"],
+        &["entity", "string"],
     ),
     Builtin::new(
         "external_entity_kind",
         &[EngineType::Symbol, EngineType::Symbol],
+        &["id", "kind"],
+        &["entity", "string"],
     ),
     Builtin::new(
         "external_entity_state",
         &[EngineType::Symbol, EngineType::Symbol],
+        &["id", "state"],
+        &["entity", "string"],
     ),
     Builtin::new(
         "external_entity_title",
         &[EngineType::Symbol, EngineType::Symbol],
+        &["id", "title"],
+        &["entity", "string"],
     ),
     Builtin::new(
         "external_entity_url",
         &[EngineType::Symbol, EngineType::Symbol],
+        &["id", "url"],
+        &["entity", "string"],
     ),
     Builtin::new(
         "external_entity_freshness",
         &[EngineType::Symbol, EngineType::Symbol],
+        &["id", "freshness"],
+        &["entity", "string"],
     ),
     Builtin::new(
         "external_entity_attribute",
         &[EngineType::Symbol, EngineType::Symbol, EngineType::Symbol],
+        &["id", "key", "value"],
+        &["entity", "string", "string"],
     ),
 ];
 
@@ -120,12 +191,60 @@ enum EngineType {
 struct Builtin {
     name: &'static str,
     types: &'static [EngineType],
+    arguments: &'static [&'static str],
+    value_shapes: &'static [&'static str],
 }
 
 impl Builtin {
-    const fn new(name: &'static str, types: &'static [EngineType]) -> Self {
-        Self { name, types }
+    const fn new(
+        name: &'static str,
+        types: &'static [EngineType],
+        arguments: &'static [&'static str],
+        value_shapes: &'static [&'static str],
+    ) -> Self {
+        Self {
+            name,
+            types,
+            arguments,
+            value_shapes,
+        }
     }
+
+    const fn property(
+        name: &'static str,
+        types: &'static [EngineType],
+        value_shapes: &'static [&'static str],
+    ) -> Self {
+        Self::new(name, types, &["id", "key", "value"], value_shapes)
+    }
+
+    const fn relation_property(
+        name: &'static str,
+        types: &'static [EngineType],
+        value_shapes: &'static [&'static str],
+    ) -> Self {
+        Self::new(
+            name,
+            types,
+            &["source", "predicate", "target", "key", "value"],
+            value_shapes,
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BuiltinPredicate {
+    pub name: &'static str,
+    pub arguments: &'static [&'static str],
+    pub value_shapes: &'static [&'static str],
+}
+
+pub fn builtin_predicates() -> impl ExactSizeIterator<Item = BuiltinPredicate> {
+    BUILTINS.iter().map(|builtin| BuiltinPredicate {
+        name: builtin.name,
+        arguments: builtin.arguments,
+        value_shapes: builtin.value_shapes,
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1839,6 +1958,18 @@ mod tests {
         .unwrap();
         assert_eq!(module.predicate_arity("actionable"), Some(1));
     }
+
+    #[test]
+    fn every_builtin_has_complete_discovery_metadata() {
+        let predicates = builtin_predicates().collect::<Vec<_>>();
+        assert_eq!(predicates.len(), BUILTINS.len());
+        for (predicate, builtin) in predicates.iter().zip(BUILTINS) {
+            assert_eq!(predicate.name, builtin.name);
+            assert_eq!(predicate.arguments.len(), builtin.types.len());
+            assert_eq!(predicate.value_shapes.len(), builtin.types.len());
+        }
+    }
+
     #[test]
     fn comments_are_masked_before_clauses_are_split() {
         for comment in [

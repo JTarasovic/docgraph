@@ -11,6 +11,7 @@ score = 2.5
 enabled = true
 observed = 2026-08-26T12:30:00Z
 labels = ["odd", "novel"]
+related = ["florp:2"]
 
 [[relations]]
 type = "grommits"
