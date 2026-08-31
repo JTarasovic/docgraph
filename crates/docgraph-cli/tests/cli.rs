@@ -304,11 +304,13 @@ fn property_repair_unblocks_tightened_enums_without_weakening_validation() {
     ] {
         let path = fixture.0.join("docs").join(name);
         let source = fs::read_to_string(&path).unwrap();
+        let newline = if source.contains("\r\n") { "\r\n" } else { "\n" };
+        let properties_header = format!("[properties]{newline}");
         fs::write(
             path,
             source.replacen(
-                "[properties]\n",
-                &format!("[properties]\nimpact = \"{impact}\"\n"),
+                &properties_header,
+                &format!("{properties_header}impact = \"{impact}\"{newline}"),
                 1,
             ),
         )
