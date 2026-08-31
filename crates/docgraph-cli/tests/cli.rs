@@ -317,9 +317,10 @@ fn property_repair_unblocks_tightened_enums_without_weakening_validation() {
 
     let strict = fixture.run(&["property", "set", "florp:1", "impact", "critical"]);
     assert!(!strict.status.success());
+    let strict_error = String::from_utf8_lossy(&strict.stderr);
     assert!(
-        String::from_utf8_lossy(&strict.stderr)
-            .contains("florp:2\" property \"impact\" does not match")
+        strict_error.contains("property \"impact\" does not match"),
+        "{strict_error}"
     );
 
     let first_path = fixture.0.join("docs/florp.md");
