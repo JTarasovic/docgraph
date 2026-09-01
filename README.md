@@ -12,6 +12,9 @@ before 1.0, so treat compatibility as best effort and pin the release used by
 automation. Initial release artifacts target x86-64 Windows and x86-64 Linux;
 macOS and ARM artifacts are not provided yet.
 
+Contributors can rehearse and publish releases with the
+[release runbook](docs/reference/release-workflow.md).
+
 ## Installation
 
 Release binaries are published through the repository's GitHub Releases. Choose

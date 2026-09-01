@@ -1,0 +1,154 @@
++++
+
+id = "reference:release-workflow"
+type = "reference"
+
+[properties]
+role = "design"
+
+[docgraph_generated]
+schema_version = 1
+
+[[docgraph_generated.incoming]]
+source = "task:define-repeatable-release-workflow"
+predicate = "implements"
+target = "reference:release-workflow"
+
+[[docgraph_generated.inverses]]
+source = "reference:release-workflow"
+type = "implemented_by"
+target = "task:define-repeatable-release-workflow"
+
++++
+<a id="s-VZ0QKNRXQK"></a>
+# Release workflow
+
+This runbook defines the contributor workflow selected in
+[decision:release-workflow-ownership](../decisions/release-workflow-ownership.md).
+Task automate-release-preparation will check in the pinned configuration and replace
+the transitional commands identified below.
+
+<a id="s-Q9JPZDVN2R"></a>
+## Release contract
+
+Docgraph publishes one x86-64 Windows archive and one x86-64 Linux archive from an
+immutable vMAJOR.MINOR.PATCH tag. Each contains the CLI, matching native logic runtime,
+project and third-party licenses, README, and portable skill. Each archive has a
+SHA-256 checksum and passes a clean-install smoke test on its native runner.
+
+Cargo.toml workspace.package.version is the only canonical checked-in version.
+Cargo-release derives Cargo.lock and the portable skill's cli_version. Dist derives
+the target matrix, archive names, checksums, release manifest, workflow, and GitHub
+release from that version and the tag. Documentation examples are generic; CI resolves
+the published version it is testing.
+
+<a id="s-5DGJ989FQ4"></a>
+## Preconditions
+
+- Start a release branch from current origin/main with a clean working tree.
+- Choose an explicit version greater than the latest stable tag under Semantic
+  Versioning and review all changes since that tag for user impact and security notes.
+- Confirm the pinned Windows and Linux companion-runtime artifacts exist and their
+  configured checksums verify.
+- Install the exact mise-managed Rust, cargo-release, git-cliff, dist,
+  cargo-auditable, and cargo-cyclonedx versions.
+- Authenticate gh for the repository and confirm required Linux and Windows checks can
+  run on the release branch.
+
+<a id="s-A4SX0BRFKM"></a>
+## Prepare and rehearse
+
+The implemented interface will use these commands, with 0.3.0 replaced by the intended
+numeric version:
+
+    cargo release 0.3.0 --workspace --no-publish --no-push --no-tag
+    cargo release 0.3.0 --workspace --no-publish --no-push --no-tag --execute
+    dist plan --tag v0.3.0
+    dist build --tag v0.3.0
+
+The first cargo-release command is a non-mutating preview and is always run first. Its
+preview must show only Cargo.toml, Cargo.lock, skills/docgraph/skill.toml, and the
+git-cliff changelog proposal. The execute command creates one consolidated preparation
+commit but neither a tag nor a push. Review and edit CHANGELOG.md for user impact,
+amend that commit, then run the repository checks.
+
+Dist plan must show exactly the supported native targets, archives, SHA-256 outputs,
+release manifest, SBOM, and attestation work. Dist build stages the current host's
+companion runtime and builds the archive. Run the existing smoke test against the
+resulting archive. A local rehearsal proves only the current platform; the release pull
+request must exercise the other native runner.
+
+Until task automate-release-preparation checks in those configurations, use the
+existing tools/release/package.ps1 and tools/release/smoke-test.ps1 commands documented
+by their help output. Update only Cargo.toml, Cargo.lock through Cargo, and
+skills/docgraph/skill.toml. Do not create a changelog file or invoke the target dist
+commands until their pinned configuration lands.
+
+<a id="s-PPK9N1DX91"></a>
+## Review the preparation commit
+
+The release pull request must contain no unrelated work. Verify:
+
+1. Cargo metadata, Cargo.lock, the portable skill, and the intended tag agree.
+2. CHANGELOG.md has a curated dated entry and correct comparison links.
+3. README and action examples contain no release-owned current-version strings.
+4. Dist's generated workflow matches dist-workspace.toml and uses pinned actions,
+   tools, companion inputs, and runner images.
+5. The native archive contains the CLI, runtime, licenses, README, and skill and passes
+   the clean-install smoke test.
+6. mise run check-local, docgraph validate --changes origin/main, and docgraph review
+   origin/main pass.
+
+Merge only after required Linux and Windows checks are green.
+
+<a id="s-H8CPAF9ZRS"></a>
+## Publish
+
+After the preparation commit is merged, update local main with a fast-forward, confirm
+the tree is clean, and create the reviewed annotated tag:
+
+    git fetch origin --tags
+    git switch main
+    git pull --ff-only origin main
+    git status --short
+    git tag -a v0.3.0 -m "docgraph v0.3.0"
+    git show --stat v0.3.0
+    git push origin v0.3.0
+
+Replace 0.3.0 with the reviewed version. Do not push unless git show identifies the
+merged preparation commit. The tag starts the generated dist workflow; its host phase
+publishes only after both native build and smoke-test jobs succeed.
+
+<a id="s-8TZDE68XQA"></a>
+## Verify and close out
+
+1. Confirm dist's tag workflow and every native build, smoke, checksum, SBOM, and
+   attestation job succeeded.
+2. Download both archives and checksum outputs and verify them independently.
+3. Verify GitHub artifact attestations for each archive and checksum manifest. After
+   issue 12 is complete, also verify that each final SBOM is bound to its archive.
+4. In a clean directory, run docgraph --version and docgraph --help from each archive,
+   then exercise the documented validation action at the exact published version.
+5. Confirm the GitHub release body matches the accepted changelog entry and that CI's
+   published-action compatibility check observes the new release dynamically.
+6. Close the release issue only after artifacts, checksums, notes, attestations, and
+   post-release validation are present.
+
+<a id="s-T1ZYCCJ8W6"></a>
+## Rollback and correction
+
+Before a tag is pushed, amend or abandon the release branch normally. A failed
+tag-triggered workflow may be rerun against the same immutable inputs. If a fix changes
+an input, prepare a new version instead of moving the tag. Delete an unpublished draft
+release if necessary, but never replace an externally observed tag or published asset;
+correct it with a patch release.
+
+<a id="s-XBXJZW4EST"></a>
+## Changelog policy
+
+CHANGELOG.md is canonical release prose in Keep a Changelog structure. It contains an
+Unreleased section and one dated heading and comparison link per stable release.
+Git-cliff proposes entries from commits since the previous stable tag. The release
+author owns categorization, omission of internal-only work, compatibility and security
+notes, and final wording. Dist publishes the accepted section instead of independently
+generating notes.

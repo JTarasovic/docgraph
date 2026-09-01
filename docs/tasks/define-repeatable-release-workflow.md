@@ -2,7 +2,7 @@
 
 id = "task:define-repeatable-release-workflow"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Define a repeatable release workflow"
@@ -14,6 +14,14 @@ target = "plan:harden-delivery-integrity"
 [[relations]]
 type = "implements"
 target = "plan:harden-delivery-integrity#s-D2EX933DKW"
+
+[[relations]]
+type = "implements"
+target = "decision:release-workflow-ownership"
+
+[[relations]]
+type = "implements"
+target = "reference:release-workflow"
 
 [docgraph_generated]
 schema_version = 1
