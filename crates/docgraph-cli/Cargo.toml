@@ -22,3 +22,20 @@ toml_edit.workspace = true
 
 [dev-dependencies]
 serde_yaml_ng.workspace = true
+
+[package.metadata.dist]
+dist = true
+
+[package.metadata.release]
+pre-release-replacements = [
+  { file = "../../skills/docgraph/skill.toml", search = 'cli_version = "[^"]+"', replace = 'cli_version = "{{version}}"', exactly = 1 },
+  { file = "../../CHANGELOG.md", search = '(?m)^\[Unreleased\]: https://github\.com/JTarasovic/docgraph/compare/v([^\s]+)\.\.HEAD$', replace = '''[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v{{version}}..HEAD
+[{{version}}]: https://github.com/JTarasovic/docgraph/compare/v$1..v{{version}}''', exactly = 1 },
+]
+pre-release-hook = [
+  "pwsh",
+  "-NoProfile",
+  "-File",
+  "../../tools/release/update-changelog.ps1",
+  "{{version}}",
+]

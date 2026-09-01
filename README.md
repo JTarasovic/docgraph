@@ -7,8 +7,8 @@ validation, and safe mutation commands for people and software agents.
 
 ## Status and support
 
-The current release is v0.2.0. Interfaces and configuration are still evolving
-before 1.0, so treat compatibility as best effort and pin the release used by
+Interfaces and configuration are still evolving before 1.0, so treat
+compatibility as best effort and pin the release used by
 automation. Initial release artifacts target x86-64 Windows and x86-64 Linux;
 macOS and ARM artifacts are not provided yet.
 
@@ -17,9 +17,10 @@ Contributors can rehearse and publish releases with the
 
 ## Installation
 
-Release binaries are published through the repository's GitHub Releases. Choose
-`docgraph-v0.2.0-windows-x86_64.zip` or
-`docgraph-v0.2.0-linux-x86_64.tar.gz`, unpack it, and keep
+Release binaries are published through the repository's
+[latest GitHub release](https://github.com/JTarasovic/docgraph/releases/latest).
+Choose the archive for `x86_64-pc-windows-msvc` or
+`x86_64-unknown-linux-gnu`, unpack it, and keep
 the `docgraph` executable beside the adjacent `docgraph-logic-runtime` and
 license files included in that archive. The matching portable agent skill is
 included under `skills/docgraph` and is also embedded in the CLI for verified
@@ -50,7 +51,7 @@ steps:
   - uses: actions/checkout@<full-commit-sha>
   - uses: JTarasovic/docgraph@<full-commit-sha>
     with:
-      version: v0.2.0
+      version: <exact-release-tag>
       token: ${{ secrets.DOCGRAPH_RELEASE_TOKEN }} # only while releases are private
 ```
 

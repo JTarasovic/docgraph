@@ -21,49 +21,63 @@ if ($architecture -ne "X64") {
     throw "docgraph release artifacts do not support runner architecture '$architecture'."
 }
 if ($IsWindows) {
-    $target = "windows-x86_64"
+    $target = "x86_64-pc-windows-msvc"
     $extension = ".zip"
     $executableName = "docgraph.exe"
-    $runtimeName = "docgraph-logic-runtime.exe"
 } elseif ($IsLinux) {
-    $target = "linux-x86_64"
+    $target = "x86_64-unknown-linux-gnu"
     $extension = ".tar.gz"
     $executableName = "docgraph"
-    $runtimeName = "docgraph-logic-runtime"
 } else {
     throw "docgraph release artifacts support only Windows and Linux x86-64 runners."
 }
 
-$archiveName = "docgraph-$tag-$target$extension"
-$releaseBase = "https://github.com/JTarasovic/docgraph/releases/download/$tag"
+$runtimeNames = @("docgraph-logic-runtime")
+if ($IsWindows) {
+    $runtimeNames += "docgraph-logic-runtime.exe"
+}
+$archiveCandidates = @(
+    "docgraph-cli-$target$extension"
+    "docgraph-$tag-$(if ($IsWindows) { 'windows' } else { 'linux' })-x86_64$extension"
+)
 $runnerTemp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 $installation = Join-Path $runnerTemp "docgraph-action-$versionNumber-$target-$([guid]::NewGuid())"
-$archive = Join-Path $installation $archiveName
-$checksum = "$archive.sha256"
 New-Item -ItemType Directory -Path $installation | Out-Null
 
-if ($env:DOCGRAPH_ACTION_TOKEN) {
-    $apiHeaders = @{
-        Authorization = "Bearer $env:DOCGRAPH_ACTION_TOKEN"
-        Accept = "application/vnd.github+json"
-        "X-GitHub-Api-Version" = "2022-11-28"
-    }
-    $release = Invoke-RestMethod `
-        -Uri "https://api.github.com/repos/JTarasovic/docgraph/releases/tags/$tag" `
-        -Headers $apiHeaders
-    $archiveAsset = $release.assets | Where-Object name -EQ $archiveName | Select-Object -First 1
-    $checksumAsset = $release.assets | Where-Object name -EQ "$archiveName.sha256" | Select-Object -First 1
-    if (-not $archiveAsset -or -not $checksumAsset) {
-        throw "Release $tag does not contain $archiveName and its checksum."
-    }
-    $assetHeaders = $apiHeaders.Clone()
-    $assetHeaders.Accept = "application/octet-stream"
-    Invoke-WebRequest -Uri $archiveAsset.url -Headers $assetHeaders -OutFile $archive
-    Invoke-WebRequest -Uri $checksumAsset.url -Headers $assetHeaders -OutFile $checksum
-} else {
-    Invoke-WebRequest -Uri "$releaseBase/$archiveName" -OutFile $archive
-    Invoke-WebRequest -Uri "$releaseBase/$archiveName.sha256" -OutFile $checksum
+$apiHeaders = @{
+    Accept = "application/vnd.github+json"
+    "X-GitHub-Api-Version" = "2022-11-28"
 }
+if ($env:DOCGRAPH_ACTION_TOKEN) {
+    $apiHeaders.Authorization = "Bearer $env:DOCGRAPH_ACTION_TOKEN"
+}
+$release = Invoke-RestMethod `
+    -Uri "https://api.github.com/repos/JTarasovic/docgraph/releases/tags/$tag" `
+    -Headers $apiHeaders
+
+$archiveName = $null
+$archiveAsset = $null
+$checksumAsset = $null
+foreach ($candidate in $archiveCandidates) {
+    $candidateArchive = $release.assets | Where-Object name -EQ $candidate | Select-Object -First 1
+    $candidateChecksum = $release.assets | Where-Object name -EQ "$candidate.sha256" | Select-Object -First 1
+    if ($candidateArchive -and $candidateChecksum) {
+        $archiveName = $candidate
+        $archiveAsset = $candidateArchive
+        $checksumAsset = $candidateChecksum
+        break
+    }
+}
+if (-not $archiveAsset -or -not $checksumAsset) {
+    throw "Release $tag has no supported archive/checksum pair for $target. Expected one of: $($archiveCandidates -join ', ')."
+}
+
+$archive = Join-Path $installation $archiveName
+$checksum = "$archive.sha256"
+$assetHeaders = $apiHeaders.Clone()
+$assetHeaders.Accept = "application/octet-stream"
+Invoke-WebRequest -Uri $archiveAsset.url -Headers $assetHeaders -OutFile $archive
+Invoke-WebRequest -Uri $checksumAsset.url -Headers $assetHeaders -OutFile $checksum
 
 $checksumMatch = [regex]::Match(
     (Get-Content -Raw -LiteralPath $checksum).Trim(),
@@ -93,9 +107,12 @@ if (-not $executable) {
     throw "Release archive does not contain $executableName."
 }
 $executableDirectory = Split-Path -Parent $executable
-$runtime = Join-Path $executableDirectory $runtimeName
-if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) {
-    throw "Release archive does not place $runtimeName beside $executableName."
+$runtime = $runtimeNames |
+    ForEach-Object { Join-Path $executableDirectory $_ } |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
+if (-not $runtime) {
+    throw "Release archive does not place a supported logic runtime beside $executableName."
 }
 if ($IsLinux) {
     chmod +x $executable $runtime

@@ -50,10 +50,22 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve latest stable release
+        id: released-docgraph
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = (gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name).Trim()
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Latest release tag is not stable semantic version: $tag"
+          }
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "tag=$tag"
+
       - name: Smoke-test released validation action
         uses: ./
         with:
-          version: v0.2.0
+          version: ${{ steps.released-docgraph.outputs.tag }}
 
       - name: Install Windows test tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0

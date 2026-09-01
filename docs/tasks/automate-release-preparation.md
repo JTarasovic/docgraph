@@ -2,7 +2,7 @@
 
 id = "task:automate-release-preparation"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Automate release preparation"

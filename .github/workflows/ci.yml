@@ -27,13 +27,27 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Resolve latest stable release
+        id: released-docgraph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Latest release tag is not stable semantic version: $tag" >&2
+            exit 1
+          }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - name: Smoke-test released validation action
         uses: ./
         with:
-          version: v0.2.0
+          version: ${{ steps.released-docgraph.outputs.tag }}
 
       - name: Install pinned development tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          install_args: cargo-binstall rust cargo:cargo-deny cargo:cargo-machete cargo:cargo-nextest cargo:cargo-dist cargo:committed
 
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2

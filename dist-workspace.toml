@@ -1,0 +1,36 @@
+[workspace]
+members = ["cargo:."]
+
+[dist]
+cargo-dist-version = "0.32.0"
+ci = "github"
+hosting = "github"
+packages = ["docgraph-cli"]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+installers = []
+unix-archive = ".tar.gz"
+windows-archive = ".zip"
+checksum = "sha256"
+source-tarball = false
+include = [
+  "target/release-inputs/docgraph-logic-runtime",
+  "target/release-inputs/skills",
+  "target/release-inputs/THIRD_PARTY_LICENSES",
+]
+cargo-auditable = false
+cargo-cyclonedx = true
+github-attestations = true
+github-build-setup = "../release-build-setup.yml"
+global-artifacts-jobs = ["./release-smoke"]
+pr-run-mode = "plan"
+
+[dist.github-custom-runners]
+global = "ubuntu-24.04"
+x86_64-unknown-linux-gnu = "ubuntu-24.04"
+x86_64-pc-windows-msvc = "windows-2025"
+
+[dist.github-action-commits]
+"actions/checkout" = "d23441a48e516b6c34aea4fa41551a30e30af803"
+"actions/upload-artifact" = "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+"actions/download-artifact" = "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+"actions/attest" = "1e69f48acb82d1966a394da916b4c1698aa569d6"

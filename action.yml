@@ -4,7 +4,7 @@ author: docgraph contributors
 
 inputs:
   version:
-    description: Exact docgraph release tag to install, such as v0.2.0.
+    description: Exact docgraph release tag to install in v<major>.<minor>.<patch> form.
     required: true
   working-directory:
     description: Repository-relative directory containing the .docgraph configuration.

@@ -1,0 +1,28 @@
+name: Pull request title
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional-title:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned commit validator
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          install_args: cargo-binstall rust cargo:committed
+
+      - name: Validate pull-request title
+        env:
+          DOCGRAPH_COMMIT_MESSAGE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$DOCGRAPH_COMMIT_MESSAGE" | committed --commit-file -

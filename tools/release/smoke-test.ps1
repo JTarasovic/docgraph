@@ -36,11 +36,7 @@ try {
     if (-not $executable) {
         throw "Archive does not contain $executableName."
     }
-    $runtimeName = if ($Target -eq "windows-x86_64") {
-        "docgraph-logic-runtime.exe"
-    } else {
-        "docgraph-logic-runtime"
-    }
+    $runtimeName = "docgraph-logic-runtime"
     $runtime = Join-Path (Split-Path -Parent $executable) $runtimeName
     if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) {
         throw "Archive does not place $runtimeName beside $executableName."

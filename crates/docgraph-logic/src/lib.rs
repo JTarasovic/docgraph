@@ -932,19 +932,20 @@ fn runtime_executable() -> Result<PathBuf, QueryError> {
         path: PathBuf::from("current executable"),
         error,
     })?;
-    let name = if cfg!(windows) {
-        "docgraph-logic-runtime.exe"
-    } else {
-        "docgraph-logic-runtime"
-    };
-    let companion = current
-        .parent()
-        .ok_or(QueryError::RuntimeUnavailable)?
-        .join(name);
-    companion
-        .is_file()
-        .then_some(companion)
+    let directory = current.parent().ok_or(QueryError::RuntimeUnavailable)?;
+    packaged_runtime_names()
+        .iter()
+        .map(|name| directory.join(name))
+        .find(|candidate| candidate.is_file())
         .ok_or(QueryError::RuntimeUnavailable)
+}
+
+fn packaged_runtime_names() -> &'static [&'static str] {
+    if cfg!(windows) {
+        &["docgraph-logic-runtime", "docgraph-logic-runtime.exe"]
+    } else {
+        &["docgraph-logic-runtime"]
+    }
 }
 
 fn sqlite_database_uri(path: &Path) -> String {
@@ -2088,11 +2089,11 @@ mod tests {
 
     #[test]
     fn packaged_runtime_name_is_engine_opaque() {
-        let name = if cfg!(windows) {
-            "docgraph-logic-runtime.exe"
-        } else {
-            "docgraph-logic-runtime"
-        };
-        assert!(!name.to_ascii_lowercase().contains("souffle"));
+        assert_eq!(packaged_runtime_names()[0], "docgraph-logic-runtime");
+        assert!(
+            packaged_runtime_names()
+                .iter()
+                .all(|name| !name.to_ascii_lowercase().contains("souffle"))
+        );
     }
 }

@@ -11,6 +11,12 @@ cargo-binstall = "1.20.0"
 "cargo:cargo-deny" = { version = "0.20.2", depends = ["cargo-binstall", "rust"] }
 "cargo:cargo-machete" = { version = "0.9.2", depends = ["cargo-binstall", "rust"] }
 "cargo:cargo-nextest" = { version = "0.9.143", depends = ["cargo-binstall", "rust"] }
+"cargo:cargo-release" = { version = "1.1.5", depends = ["cargo-binstall", "rust"] }
+"github:orhun/git-cliff" = "2.13.1"
+"cargo:cargo-dist" = { version = "0.32.0", depends = ["cargo-binstall", "rust"] }
+"cargo:cargo-auditable" = { version = "0.7.5", depends = ["cargo-binstall", "rust"] }
+"cargo:cargo-cyclonedx" = { version = "0.5.5", depends = ["cargo-binstall", "rust"] }
+"cargo:committed" = { version = "1.1.11", depends = ["cargo-binstall", "rust"] }
 
 [tasks.fmt]
 description = "Check Rust formatting"
@@ -26,7 +32,18 @@ run = "cargo nextest run --workspace --all-features --locked --no-tests pass"
 
 [tasks.check]
 description = "Run every platform-independent required check"
-depends = ["fmt", "lint", "test", "managed-changes", "deny", "machete"]
+depends = ["fmt", "lint", "test", "managed-changes", "release-check", "commit-messages", "deny", "machete"]
+
+[tasks.commit-messages]
+description = "Require Conventional Commit subjects in the changed Git range"
+run = "committed \"{{ get_env(name='DOCGRAPH_CHANGE_BASE', default='HEAD') }}..HEAD\""
+
+[tasks.release-check]
+description = "Reject stale generated release automation or invalid distribution plans"
+run = [
+    "dist generate --check",
+    "dist plan --allow-dirty",
+]
 
 [tasks.check-local]
 description = "Prepare the host runtime and run every required check"

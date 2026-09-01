@@ -39,14 +39,16 @@ adjacent SHA-256 file, checks the packaged CLI version and adjacent logic runtim
 adds the installation directory to the job path, and validates the configured
 corpus.
 
-The action supports `windows-x86_64` and `linux-x86_64`, matching the published
-release artifacts. Unsupported operating systems and architectures fail with an
+The action supports the `x86_64-pc-windows-msvc` and
+`x86_64-unknown-linux-gnu` release targets. It selects dist's exact archive and
+checksum pair from release metadata; the legacy v0.2.0 names remain accepted for
+compatibility. Unsupported operating systems and architectures fail with an
 actionable diagnostic.
 
 Inputs:
 
-- `version` is required and must be an exact semantic release tag such as
-  `v0.2.0`. Floating versions are rejected.
+- `version` is required and must be an exact semantic release tag in
+  `v<major>.<minor>.<patch>` form. Floating versions are rejected.
 - `working-directory` defaults to `.` relative to `github.workspace`.
 - `changes` optionally supplies the Git ref for `docgraph validate --changes`.
 - `token` defaults to the workflow token. Public releases need no additional
@@ -68,7 +70,7 @@ steps:
   - uses: actions/checkout@<full-commit-sha>
   - uses: JTarasovic/docgraph@<full-commit-sha>
     with:
-      version: v0.2.0
+      version: <exact-release-tag>
       token: ${{ secrets.DOCGRAPH_RELEASE_TOKEN }} # only while releases are private
 ```
 

@@ -2,6 +2,14 @@
 
 This repository builds docgraph. The product contract lives in `docs/reference/`; keep implementation and tests aligned with it. Use the pinned mise environment and run `mise run check-local` before handing off changes.
 
+## Commit and pull-request titles
+
+Use Conventional Commits for every commit subject and pull-request title. Pull requests
+will be squash-merged, so the title is the permanent release-facing subject. The
+executable policy and allowed types live in `committed.toml`; validate a proposed title
+with `"<title>" | committed --commit-file -`. CI validates both changed commits and
+pull-request titles.
+
 ## Dogfooding boundary
 
 Docgraph manages only the configured `docs` corpus. Use its CLI for managed frontmatter changes; prose remains directly editable. Do not interpret ordinary links as graph policy. Generated docgraph instructions may extend this file inside their marked block; they do not replace these implementation instructions.

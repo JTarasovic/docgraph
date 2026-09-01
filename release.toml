@@ -1,0 +1,8 @@
+allow-branch = ["main", "release/*", "codex/*"]
+shared-version = true
+consolidate-commits = true
+publish = false
+push = false
+tag = false
+pre-release-commit-message = "chore: prepare v{{version}} release"
+tag-name = "v{{version}}"

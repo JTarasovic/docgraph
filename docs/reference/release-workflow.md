@@ -25,8 +25,9 @@ target = "task:define-repeatable-release-workflow"
 
 This runbook defines the contributor workflow selected in
 [decision:release-workflow-ownership](../decisions/release-workflow-ownership.md).
-Task automate-release-preparation will check in the pinned configuration and replace
-the transitional commands identified below.
+The checked-in cargo-release, git-cliff, and dist configuration owns preparation and
+distribution; the repository keeps only its product-specific companion-payload staging
+and smoke-test seams.
 
 <a id="s-Q9JPZDVN2R"></a>
 ## Release contract
@@ -58,13 +59,13 @@ the published version it is testing.
 <a id="s-A4SX0BRFKM"></a>
 ## Prepare and rehearse
 
-The implemented interface will use these commands, with 0.3.0 replaced by the intended
-numeric version:
+Use these commands, with 0.3.0 replaced by the intended numeric version:
 
-    cargo release 0.3.0 --workspace --no-publish --no-push --no-tag
-    cargo release 0.3.0 --workspace --no-publish --no-push --no-tag --execute
+    cargo release 0.3.0 --workspace
+    cargo release 0.3.0 --workspace --execute
+    pwsh -NoProfile -File tools/release/stage-dist-inputs.ps1
     dist plan --tag v0.3.0
-    dist build --tag v0.3.0
+    dist build --tag v0.3.0 --target <current-host-target>
 
 The first cargo-release command is a non-mutating preview and is always run first. Its
 preview must show only Cargo.toml, Cargo.lock, skills/docgraph/skill.toml, and the
@@ -73,16 +74,14 @@ commit but neither a tag nor a push. Review and edit CHANGELOG.md for user impac
 amend that commit, then run the repository checks.
 
 Dist plan must show exactly the supported native targets, archives, SHA-256 outputs,
-release manifest, SBOM, and attestation work. Dist build stages the current host's
-companion runtime and builds the archive. Run the existing smoke test against the
-resulting archive. A local rehearsal proves only the current platform; the release pull
-request must exercise the other native runner.
-
-Until task automate-release-preparation checks in those configurations, use the
-existing tools/release/package.ps1 and tools/release/smoke-test.ps1 commands documented
-by their help output. Update only Cargo.toml, Cargo.lock through Cargo, and
-skills/docgraph/skill.toml. Do not create a changelog file or invoke the target dist
-commands until their pinned configuration lands.
+release manifest, CycloneDX SBOM, and GitHub attestation work. The staging command
+downloads and verifies the current host's pinned companion runtime and lays out the
+portable skill and third-party notices for dist. Dist build consumes those inputs and
+builds the archive. Run tools/release/smoke-test.ps1 against the resulting archive. A
+local rehearsal proves only the current platform; the release pull request must
+exercise the other native runner. Cargo-auditable remains disabled because dist 0.32's
+generated installer for it is not version-pinned; issue 12 owns enabling auditable
+binaries without weakening the pinning contract.
 
 <a id="s-PPK9N1DX91"></a>
 ## Review the preparation commit
@@ -151,4 +150,6 @@ Unreleased section and one dated heading and comparison link per stable release.
 Git-cliff proposes entries from commits since the previous stable tag. The release
 author owns categorization, omission of internal-only work, compatibility and security
 notes, and final wording. Dist publishes the accepted section instead of independently
-generating notes.
+generating notes. Repository commits and squash-merge pull-request titles are checked
+against the same Conventional Commit policy, so the proposal starts from consistently
+typed release-facing subjects rather than relying on release-time cleanup.
