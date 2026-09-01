@@ -123,7 +123,7 @@ fn mise_and_ci_share_one_required_check_contract() {
     let install = named_step(windows_steps, "Install Windows test tools");
     assert_eq!(
         install["with"]["install_args"].as_str(),
-        Some("rust cargo:cargo-nextest")
+        Some("cargo-binstall rust cargo:cargo-nextest")
     );
     let windows_test = named_step(windows_steps, "Run Windows end-to-end tests");
     assert_eq!(
