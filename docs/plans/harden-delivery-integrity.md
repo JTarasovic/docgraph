@@ -2,7 +2,7 @@
 
 id = "plan:harden-delivery-integrity"
 type = "plan"
-state = "proposed"
+state = "active"
 
 [properties]
 title = "Harden delivery integrity"

@@ -2,7 +2,7 @@
 
 id = "task:align-local-and-ci-checks"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Align local and CI checks"
@@ -50,3 +50,18 @@ future edits cannot drift unnoticed.
 - Dependency policy and locked-dependency behavior are consistent in both places.
 - A regression test detects meaningful task/workflow divergence.
 - Documentation states which CI behavior cannot be reproduced on one developer host.
+
+<a id="s-3MHC3Z5E16"></a>
+## Implementation
+
+Implemented with `mise run check` as the single platform-independent contract for
+formatting, lint, locked tests, managed-change validation, dependency policy, and
+unused-dependency detection. `mise run check-local` prepares the pinned Linux or
+Windows logic runtime before invoking that same contract. CI obtains the corresponding
+checksum-verified packaged runtime, selects an explicit change base, and invokes the
+contract unchanged in both jobs.
+
+`repository_check_contract.rs` parses `mise.toml` and the CI workflow to keep the
+required task set, both job invocations, full-history checkout, and change-base
+selection synchronized. The README documents the host/CI boundary. On Windows,
+`mise run check-local` passed all six checks and 139 tests.

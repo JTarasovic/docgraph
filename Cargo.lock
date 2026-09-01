@@ -259,6 +259,7 @@ dependencies = [
  "docgraph-logic",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "toml_edit",
 ]
 

@@ -48,10 +48,9 @@ not complete by itself. Before merging such a pull request:
 2. Publish both immutable companion releases for the new source revision.
 3. Update the release names, archive URLs, archive checksums, and binary checksums
    in `tools/logic-runtime/sources.toml` and the CI/release workflows.
-4. Run the same `mise run check` and dependency checks required for authored
-   changes.
+4. Run the same `mise run check-local` contract required for authored changes.
 
 Renovate pull requests use the normal pull-request workflow and receive no CI or
 merge bypass. Repository settings should require the `rust` and `windows-e2e`
-jobs before merge; dependency changes additionally run the Cargo policy and
-unused-dependency checks in the `rust` job.
+jobs before merge. Both jobs run the shared check contract, including Cargo policy
+and unused-dependency checks.

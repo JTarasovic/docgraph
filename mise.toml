@@ -2,6 +2,9 @@
 cargo.binstall_native = true
 cargo.binstall_only = true
 
+[env]
+DOCGRAPH_LOGIC_RUNTIME = { default = "{{config_root}}/target/logic-runtime/{{os()}}-x86_64/docgraph-logic-runtime{% if os() == 'windows' %}.exe{% endif %}" }
+
 [tools]
 rust = { version = "1.98.0", profile = "minimal", components = ["rustfmt", "clippy"] }
 cargo-binstall = "1.20.0"
@@ -19,17 +22,26 @@ run = "cargo clippy --workspace --all-targets --all-features --locked -- -D warn
 
 [tasks.test]
 description = "Run the Rust test suite"
-depends = ["logic-runtime-windows"]
-env = { DOCGRAPH_LOGIC_RUNTIME = "{{config_root}}/target/logic-runtime/windows-x86_64/docgraph-logic-runtime.exe" }
 run = "cargo nextest run --workspace --all-features --locked --no-tests pass"
 
 [tasks.check]
-description = "Run the default local checks"
-depends = ["fmt", "lint", "test", "managed-changes"]
+description = "Run every platform-independent required check"
+depends = ["fmt", "lint", "test", "managed-changes", "deny", "machete"]
+
+[tasks.check-local]
+description = "Prepare the host runtime and run every required check"
+run = [
+    { task = "logic-runtime-linux" },
+    { task = "check" },
+]
+run_windows = [
+    { task = "logic-runtime-windows" },
+    { task = "check" },
+]
 
 [tasks.managed-changes]
 description = "Reject unsupported managed metadata changes"
-run = "cargo run --quiet --locked -p docgraph-cli -- validate --changes HEAD"
+run = "cargo run --quiet --locked -p docgraph-cli -- validate --changes \"{{ get_env(name='DOCGRAPH_CHANGE_BASE', default='HEAD') }}\""
 
 [tasks.deny]
 description = "Check dependency policy"
@@ -42,3 +54,7 @@ run = "cargo machete"
 [tasks.logic-runtime-windows]
 description = "Build the pinned native Windows logic runtime"
 run = "pwsh -NoProfile -File tools/logic-runtime/build-windows.ps1"
+
+[tasks.logic-runtime-linux]
+description = "Build the pinned native Linux logic runtime"
+run = "bash tools/logic-runtime/build-linux.sh"

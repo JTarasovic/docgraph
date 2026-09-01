@@ -138,7 +138,17 @@ The repository pins its toolchain and task commands with mise. With Rust and
 mise installed, run:
 
 ```text
-mise run check
+mise run check-local
 ```
 
-This runs the repository's formatting, lint, test, and validation checks.
+This prepares the pinned native logic runtime for the current Linux or Windows host,
+then runs the shared `mise run check` contract: formatting, lint, tests, managed-change
+validation, dependency policy, and unused-dependency detection. All Cargo build and
+test commands use `Cargo.lock`.
+
+CI installs a checksum-verified packaged logic runtime as an explicit platform setup
+step, then runs the same `mise run check` contract on Linux and Windows. Set
+`DOCGRAPH_CHANGE_BASE` to review managed changes against a ref other than the local
+default, `HEAD`. A single developer host cannot reproduce the other operating
+system's runtime installation, path behavior, or end-to-end execution; CI owns that
+cross-platform coverage.

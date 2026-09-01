@@ -1,6 +1,6 @@
 # Repository guidance
 
-This repository builds docgraph. The product contract lives in `docs/reference/`; keep implementation and tests aligned with it. Use the pinned mise environment and run `mise run check` before handing off changes.
+This repository builds docgraph. The product contract lives in `docs/reference/`; keep implementation and tests aligned with it. Use the pinned mise environment and run `mise run check-local` before handing off changes.
 
 ## Dogfooding boundary
 
