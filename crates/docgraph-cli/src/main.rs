@@ -64,6 +64,9 @@ enum Command {
         action: SectionAction,
     },
     /// Adopt an existing document into the managed graph.
+    #[command(
+        after_long_help = "Examples:\n  docgraph adopt docs/legacy.md --id reference:legacy --type reference --dry-run\n  docgraph adopt docs/task.md --id task:42 --type task --property owner=platform --property 'labels=[\"urgent\",\"backend\"]'\n  docgraph adopt --batch adoption.toml --dry-run"
+    )]
     Adopt {
         path: Option<PathBuf>,
         #[arg(long)]
@@ -129,6 +132,9 @@ enum Command {
         action: PropertyAction,
     },
     /// Add an explicit managed relation.
+    #[command(
+        after_long_help = "Examples:\n  docgraph relate task:42 depends_on task:17 --dry-run\n  docgraph relate adr:42 decides requirement:7 --property confidence=0.9\n  docgraph relate plan:release#s-0123456789 cites reference:benchmark"
+    )]
     Relate {
         source: String,
         relation: String,
@@ -195,12 +201,21 @@ enum Command {
         #[arg(long)]
         all: bool,
     },
-    /// Add stable IDs to headings that lack them.
+    /// Add stable IDs to every heading that lacks one, repository-wide.
+    #[command(
+        after_long_help = "Scope:\n  normalize always scans the complete configured document corpus; it does not accept a path.\n\nExamples:\n  docgraph normalize --dry-run\n  docgraph normalize\n  docgraph validate"
+    )]
     Normalize {
+        /// A path is accepted only to explain that normalization is repository-wide.
+        #[arg(value_name = "PATH")]
+        target: Option<PathBuf>,
         #[arg(long)]
         dry_run: bool,
     },
     /// Validate configuration, logic, and the complete canonical corpus.
+    #[command(
+        after_long_help = "Examples:\n  docgraph validate\n  docgraph validate --changes HEAD\n  docgraph --json validate --changes origin/main"
+    )]
     Validate {
         /// Reject managed changes not equivalent to supported operations since REF.
         #[arg(long, value_name = "REF")]
@@ -212,6 +227,9 @@ enum Command {
         reference: String,
     },
     /// Execute a typed named query.
+    #[command(
+        after_long_help = "Examples:\n  docgraph query task_blockers --arg task=task:42\n  docgraph query related_findings --arg source=finding:7 --arg minimum_score=0.75\n  docgraph --json query task_blockers --arg task=task:42"
+    )]
     Query {
         name: String,
         #[arg(long = "arg")]
@@ -268,6 +286,9 @@ enum InstructionAction {
 
 #[derive(Subcommand)]
 enum FrontmatterAction {
+    #[command(
+        after_long_help = "Examples:\n  docgraph frontmatter sync --dry-run\n  docgraph frontmatter sync\n  docgraph frontmatter check"
+    )]
     Sync {
         #[arg(long)]
         dry_run: bool,
@@ -285,6 +306,9 @@ enum FrontmatterAction {
 #[derive(Subcommand)]
 enum DocumentAction {
     /// Create a new managed document.
+    #[command(
+        after_long_help = "Examples:\n  docgraph document create docs/plans/cache.md --id plan:cache --type plan --title \"Cache plan\" --dry-run\n  docgraph document create docs/tasks/42.md --id task:42 --type task --title \"Ship cache\" --property owner=platform --property 'labels=[\"urgent\",\"backend\"]'\n\nAfter adding Markdown headings directly, preview repository-wide stable-ID insertion with:\n  docgraph normalize --dry-run"
+    )]
     Create {
         path: PathBuf,
         #[arg(long)]
@@ -820,7 +844,15 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 Ok(())
             }
         }
-        Command::Normalize { dry_run } => mutate(MutationRequest::Normalize, dry_run, cli.json),
+        Command::Normalize { target, dry_run } => {
+            if let Some(target) = target {
+                return Err(CliError::message(format!(
+                    "normalize is repository-wide and does not accept a path (received {:?}); preview the complete configured corpus with `docgraph normalize --dry-run`, then run `docgraph normalize`",
+                    target.display()
+                )));
+            }
+            mutate(MutationRequest::Normalize, dry_run, cli.json)
+        }
         Command::Validate { changes } => validate(changes.as_deref(), cli.json),
         Command::Review { reference } => review(&reference, cli.json),
         Command::Query { name, arguments } => query(&name, &arguments, cli.json),
@@ -1215,24 +1247,83 @@ fn read_adoption_manifest(
 }
 
 fn print_root_help() -> Result<(), CliError> {
-    let mut command = Cli::command();
+    let command = Cli::command();
     if let Ok(repository) = Repository::discover(".")
         && let Ok(config) = RepositoryConfig::load(&repository)
         && !config.commands.is_empty()
     {
-        let mut help = String::from("Repository commands:\n");
+        println!("Repository commands:");
         for (name, configured) in &config.commands {
-            help.push_str(&format!(
-                "  {:20} {}\n",
-                name.replace('.', " "),
-                configured.description
-            ));
+            println!("  {:20} {}", name.replace('.', " "), configured.description);
         }
-        command = command.before_help(help.trim_end().to_owned());
+        println!();
     }
-    command.print_long_help().map_err(CliError::boxed)?;
-    println!();
+    println!("Repository-native document graphs\n");
+    println!("Usage: docgraph [OPTIONS] <COMMAND>\n");
+    print_help_group(
+        &command,
+        "Inspect and query",
+        &[
+            "describe",
+            "get",
+            "outline",
+            "search",
+            "semantic-search",
+            "neighbors",
+            "incoming",
+            "outgoing",
+            "traverse",
+            "context",
+            "path",
+            "query",
+        ],
+    );
+    print_help_group(
+        &command,
+        "Author and mutate",
+        &[
+            "document",
+            "adopt",
+            "section",
+            "property",
+            "transition",
+            "workflow",
+            "relate",
+            "unrelate",
+        ],
+    );
+    print_help_group(
+        &command,
+        "Maintain and verify",
+        &[
+            "normalize",
+            "frontmatter",
+            "validate",
+            "review",
+            "instructions",
+        ],
+    );
+    print_help_group(&command, "Set up", &["init"]);
+    println!("Options:");
+    println!("      --json     Emit documented structured JSON");
+    println!("  -h, --help     Print help");
+    println!("  -V, --version  Print version\n");
+    println!("Run `docgraph <command> --help` for syntax and scenario-derived examples.");
     Ok(())
+}
+
+fn print_help_group(command: &clap::Command, title: &str, names: &[&str]) {
+    println!("{title}:");
+    for name in names {
+        let description = command
+            .get_subcommands()
+            .find(|subcommand| subcommand.get_name() == *name)
+            .and_then(|subcommand| subcommand.get_about())
+            .map(|description| description.to_string())
+            .unwrap_or_default();
+        println!("  {name:20} {description}");
+    }
+    println!();
 }
 
 fn custom_command(arguments: &[String], json_output: bool) -> Result<(), CliError> {
@@ -2036,6 +2127,9 @@ fn resolve_graph_reference(graph: &GraphIndex, reference: &str) -> Result<GraphN
 
 #[derive(Subcommand)]
 enum PropertyAction {
+    #[command(
+        after_long_help = "Examples:\n  docgraph property set task:42 owner platform --dry-run\n  docgraph property set task:42 estimate 8\n  docgraph property set task:42 labels '[\"urgent\",\"backend\"]'\n  docgraph property set finding:7 score 0.75\n\nValues use TOML scalar or array syntax; bare strings are accepted for string properties."
+    )]
     Set {
         entity: String,
         property: String,
@@ -2046,6 +2140,9 @@ enum PropertyAction {
         #[arg(long)]
         dry_run: bool,
     },
+    #[command(
+        after_long_help = "Examples:\n  docgraph property unset task:42 owner --dry-run\n  docgraph property unset task:42 labels"
+    )]
     Unset {
         entity: String,
         property: String,
@@ -2062,10 +2159,16 @@ fn relation_context(graph: &GraphIndex, node: &GraphNode) -> Vec<JsonValue> {
         .neighbors(node, None)
         .into_iter()
         .map(|neighbor| {
+            let source = node_name(graph, &neighbor.relation.source);
+            let target = node_name(graph, &neighbor.relation.target);
+            let adjacent = node_name(graph, neighbor.node);
             json!({
                 "direction": if neighbor.outgoing { "outgoing" } else { "incoming" },
                 "predicate": neighbor.relation.predicate,
-                "target": node_name(graph, neighbor.node),
+                "source": source,
+                "target": target,
+                "neighbor": &adjacent,
+                "node": adjacent,
                 "origin": origin_name(neighbor.relation.origin),
             })
         })
@@ -2093,8 +2196,14 @@ fn direct_relations(
         let rows: Vec<_> = neighbors
             .iter()
             .map(|neighbor| {
+                let source = node_name(&context.graph, &neighbor.relation.source);
+                let target = node_name(&context.graph, &neighbor.relation.target);
+                let adjacent = node_name(&context.graph, neighbor.node);
                 json!({
-                    "node": node_name(&context.graph, neighbor.node),
+                    "source": source,
+                    "target": target,
+                    "neighbor": &adjacent,
+                    "node": adjacent,
                     "predicate": neighbor.relation.predicate,
                     "direction": if neighbor.outgoing { "outgoing" } else { "incoming" },
                     "origin": origin_name(neighbor.relation.origin),
@@ -2135,8 +2244,14 @@ fn traverse(
         let rows: Vec<_> = steps
             .iter()
             .map(|step| {
+                let source = node_name(&context.graph, &step.relation.source);
+                let target = node_name(&context.graph, &step.relation.target);
+                let adjacent = node_name(&context.graph, &step.node);
                 json!({
-                    "node": node_name(&context.graph, &step.node),
+                    "source": source,
+                    "target": target,
+                    "neighbor": &adjacent,
+                    "node": adjacent,
                     "depth": step.depth,
                     "from": node_name(&context.graph, &step.from),
                     "predicate": step.relation.predicate,

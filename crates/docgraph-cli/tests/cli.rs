@@ -1030,6 +1030,110 @@ fn long_document_outline_and_bounded_section_reads_preserve_hierarchy() {
 }
 
 #[test]
+fn command_help_and_root_skill_teach_a_clean_room_authoring_recovery() {
+    let fixture = Fixture::copy("synthetic");
+    let root_help = fixture.run(&["--help"]);
+    assert!(root_help.status.success());
+    let root_help = String::from_utf8_lossy(&root_help.stdout);
+    for heading in [
+        "Inspect and query:",
+        "Author and mutate:",
+        "Maintain and verify:",
+        "Set up:",
+    ] {
+        assert!(root_help.contains(heading), "missing {heading:?}");
+    }
+
+    for arguments in [
+        &["document", "create", "--help"][..],
+        &["adopt", "--help"],
+        &["property", "set", "--help"],
+        &["relate", "--help"],
+        &["query", "--help"],
+        &["normalize", "--help"],
+        &["frontmatter", "sync", "--help"],
+        &["validate", "--help"],
+    ] {
+        let help = fixture.run(arguments);
+        assert!(help.status.success(), "help failed for {arguments:?}");
+        assert!(
+            String::from_utf8_lossy(&help.stdout).contains("Examples:"),
+            "help lacked examples for {arguments:?}"
+        );
+    }
+    let property_help = fixture.run(&["property", "set", "--help"]);
+    let property_help = String::from_utf8_lossy(&property_help.stdout);
+    assert!(property_help.contains("labels"));
+    assert!(property_help.contains("estimate 8"));
+
+    let skill = fs::read_to_string(fixture.0.join("skills/docgraph/SKILL.md")).unwrap();
+    assert!(skill.contains("| If you need to... | Start with... | Then read... |"));
+    assert!(skill.contains("if those headings should remain"));
+    assert!(skill.contains("frontmatter"));
+    assert!(skill.contains("sync --dry-run"));
+    assert!(skill.contains("validate"));
+    assert!(skill.contains("--changes <git-ref>"));
+
+    let create = fixture.run(&[
+        "document",
+        "create",
+        "docs/self-teaching.md",
+        "--id",
+        "florp:self-teaching",
+        "--type",
+        "florp",
+        "--title",
+        "Self teaching",
+        "--property",
+        "title=Self teaching",
+    ]);
+    assert!(
+        create.status.success(),
+        "{}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let path = fixture.0.join("docs/self-teaching.md");
+    let mut document = fs::read_to_string(&path).unwrap();
+    document.push_str("\n## Added directly\n\nThis heading needs an ID.\n");
+    fs::write(&path, document).unwrap();
+
+    let blocked = fixture.run(&[
+        "relate",
+        "florp:self-teaching",
+        "precedes",
+        "florp:3",
+        "--dry-run",
+    ]);
+    assert!(!blocked.status.success());
+    let blocked = String::from_utf8_lossy(&blocked.stderr);
+    assert!(blocked.contains("missing-section-id"));
+    assert!(blocked.contains("if the heading should remain"));
+    assert!(blocked.contains("docgraph normalize --dry-run"));
+
+    let targeted = fixture.run(&["normalize", "docs/self-teaching.md"]);
+    assert!(!targeted.status.success());
+    let targeted = String::from_utf8_lossy(&targeted.stderr);
+    assert!(targeted.contains("normalize is repository-wide"));
+    assert!(targeted.contains("docgraph normalize --dry-run"));
+
+    assert!(fixture.run(&["normalize", "--dry-run"]).status.success());
+    assert!(fixture.run(&["normalize"]).status.success());
+    assert!(
+        fixture
+            .run(&["relate", "florp:self-teaching", "precedes", "florp:3",])
+            .status
+            .success()
+    );
+    assert!(
+        fixture
+            .run(&["frontmatter", "sync", "--dry-run"])
+            .status
+            .success()
+    );
+    assert!(fixture.run(&["validate"]).status.success());
+}
+
+#[test]
 fn structured_describe_validate_and_unavailable_query_are_stable() {
     let fixture = Fixture::copy("synthetic");
 
@@ -1160,24 +1264,20 @@ fn directional_traversal_and_expanded_context_are_structured() {
             .iter()
             .all(|row| { row["direction"] == "incoming" && row["origin"] == "explicit" })
     );
-    assert!(
-        incoming["rows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|row| row["node"] == "florp:2")
-    );
+    assert!(incoming["rows"].as_array().unwrap().iter().any(|row| {
+        row["source"] == "florp:2" && row["target"] == "florp:1" && row["neighbor"] == row["node"]
+    }));
 
     let outgoing = fixture.run(&["--json", "outgoing", "florp:1"]);
     assert!(outgoing.status.success());
     let outgoing: Value = serde_json::from_slice(&outgoing.stdout).unwrap();
-    assert!(
-        outgoing["rows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|row| { row["direction"] == "outgoing" && row["origin"] == "explicit" })
-    );
+    assert!(outgoing["rows"].as_array().unwrap().iter().all(|row| {
+        row["direction"] == "outgoing"
+            && row["origin"] == "explicit"
+            && row["source"] == "florp:1"
+            && row["target"] == row["neighbor"]
+            && row["neighbor"] == row["node"]
+    }));
 
     let section = fixture.run(&["--json", "outgoing", "florp:1#s-9K8J7H6G5F"]);
     assert!(section.status.success());
@@ -1202,6 +1302,9 @@ fn directional_traversal_and_expanded_context_are_structured() {
             .iter()
             .any(|row| row["node"] == "florp:3" && row["depth"] == 2)
     );
+    assert!(traverse["rows"].as_array().unwrap().iter().all(|row| {
+        row["source"].is_string() && row["target"].is_string() && row["neighbor"] == row["node"]
+    }));
 
     let context = fixture.run(&["--json", "context", "florp:1", "--depth", "1"]);
     assert!(context.status.success());
@@ -1219,6 +1322,14 @@ fn directional_traversal_and_expanded_context_are_structured() {
             .iter()
             .all(|relation| relation["origin"] == "explicit")
     );
+
+    let get = fixture.run(&["--json", "get", "florp:1"]);
+    let get: Value = serde_json::from_slice(&get.stdout).unwrap();
+    assert!(get["relations"].as_array().unwrap().iter().all(|relation| {
+        relation["source"].is_string()
+            && relation["target"].is_string()
+            && relation["neighbor"] == relation["node"]
+    }));
 }
 
 #[test]

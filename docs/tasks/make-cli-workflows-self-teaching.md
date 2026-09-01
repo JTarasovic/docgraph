@@ -2,7 +2,7 @@
 
 id = "task:make-cli-workflows-self-teaching"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Make CLI workflows self-teaching"

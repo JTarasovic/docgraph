@@ -1802,18 +1802,21 @@ impl fmt::Display for LogicError {
                 formatter,
                 "repository logic cannot define reserved predicate {name:?}"
             ),
-            Self::UnknownPredicate(name) => write!(formatter, "unknown predicate {name:?}"),
+            Self::UnknownPredicate(name) => write!(
+                formatter,
+                "unknown predicate {name:?}; if the call should remain, define or correct the predicate and inspect available built-ins with `docgraph describe --all`"
+            ),
             Self::ArityMismatch {
                 predicate,
                 expected,
                 found,
             } => write!(
                 formatter,
-                "predicate {predicate:?} has arity {found}, expected {expected}"
+                "predicate {predicate:?} has arity {found}, expected {expected}; if the call should remain, align its ordered arguments with the predicate declaration (inspect built-ins with `docgraph describe --all`)"
             ),
             Self::QueryPredicateMissing { query, predicate } => write!(
                 formatter,
-                "query {query:?} references unknown predicate {predicate:?}"
+                "query {query:?} references unknown predicate {predicate:?}; if the query should remain, define the predicate or correct `[query.{query}].predicate`, then inspect it with `docgraph describe query {query}`"
             ),
             Self::QueryArityMismatch {
                 query,
@@ -1822,7 +1825,7 @@ impl fmt::Display for LogicError {
                 found,
             } => write!(
                 formatter,
-                "query {query:?} declares {found} arguments but predicate {predicate:?} has arity {expected}"
+                "query {query:?} declares {found} arguments but predicate {predicate:?} has arity {expected}; align the ordered `[query.{query}].arguments` with the predicate positions (inspect the query with `docgraph describe query {query}`)"
             ),
             Self::PredicateTypeConflict {
                 predicate,
@@ -1968,6 +1971,24 @@ mod tests {
             assert_eq!(predicate.arguments.len(), builtin.types.len());
             assert_eq!(predicate.value_shapes.len(), builtin.types.len());
         }
+    }
+
+    #[test]
+    fn predicate_diagnostics_offer_conditional_discovery_guidance() {
+        let arity = LogicError::QueryArityMismatch {
+            query: "task_blockers".to_owned(),
+            predicate: "task_blockers".to_owned(),
+            expected: 2,
+            found: 1,
+        }
+        .to_string();
+        assert!(arity.contains("declares 1 arguments"));
+        assert!(arity.contains("align the ordered"));
+        assert!(arity.contains("docgraph describe query task_blockers"));
+
+        let unknown = LogicError::UnknownPredicate("mystery".to_owned()).to_string();
+        assert!(unknown.contains("if the call should remain"));
+        assert!(unknown.contains("docgraph describe --all"));
     }
 
     #[test]

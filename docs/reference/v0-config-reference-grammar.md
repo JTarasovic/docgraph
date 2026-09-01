@@ -1114,6 +1114,46 @@ section span and parent identity. `--lines` selects another positive bound and `
 opts into the complete section body. These content options are rejected for entities
 and external identities rather than silently ignored.
 
+<a id="s-R9E5HSD5TS"></a>
+### 20.1 Structured output contracts
+
+Global `--json` selects one pretty-printed JSON document; whitespace is not part of
+the contract. Consumers must select fields structurally rather than grep serialized
+text. The stable v0 shapes are:
+
+| Command | Envelope and row fields |
+| --- | --- |
+| `get` | one node object; entities expose `kind`, `id`, `type`, `state`, `document`, `properties`, `relations`; sections additionally expose `heading`, `level`, `parent`, `span`, `content`, `content_lines`, and `content_truncated` |
+| `outline` | `entity`, `document`, `sections[]`; each section has `id`, `heading`, `level`, `parent`, and `span` |
+| `search` | `query`, `rows[]`; each row has `node`, `score`, `snippet`, and optional `external` metadata |
+| `semantic-search` | `query`, `mode`, `reason`, `rows[]`; hit rows match `search` |
+| `neighbors`, `incoming`, `outgoing` | `reference`, `rows[]`; each relation row has canonical `source`, `target`, `neighbor`, `predicate`, `direction`, and `origin` |
+| `traverse` | `reference`, `direction`, `depth`, `rows[]`; each row has canonical `source`, `target`, `neighbor`, `predicate`, `direction`, `origin`, and traversal `depth` |
+| `context` | `reference`, `depth`, `nodes[]`, `relations[]`; relations use `source`, `target`, `predicate`, `origin`, and `properties` |
+| `path` | `path[]` in source-to-target order |
+| `query` and query-backed custom commands | `query`, typed ordered `columns[]`, and object `rows[]` |
+| `validate` | `valid`, `diagnostics[]` |
+| `review` | `base`, `valid`, `changes[]`, `diagnostics[]` |
+| mutations with `--json` | `dry_run`, `changes[]`; each change has `path`, `original`, and `intended` |
+
+For compatibility, direct-relation and traversal rows retain the legacy `node` alias
+for `neighbor`, and traversal rows retain legacy `from`, throughout v0.x. New
+consumers should use `source` and `target` for edge endpoints and `neighbor` for the
+adjacent/discovered node. These aliases will not be removed before a v1 contract
+change. This makes an outgoing edge's `target` and an incoming edge's `source`
+available without breaking existing `node` consumers. Before this contract,
+`get.relations[].target` misleadingly held the adjacent node even for incoming edges;
+it now consistently means the actual edge target, while `neighbor` carries that prior
+adjacent-node value. This is the one pre-v1 field-meaning correction; the documented
+shapes above are stable for the remainder of v0.x.
+
+Root help groups commands by inspection, authoring, maintenance, and setup. Detailed
+help includes scenario-derived examples for document creation and adoption, typed and
+repeated properties, relations, named queries, repository-wide normalization,
+frontmatter synchronization, and validation. `normalize` intentionally accepts no
+target: passing the commonly guessed path produces a targeted explanation and the
+repository-wide dry-run command.
+
 <a id="s-RVDXZTQY4X"></a>
 ## 21. Introspection
 

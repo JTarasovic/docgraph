@@ -562,7 +562,10 @@ impl<'a> Validator<'a> {
                 Some(id) => section_ids.entry(id.as_str()).or_default().push(index),
                 None => self.error(
                     "missing-section-id",
-                    format!("heading {:?} has no stable section ID", section.heading),
+                    format!(
+                        "heading {:?} has no stable section ID; if the heading should remain, preview repository-wide ID insertion with `docgraph normalize --dry-run`, then run `docgraph normalize`",
+                        section.heading
+                    ),
                     (&section.location).into(),
                 ),
             }
@@ -1021,6 +1024,12 @@ mod tests {
         assert!(codes.contains("undeclared-property"));
         assert!(codes.contains("unresolved-managed-reference"), "{codes:?}");
         assert!(codes.contains("missing-section-id"));
+        let missing_id = report
+            .errors()
+            .find(|error| error.code == "missing-section-id")
+            .unwrap();
+        assert!(missing_id.message.contains("if the heading should remain"));
+        assert!(missing_id.message.contains("docgraph normalize --dry-run"));
     }
 
     #[test]
