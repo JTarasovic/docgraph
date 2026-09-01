@@ -146,9 +146,14 @@ then runs the shared `mise run check` contract: formatting, lint, tests, managed
 validation, dependency policy, and unused-dependency detection. All Cargo build and
 test commands use `Cargo.lock`.
 
-CI installs a checksum-verified packaged logic runtime as an explicit platform setup
-step, then runs the same `mise run check` contract on Linux and Windows. Set
-`DOCGRAPH_CHANGE_BASE` to review managed changes against a ref other than the local
-default, `HEAD`. A single developer host cannot reproduce the other operating
-system's runtime installation, path behavior, or end-to-end execution; CI owns that
-cross-platform coverage.
+Linux CI installs a checksum-verified packaged runtime, then runs the complete
+`mise run check` contract. Set `DOCGRAPH_CHANGE_BASE` to review managed changes
+against a ref other than the local default, `HEAD`.
+
+A separate path-filtered Windows workflow starts in parallel for changes to Rust,
+fixtures, the validation action, or native-runtime infrastructure. It uses a shallow
+checkout, installs only Rust and nextest, verifies the packaged Windows runtime, and
+runs the shared test suite through the named `windows-e2e` overlay. Documentation-only
+changes do not allocate a Windows runner. A single developer host cannot reproduce
+the other operating system's runtime installation, path behavior, or end-to-end
+execution; CI owns that cross-platform coverage.

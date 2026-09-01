@@ -18,7 +18,7 @@ run = "cargo fmt --all --check"
 
 [tasks.lint]
 description = "Lint all Rust targets"
-run = "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings"
+run = "cargo clippy --workspace --all-targets --all-features --locked --no-deps -- -D warnings"
 
 [tasks.test]
 description = "Run the Rust test suite"
@@ -38,6 +38,10 @@ run_windows = [
     { task = "logic-runtime-windows" },
     { task = "check" },
 ]
+
+[tasks.windows-e2e]
+description = "Run the shared test suite against the Windows runtime"
+run = [{ task = "test" }]
 
 [tasks.managed-changes]
 description = "Reject unsupported managed metadata changes"

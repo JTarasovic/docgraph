@@ -51,6 +51,8 @@ not complete by itself. Before merging such a pull request:
 4. Run the same `mise run check-local` contract required for authored changes.
 
 Renovate pull requests use the normal pull-request workflow and receive no CI or
-merge bypass. Repository settings should require the `rust` and `windows-e2e`
-jobs before merge. Both jobs run the shared check contract, including Cargo policy
-and unused-dependency checks.
+merge bypass. The Linux `rust` job runs the complete shared contract, including Cargo
+policy and unused-dependency checks. The path-filtered `windows-e2e` workflow runs the
+locked test suite for changes that can affect Windows behavior. Because GitHub leaves
+path-filtered required checks pending when their workflow does not run, require `rust`
+globally but do not make `windows-e2e` an unconditional branch-protection check.
