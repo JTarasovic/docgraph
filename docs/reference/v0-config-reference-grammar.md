@@ -40,14 +40,34 @@ predicate = "implements"
 target = "reference:config-grammar#s-P73QA8YDQB"
 
 [[docgraph_generated.incoming]]
+source = "plan:complete-external-provider-ontology"
+predicate = "implements"
+target = "reference:config-grammar#s-3MQG5HQA1C"
+
+[[docgraph_generated.incoming]]
 source = "plan:complete-v0"
 predicate = "implements"
 target = "reference:config-grammar#s-D6B9JYV06F"
 
 [[docgraph_generated.incoming]]
+source = "plan:deliver-declarative-mutation-changesets"
+predicate = "implements"
+target = "reference:config-grammar#s-V5R4RB2AP1"
+
+[[docgraph_generated.incoming]]
 source = "plan:deliver-external-entity-sources"
 predicate = "implements"
 target = "reference:config-grammar#s-6RGFEKP4CT"
+
+[[docgraph_generated.incoming]]
+source = "plan:make-agent-guidance-portable"
+predicate = "implements"
+target = "reference:config-grammar#s-T1A2GRA1JJ"
+
+[[docgraph_generated.incoming]]
+source = "plan:make-agent-guidance-portable"
+predicate = "implements"
+target = "reference:config-grammar#s-XBB55PRA71"
 
 [[docgraph_generated.incoming]]
 source = "plan:project-aware-commands"
@@ -130,6 +150,11 @@ type = "implemented_by"
 target = "plan:project-aware-commands"
 
 [[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-3MQG5HQA1C"
+type = "implemented_by"
+target = "plan:complete-external-provider-ontology"
+
+[[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-6RGFEKP4CT"
 type = "implemented_by"
 target = "plan:deliver-external-entity-sources"
@@ -185,6 +210,11 @@ type = "affected_by"
 target = "issue:slow-logic-query-startup"
 
 [[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-T1A2GRA1JJ"
+type = "implemented_by"
+target = "plan:make-agent-guidance-portable"
+
+[[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-TW0V0THMJD"
 type = "implemented_by"
 target = "task:support-section-path-endpoints"
@@ -197,7 +227,17 @@ target = "issue:multi-file-adoption-normalize-first"
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-V5R4RB2AP1"
 type = "implemented_by"
+target = "plan:deliver-declarative-mutation-changesets"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-V5R4RB2AP1"
+type = "implemented_by"
 target = "task:complete-safe-read-mutation-boundary"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-XBB55PRA71"
+type = "implemented_by"
+target = "plan:make-agent-guidance-portable"
 
 +++
 <a id="s-H8DH7THYWV"></a>

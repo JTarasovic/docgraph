@@ -25,9 +25,39 @@ predicate = "implements"
 target = "reference:design#s-DRW3RR84VS"
 
 [[docgraph_generated.incoming]]
+source = "plan:complete-external-provider-ontology"
+predicate = "implements"
+target = "reference:design#s-WCDD32CNPK"
+
+[[docgraph_generated.incoming]]
+source = "plan:deliver-declarative-mutation-changesets"
+predicate = "implements"
+target = "reference:design#s-B7542FYPRY"
+
+[[docgraph_generated.incoming]]
 source = "plan:deliver-external-entity-sources"
 predicate = "implements"
 target = "reference:design#s-WCDD32CNPK"
+
+[[docgraph_generated.incoming]]
+source = "plan:harden-delivery-integrity"
+predicate = "implements"
+target = "reference:design#s-DHW5KPNDJV"
+
+[[docgraph_generated.incoming]]
+source = "plan:make-agent-guidance-portable"
+predicate = "implements"
+target = "reference:design#s-64KP745XR0"
+
+[[docgraph_generated.incoming]]
+source = "plan:make-agent-guidance-portable"
+predicate = "implements"
+target = "reference:design#s-Q30QTKRZQ6"
+
+[[docgraph_generated.incoming]]
+source = "plan:make-agent-guidance-portable"
+predicate = "implements"
+target = "reference:design#s-Y4QFB1ZND8"
 
 [[docgraph_generated.incoming]]
 source = "plan:project-aware-commands"
@@ -95,9 +125,19 @@ type = "implemented_by"
 target = "task:version-portable-agent-skill"
 
 [[docgraph_generated.inverses]]
+source = "reference:design#s-64KP745XR0"
+type = "implemented_by"
+target = "plan:make-agent-guidance-portable"
+
+[[docgraph_generated.inverses]]
 source = "reference:design#s-7BBMBXC9RK"
 type = "implemented_by"
 target = "task:implement-derived-index-lifecycle"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-B7542FYPRY"
+type = "implemented_by"
+target = "plan:deliver-declarative-mutation-changesets"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-B7542FYPRY"
@@ -113,6 +153,11 @@ target = "plan:project-aware-commands"
 source = "reference:design#s-DD5NS2HR0R"
 type = "implemented_by"
 target = "task:generate-model-appendix"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-DHW5KPNDJV"
+type = "implemented_by"
+target = "plan:harden-delivery-integrity"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-DRW3RR84VS"
@@ -140,6 +185,16 @@ type = "implemented_by"
 target = "task:index-searchable-markdown-content"
 
 [[docgraph_generated.inverses]]
+source = "reference:design#s-Q30QTKRZQ6"
+type = "implemented_by"
+target = "plan:make-agent-guidance-portable"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-WCDD32CNPK"
+type = "implemented_by"
+target = "plan:complete-external-provider-ontology"
+
+[[docgraph_generated.inverses]]
 source = "reference:design#s-WCDD32CNPK"
 type = "implemented_by"
 target = "plan:deliver-external-entity-sources"
@@ -148,6 +203,11 @@ target = "plan:deliver-external-entity-sources"
 source = "reference:design#s-WCDD32CNPK"
 type = "implemented_by"
 target = "task:define-external-entity-source-contract"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-Y4QFB1ZND8"
+type = "implemented_by"
+target = "plan:make-agent-guidance-portable"
 
 [[docgraph_generated.backlinks]]
 source = "reference:config-grammar#s-P73QA8YDQB"

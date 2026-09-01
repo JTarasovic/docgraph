@@ -10,9 +10,19 @@ role = "design"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "plan:harden-delivery-integrity"
+predicate = "implements"
+target = "reference:validation-action"
+
+[[docgraph_generated.incoming]]
 source = "task:publish-validation-action"
 predicate = "implements"
 target = "reference:validation-action"
+
+[[docgraph_generated.inverses]]
+source = "reference:validation-action"
+type = "implemented_by"
+target = "plan:harden-delivery-integrity"
 
 [[docgraph_generated.inverses]]
 source = "reference:validation-action"
