@@ -2,7 +2,7 @@
 
 id = "plan:resolve-initial-github-report-backlog"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Resolve the initial GitHub report backlog"
