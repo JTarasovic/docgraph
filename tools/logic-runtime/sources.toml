@@ -15,16 +15,22 @@ sha256 = "8d324b62be33604b2c45ad1dd34ab93d722534448f55a16ca7292de32b6ac135"
 
 [artifact.windows-x86_64]
 name = "docgraph-logic-runtime.exe"
-release = "logic-runtime-windows-a1303be3"
-url = "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-windows-a1303be3/docgraph-logic-runtime-windows-x86_64-a1303be3.zip"
-archive_sha256 = "65880b97ad4c0242e457917afbce6c59aad1ee6fffa6a9490cd31f62117ee267"
-binary_sha256 = "769468c7d3e55ed4842d5ee57c42bb742c3a4fda07d8d375cc7d38056280b50b"
+release = "logic-runtime-windows-a1303be3-d85140ef"
+url = "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-windows-a1303be3-d85140ef/docgraph-logic-runtime-windows-x86_64-a1303be3-d85140ef.zip"
+archive_sha256 = "72b17ce56ed4a028cd8d85d3f73c24c76d1e442ad91a41f6ea4d513465aff51c"
+checksum_sha256 = "d001a42d5ce52cc39bdb44f43bf1b3a3598669193286721e59cf702c7ca3a201"
+sbom_sha256 = "f58b319024ed20e15afb420e213590434382fbfdf73a6bd8a2d0726d9a212ac5"
+binary_sha256 = "1eee61505cf84ca327c106f2d3d01c1122c1bbd5efd05219c21320a03519264e"
+producer_revision = "d85140ef7c6369ff003a90d4adc860c8c77484e7"
 features = ["64-bit-domain", "sqlite", "static-crt"]
 
 [artifact.linux-x86_64]
 name = "docgraph-logic-runtime"
-release = "logic-runtime-linux-a1303be3"
-url = "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-linux-a1303be3/docgraph-logic-runtime-linux-x86_64-a1303be3.tar.gz"
-archive_sha256 = "5f24f24cc95c57cd32518763249281c9c19f21be637dcde3fddf57661536bbe6"
+release = "logic-runtime-linux-a1303be3-d85140ef"
+url = "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-linux-a1303be3-d85140ef/docgraph-logic-runtime-linux-x86_64-a1303be3-d85140ef.tar.gz"
+archive_sha256 = "09db2062327c8f8b7a07a3e4d3efc15fa03f791ddb662f7560dac8b8fef4b425"
+checksum_sha256 = "90f33dc20e386388823571858279fef4e7cb642d501db1c8bf8c32595e5aa669"
+sbom_sha256 = "6b09368f3da3d1b0a43a7c18c19b1404a44c5d648f045e09a1332d4a61159fa9"
 binary_sha256 = "db2747c2233d267b76a2e606c4fddd27a21be5cf35c2f5083f6a560dc8c2980e"
+producer_revision = "d85140ef7c6369ff003a90d4adc860c8c77484e7"
 features = ["64-bit-domain", "sqlite", "static-cxx-runtime"]

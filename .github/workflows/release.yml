@@ -127,8 +127,8 @@ jobs:
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
       - name: "Stage pinned companion runtime and portable files"
-        run: "pwsh -NoProfile -File tools/release/stage-dist-inputs.ps1"
-        shell: "pwsh"
+        run: "bash tools/release/stage-dist-inputs.sh"
+        shell: "bash"
         env:
           "GH_TOKEN": "${{ github.token }}"
       - name: Install dist
@@ -243,6 +243,9 @@ jobs:
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
+    permissions:
+      "attestations": "read"
+      "contents": "read"
   # Determines if we should publish/announce
   host:
     needs:

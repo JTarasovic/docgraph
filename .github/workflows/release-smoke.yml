@@ -8,6 +8,7 @@ on:
         type: string
 
 permissions:
+  attestations: read
   contents: read
 
 jobs:
@@ -20,20 +21,46 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Verify pinned companion evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/release/stage-dist-inputs.sh --verify-attestations
+
       - name: Download native artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: artifacts-build-local-*
+          pattern: artifacts-build-*
           path: target/distrib
           merge-multiple: true
 
-      - name: Smoke-test clean archive
-        shell: pwsh
+      - name: Verify product evidence inputs
+        shell: bash
         run: |
-          tools/release/smoke-test.ps1 `
-            -Target linux-x86_64 `
-            -Version $env:GITHUB_REF_NAME `
-            -ArchivePath target/distrib/docgraph-cli-x86_64-unknown-linux-gnu.tar.gz
+          set -euo pipefail
+          shopt -s nullglob
+          cd target/distrib
+          archives=(*.tar.gz *.zip)
+          sboms=(*.cdx.xml)
+          [[ ${#archives[@]} -eq 2 ]]
+          [[ ${#sboms[@]} -gt 0 ]]
+          [[ -f sha256.sum ]]
+          for archive in "${archives[@]}"; do
+            [[ -f "$archive.sha256" ]]
+            grep --fixed-strings --quiet "$archive" sha256.sum
+          done
+          for checksum in *.sha256 sha256.sum; do
+            ! grep --extended-regexp --invert-match --quiet \
+              '^$|^[0-9a-fA-F]{64} [ *].+$' "$checksum"
+            grep --invert-match '^$' "$checksum" | sha256sum --check
+          done
+          grep --quiet '<name>docgraph-cli</name>' "${sboms[@]}"
+
+      - name: Smoke-test clean archive
+        shell: bash
+        run: >-
+          bash tools/release/smoke-test.sh
+          linux-x86_64 "$GITHUB_REF_NAME"
+          target/distrib/docgraph-cli-x86_64-unknown-linux-gnu.tar.gz
 
   windows:
     runs-on: windows-2025
@@ -44,17 +71,21 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Verify pinned companion evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/release/stage-dist-inputs.sh --verify-attestations
+
       - name: Download native artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: artifacts-build-local-*
+          pattern: artifacts-build-*
           path: target/distrib
           merge-multiple: true
 
       - name: Smoke-test clean archive
-        shell: pwsh
-        run: |
-          tools/release/smoke-test.ps1 `
-            -Target windows-x86_64 `
-            -Version $env:GITHUB_REF_NAME `
-            -ArchivePath target/distrib/docgraph-cli-x86_64-pc-windows-msvc.zip
+        shell: bash
+        run: >-
+          bash tools/release/smoke-test.sh
+          windows-x86_64 "$GITHUB_REF_NAME"
+          target/distrib/docgraph-cli-x86_64-pc-windows-msvc.zip

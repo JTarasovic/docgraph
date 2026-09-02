@@ -14,7 +14,7 @@ const REQUIRED_CHECKS: [&str; 8] = [
     "release-check",
     "test",
 ];
-const WINDOWS_PATHS: [&str; 11] = [
+const WINDOWS_PATHS: [&str; 12] = [
     ".cargo/**",
     ".github/workflows/windows-e2e.yml",
     "Cargo.lock",
@@ -26,6 +26,7 @@ const WINDOWS_PATHS: [&str; 11] = [
     "skills/**",
     "tools/action/**",
     "tools/logic-runtime/**",
+    "tools/release/**",
 ];
 const MISE_CACHE_KEY: &str = "{{cache_key_prefix}}-{{platform}}-{{file_hash}}";
 
@@ -147,6 +148,11 @@ fn mise_and_ci_share_one_required_check_contract() {
         Some(MISE_CACHE_KEY)
     );
     assert_eq!(linux_install["with"]["cache_save"].as_bool(), Some(true));
+    assert_eq!(linux["permissions"]["attestations"].as_str(), Some("read"));
+    assert_eq!(
+        named_step(linux_steps, "Install packaged logic runtime")["run"].as_str(),
+        Some("bash tools/release/stage-dist-inputs.sh --verify-attestations")
+    );
     assert_eq!(
         named_step(linux_steps, "Smoke-test released validation action")["with"]["version"]
             .as_str(),
@@ -193,6 +199,14 @@ fn mise_and_ci_share_one_required_check_contract() {
     );
     assert_eq!(install["with"]["cache_key"].as_str(), Some(MISE_CACHE_KEY));
     assert_eq!(install["with"]["cache_save"].as_bool(), Some(true));
+    assert_eq!(
+        windows["permissions"]["attestations"].as_str(),
+        Some("read")
+    );
+    assert_eq!(
+        named_step(windows_steps, "Install packaged logic runtime")["run"].as_str(),
+        Some("bash tools/release/stage-dist-inputs.sh --verify-attestations")
+    );
     let windows_test = named_step(windows_steps, "Run Windows end-to-end tests");
     assert_eq!(
         windows_test["run"].as_str(),
@@ -288,6 +302,49 @@ fn generated_release_workflow_is_pinned_and_smoke_gated() {
         workflow["jobs"]["host"]["permissions"]["id-token"].as_str(),
         Some("write")
     );
+    assert_eq!(
+        workflow["jobs"]["custom-release-smoke"]["permissions"]["attestations"].as_str(),
+        Some("read")
+    );
+}
+
+#[test]
+fn portable_release_automation_uses_bash() {
+    let root = repository_root();
+    for script in ["stage-dist-inputs", "smoke-test", "update-changelog"] {
+        let shell = root.join(format!("tools/release/{script}.sh"));
+        let powershell = root.join(format!("tools/release/{script}.ps1"));
+        assert!(shell.is_file(), "missing portable release script: {script}");
+        assert!(
+            fs::read_to_string(shell)
+                .unwrap()
+                .starts_with("#!/usr/bin/env bash\nset -euo pipefail\n"),
+            "release script must use strict Bash: {script}"
+        );
+        assert!(
+            !powershell.exists(),
+            "portable release script still depends on PowerShell: {script}"
+        );
+    }
+
+    let setup = fs::read_to_string(root.join(".github/release-build-setup.yml")).unwrap();
+    assert!(setup.contains("shell: bash"));
+    assert!(setup.contains("bash tools/release/stage-dist-inputs.sh"));
+    assert!(!setup.contains("pwsh"));
+
+    let smoke = fs::read_to_string(root.join(".github/workflows/release-smoke.yml")).unwrap();
+    assert!(smoke.contains("bash tools/release/smoke-test.sh"));
+    assert!(smoke.contains("bash tools/release/stage-dist-inputs.sh --verify-attestations"));
+    assert!(smoke.contains("attestations: read"));
+    assert!(smoke.contains("Verify product evidence inputs"));
+    assert!(smoke.contains("grep --invert-match '^$' \"$checksum\" | sha256sum --check"));
+    assert!(smoke.contains("^[0-9a-fA-F]{64} [ *].+$"));
+    assert!(smoke.contains("<name>docgraph-cli</name>"));
+    assert!(!smoke.contains("pwsh"));
+
+    let manifest = fs::read_to_string(root.join("crates/docgraph-cli/Cargo.toml")).unwrap();
+    assert!(manifest.contains("../../tools/release/update-changelog.sh"));
+    assert!(!manifest.contains("update-changelog.ps1"));
 }
 
 #[test]
@@ -398,7 +455,18 @@ fn logic_runtime_companions_are_manual_native_builds_with_evidence() {
         let release = runtime_sources["artifact"][platform]["release"]
             .as_str()
             .unwrap();
-        assert!(release.starts_with(&format!("logic-runtime-{operating_system}-{short}")));
+        let producer = runtime_sources["artifact"][platform]["producer_revision"]
+            .as_str()
+            .unwrap();
+        assert_eq!(producer.len(), 40);
+        assert!(producer.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert_eq!(
+            release,
+            format!(
+                "logic-runtime-{operating_system}-{short}-{}",
+                &producer[..8]
+            )
+        );
         let url = runtime_sources["artifact"][platform]["url"]
             .as_str()
             .unwrap();
@@ -408,7 +476,40 @@ fn logic_runtime_companions_are_manual_native_builds_with_evidence() {
             "docgraph-logic-runtime-{operating_system}-x86_64-{short}"
         )));
         assert!(file.ends_with(extension));
+        for digest in [
+            "archive_sha256",
+            "checksum_sha256",
+            "sbom_sha256",
+            "binary_sha256",
+        ] {
+            let value = runtime_sources["artifact"][platform][digest]
+                .as_str()
+                .unwrap();
+            assert_eq!(value.len(), 64);
+            assert!(value.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        }
     }
+
+    let staging = fs::read_to_string(root.join("tools/release/stage-dist-inputs.sh")).unwrap();
+    assert!(staging.contains("$asset_name.sha256"));
+    assert!(staging.contains("$asset_name.cdx.json"));
+    assert!(staging.contains("sha256sum --check --strict"));
+    assert!(staging.contains("gh attestation verify"));
+    assert!(
+        staging
+            .contains("--signer-workflow JTarasovic/docgraph/.github/workflows/logic-runtime.yml")
+    );
+    assert!(staging.contains("--source-digest \"$producer_revision\""));
+    assert!(staging.contains("--source-ref refs/heads/main"));
+    assert!(staging.contains("SOUFFLE-UPL.txt"));
+
+    let runbook = fs::read_to_string(root.join("docs/reference/release-workflow.md")).unwrap();
+    assert!(runbook.contains("gh attestation verify \"$subject\""));
+    assert!(
+        runbook.contains("--signer-workflow JTarasovic/docgraph/.github/workflows/release.yml")
+    );
+    assert!(runbook.contains("SLSA Build Level 2"));
+    assert!(runbook.contains("They do not establish Level 3"));
 }
 
 #[test]

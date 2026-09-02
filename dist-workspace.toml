@@ -31,6 +31,7 @@ github-attestations-filters = [
 ]
 github-build-setup = "../release-build-setup.yml"
 global-artifacts-jobs = ["./release-smoke"]
+github-custom-job-permissions = { "release-smoke" = { attestations = "read", contents = "read" } }
 pr-run-mode = "skip"
 
 [dist.github-custom-runners]

@@ -1,5 +1,5 @@
 - name: Stage pinned companion runtime and portable files
-  shell: pwsh
+  shell: bash
   env:
     GH_TOKEN: ${{ github.token }}
-  run: pwsh -NoProfile -File tools/release/stage-dist-inputs.ps1
+  run: bash tools/release/stage-dist-inputs.sh

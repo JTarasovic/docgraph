@@ -6,6 +6,7 @@ on:
   pull_request:
 
 permissions:
+  attestations: read
   contents: read
 
 concurrency:
@@ -19,7 +20,7 @@ jobs:
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
-      DOCGRAPH_LOGIC_RUNTIME: ${{ github.workspace }}/target/logic-runtime/linux-x86_64/docgraph-logic-runtime
+      DOCGRAPH_LOGIC_RUNTIME: ${{ github.workspace }}/target/release-inputs/docgraph-logic-runtime
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,19 +56,10 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install packaged logic runtime
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          archive="$RUNNER_TEMP/docgraph-logic-runtime.tar.gz"
-          gh release download logic-runtime-linux-a1303be3 \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern 'docgraph-logic-runtime-linux-x86_64-a1303be3.tar.gz' \
-            --output "$archive"
-          echo "5f24f24cc95c57cd32518763249281c9c19f21be637dcde3fddf57661536bbe6  $archive" \
-            | sha256sum --check
-          destination=$(dirname "$DOCGRAPH_LOGIC_RUNTIME")
-          mkdir -p "$destination"
-          tar -xzf "$archive" --strip-components=1 -C "$destination"
+        run: bash tools/release/stage-dist-inputs.sh --verify-attestations
 
       - name: Run implementation checks
         env:

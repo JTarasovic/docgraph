@@ -174,9 +174,9 @@ second narrative.
 The initial supply-chain target is SLSA Build Level 2 through GitHub artifact
 attestations, not Level 3. Dist's built-in provenance covers native build outputs; the
 issue 12 slice must prove that every archive and checksum manifest is included, attest
-the final SBOM, and augment or combine cargo-cyclonedx output so the bundled native
-runtime and its licenses are represented. Documentation must not claim a higher level
-than the implemented builder isolation supports.
+the cargo-cyclonedx workspace SBOM, and separately publish and attest a Syft CycloneDX
+SBOM for the bundled native runtime and its licenses. Documentation must not claim a
+higher level than the implemented builder isolation supports.
 
 <a id="s-WATAQS2WZ2"></a>
 ## Failure recovery

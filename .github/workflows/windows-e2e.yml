@@ -15,6 +15,7 @@ on:
       - skills/**
       - tools/action/**
       - tools/logic-runtime/**
+      - tools/release/**
   pull_request:
     paths:
       - .cargo/**
@@ -28,8 +29,10 @@ on:
       - skills/**
       - tools/action/**
       - tools/logic-runtime/**
+      - tools/release/**
 
 permissions:
+  attestations: read
   contents: read
 
 concurrency:
@@ -43,7 +46,7 @@ jobs:
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
-      DOCGRAPH_LOGIC_RUNTIME: ${{ github.workspace }}\target\logic-runtime\windows-x86_64\docgraph-logic-runtime.exe
+      DOCGRAPH_LOGIC_RUNTIME: ${{ github.workspace }}\target\release-inputs\docgraph-logic-runtime
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,23 +81,10 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install packaged logic runtime
-        shell: pwsh
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP "docgraph-logic-runtime.zip"
-          gh release download logic-runtime-windows-a1303be3 `
-            --repo $env:GITHUB_REPOSITORY `
-            --pattern "docgraph-logic-runtime-windows-x86_64-a1303be3.zip" `
-            --output $archive
-          $expected = "65880b97ad4c0242e457917afbce6c59aad1ee6fffa6a9490cd31f62117ee267"
-          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) {
-            throw "Logic runtime checksum mismatch: expected $expected, got $actual"
-          }
-          $destination = Split-Path -Parent $env:DOCGRAPH_LOGIC_RUNTIME
-          New-Item -ItemType Directory -Force -Path $destination | Out-Null
-          Expand-Archive -LiteralPath $archive -DestinationPath $destination
+        run: bash tools/release/stage-dist-inputs.sh --verify-attestations
 
       - name: Run Windows end-to-end tests
         run: mise run --skip-tools windows-e2e

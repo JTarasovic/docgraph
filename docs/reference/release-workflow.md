@@ -67,7 +67,7 @@ Use these commands, with 0.3.0 replaced by the intended numeric version:
 
     cargo release 0.3.0 --workspace
     cargo release 0.3.0 --workspace --execute
-    pwsh -NoProfile -File tools/release/stage-dist-inputs.ps1
+    bash tools/release/stage-dist-inputs.sh
     dist plan --tag v0.3.0
     dist build --tag v0.3.0 --target <current-host-target>
 
@@ -81,13 +81,13 @@ Dist plan must show exactly the supported native targets, archives, SHA-256 outp
 release manifest, cargo-cyclonedx workspace SBOM, and GitHub attestation work. The
 staging command downloads and verifies the current host's pinned companion runtime and
 lays out the portable skill and third-party notices for dist. Dist build consumes those
-inputs and builds the archive. Run tools/release/smoke-test.ps1 against the resulting
+inputs and builds the archive. Run tools/release/smoke-test.sh against the resulting
 archive. A local rehearsal proves only the current platform; the release pull request
 must exercise the other native runner. The native companion's separately attested Syft
 SBOM describes the Souffle payload and its shipped licenses; cargo-cyclonedx describes
 the Rust workspace. Cargo-auditable remains disabled because dist 0.32's generated
-installer for it is not version-pinned; issue 12 owns enabling auditable binaries
-without weakening the pinning contract.
+installer for it is not version-pinned. Binary-embedded dependency metadata is not part
+of this release contract; the two attested CycloneDX inventories are authoritative.
 
 <a id="s-PPK9N1DX91"></a>
 ## Review the preparation commit
@@ -123,6 +123,66 @@ the tree is clean, and create the reviewed annotated tag:
 Replace 0.3.0 with the reviewed version. Do not push unless git show identifies the
 merged preparation commit. The tag starts the generated dist workflow; its host phase
 publishes only after both native build and smoke-test jobs succeed.
+
+<a id="s-BW2KSCPQFH"></a>
+## Verify published evidence
+
+Checksums detect corruption after download but do not identify who produced a file.
+GitHub attestations bind each file's digest to this repository, its exact producer
+workflow, and a source ref or commit. An SBOM inventories the shipped components; it
+does not assert that they are vulnerability-free. The Rust workspace and native
+companion have separate CycloneDX SBOMs because cargo-cyclonedx cannot describe the
+Souffle binary or its bundled licenses.
+
+For a pinned companion, copy the release, archive, and full producer revision from
+`tools/logic-runtime/sources.toml`, then verify all three published subjects:
+
+    repository=JTarasovic/docgraph
+    release=logic-runtime-linux-a1303be3-d85140ef
+    archive=docgraph-logic-runtime-linux-x86_64-a1303be3-d85140ef.tar.gz
+    producer=d85140ef7c6369ff003a90d4adc860c8c77484e7
+    mkdir companion-evidence && cd companion-evidence
+    gh release download "$release" --repo "$repository" \
+      --pattern "$archive" --pattern "$archive.sha256" \
+      --pattern "$archive.cdx.json"
+    sha256sum --check --strict "$archive.sha256"
+    for subject in "$archive" "$archive.sha256" "$archive.cdx.json"; do
+      gh attestation verify "$subject" --repo "$repository" \
+        --signer-workflow JTarasovic/docgraph/.github/workflows/logic-runtime.yml \
+        --source-digest "$producer" --source-ref refs/heads/main \
+        --deny-self-hosted-runners
+    done
+    jq --exit-status \
+      '.bomFormat == "CycloneDX" and (.components | length > 0)' \
+      "$archive.cdx.json"
+
+Use the Windows release and `.zip` archive values from the adjacent source section to
+verify the Windows companion identically.
+
+For a docgraph release, download the complete evidence set, verify both checksum
+layers, then verify every archive, adjacent checksum, workspace SBOM, and unified
+checksum as an attestation subject:
+
+    repository=JTarasovic/docgraph
+    tag=v0.3.1
+    mkdir docgraph-evidence && cd docgraph-evidence
+    gh release download "$tag" --repo "$repository" \
+      --pattern '*.tar.gz' --pattern '*.tar.gz.sha256' \
+      --pattern '*.zip' --pattern '*.zip.sha256' \
+      --pattern '*.cdx.xml' --pattern sha256.sum
+    for checksum in *.sha256 sha256.sum; do
+      grep --invert-match '^$' "$checksum" | sha256sum --check
+    done
+    for subject in *.tar.gz *.tar.gz.sha256 *.zip *.zip.sha256 *.cdx.xml sha256.sum; do
+      gh attestation verify "$subject" --repo "$repository" \
+        --signer-workflow JTarasovic/docgraph/.github/workflows/release.yml \
+        --source-ref "refs/tags/$tag" --deny-self-hosted-runners
+    done
+    grep --quiet '<name>docgraph-cli</name>' ./*.cdx.xml
+
+These attestations support a SLSA Build Level 2 claim. They do not establish Level 3:
+the current generated workflow does not provide the stronger, separately administered
+build definition and isolation required for that claim.
 
 <a id="s-8TZDE68XQA"></a>
 ## Verify and close out
