@@ -158,6 +158,20 @@ fn mise_and_ci_share_one_required_check_contract() {
             .as_str(),
         Some("${{ steps.released-docgraph.outputs.tag }}")
     );
+    let linux_release = named_step(linux_steps, "Resolve latest stable release");
+    assert_eq!(linux_release["shell"].as_str(), Some("bash"));
+    assert!(
+        linux_release["run"]
+            .as_str()
+            .unwrap()
+            .contains("gh release list")
+    );
+    assert!(
+        !linux_release["run"]
+            .as_str()
+            .unwrap()
+            .contains("releases/latest")
+    );
     assert!(linux["jobs"]["windows-e2e"].is_null());
 
     for duplicated_command in [
@@ -191,6 +205,20 @@ fn mise_and_ci_share_one_required_check_contract() {
         named_step(windows_steps, "Smoke-test released validation action")["with"]["version"]
             .as_str(),
         Some("${{ steps.released-docgraph.outputs.tag }}")
+    );
+    let windows_release = named_step(windows_steps, "Resolve latest stable release");
+    assert_eq!(windows_release["shell"].as_str(), Some("bash"));
+    assert!(
+        windows_release["run"]
+            .as_str()
+            .unwrap()
+            .contains("gh release list")
+    );
+    assert!(
+        !windows_release["run"]
+            .as_str()
+            .unwrap()
+            .contains("releases/latest")
     );
     let install = named_step(windows_steps, "Install Windows test tools");
     assert_eq!(
