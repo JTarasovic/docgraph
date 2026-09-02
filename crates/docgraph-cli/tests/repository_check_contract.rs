@@ -215,6 +215,28 @@ fn mise_and_ci_share_one_required_check_contract() {
 }
 
 #[test]
+fn worktrunk_prepares_new_worktrees_in_the_background() {
+    let root = repository_root();
+    let worktrunk_source = fs::read_to_string(root.join(".config/wt.toml")).unwrap();
+    let worktrunk = worktrunk_source.parse::<DocumentMut>().unwrap();
+    assert!(worktrunk.get("pre-start").is_none());
+    let post_start = worktrunk["post-start"].as_table().unwrap();
+    assert_eq!(
+        post_start["cache"].as_str(),
+        Some("wt step copy-ignored --require-include")
+    );
+    assert_eq!(post_start["tools"].as_str(), Some("mise install"));
+
+    let included = fs::read_to_string(root.join(".worktreeinclude")).unwrap();
+    let included = included
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect::<Vec<_>>();
+    assert_eq!(included, ["target/"]);
+}
+
+#[test]
 fn generated_release_workflow_is_pinned_and_smoke_gated() {
     let root = repository_root();
     let source = fs::read_to_string(root.join(".github/workflows/release.yml")).unwrap();
