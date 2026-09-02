@@ -1,0 +1,228 @@
+name: Build logic runtime companions
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish new immutable companion releases after building and attesting them.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: logic-runtime-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOUFFLE_REVISION: a1303be3c0166400dee3d1f36f0d96abe03e6901
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bison cmake flex libsqlite3-dev ninja-build
+
+      - name: Build runtime
+        run: bash tools/logic-runtime/build-linux.sh
+
+      - name: Smoke-test runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          output=target/logic-runtime/smoke/linux
+          mkdir -p "$output"
+          target/logic-runtime/linux-x86_64/docgraph-logic-runtime \
+            --no-preprocessor -D "$output" tools/logic-runtime/smoke-test.dl
+          test "$(cat "$output/successor.csv")" = 42
+
+      - name: Attest native runtime binary
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/logic-runtime/linux-x86_64/docgraph-logic-runtime
+
+      - name: Upload runtime
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v8.0.1
+        with:
+          name: logic-runtime-linux-x86_64
+          path: target/logic-runtime/linux-x86_64
+          retention-days: 1
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build runtime
+        shell: pwsh
+        run: pwsh -NoProfile -File tools/logic-runtime/build-windows.ps1
+
+      - name: Smoke-test runtime
+        shell: pwsh
+        run: |
+          $output = "target/logic-runtime/smoke/windows"
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          & target/logic-runtime/windows-x86_64/docgraph-logic-runtime.exe `
+            --no-preprocessor -D $output tools/logic-runtime/smoke-test.dl
+          if ((Get-Content -Raw "$output/successor.csv").Trim() -ne "42") {
+            throw "The Windows runtime produced an unexpected smoke-test result."
+          }
+
+      - name: Attest native runtime binary
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/logic-runtime/windows-x86_64/docgraph-logic-runtime.exe
+
+      - name: Upload runtime
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v8.0.1
+        with:
+          name: logic-runtime-windows-x86_64
+          path: target/logic-runtime/windows-x86_64
+          retention-days: 1
+
+  evidence:
+    needs:
+      - linux
+      - windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Download native runtimes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: logic-runtime-*-x86_64
+          path: target/logic-runtime/input
+
+      - name: Package companions and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v zip >/dev/null
+          identity="${SOUFFLE_REVISION:0:8}-${GITHUB_SHA:0:8}"
+          package_root=target/logic-runtime/package
+          release_root=target/logic-runtime/release
+          linux_name="docgraph-logic-runtime-linux-x86_64-$identity"
+          windows_name="docgraph-logic-runtime-windows-x86_64-$identity"
+          mkdir -p "$package_root/$linux_name" "$package_root/$windows_name" "$release_root"
+
+          install -m 0755 target/logic-runtime/input/logic-runtime-linux-x86_64/docgraph-logic-runtime \
+            "$package_root/$linux_name/"
+          cp -R target/logic-runtime/input/logic-runtime-linux-x86_64/licenses \
+            "$package_root/$linux_name/"
+          cp target/logic-runtime/input/logic-runtime-windows-x86_64/docgraph-logic-runtime.exe \
+            "$package_root/$windows_name/"
+          cp -R target/logic-runtime/input/logic-runtime-windows-x86_64/licenses \
+            "$package_root/$windows_name/"
+
+          tar -czf "$release_root/$linux_name.tar.gz" -C "$package_root" "$linux_name"
+          (cd "$package_root" && zip -qr "../release/$windows_name.zip" "$windows_name")
+          (cd "$release_root" && sha256sum "$linux_name.tar.gz" >"$linux_name.tar.gz.sha256")
+          (cd "$release_root" && sha256sum "$windows_name.zip" >"$windows_name.zip.sha256")
+
+      - name: Install Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          syft-version: v1.51.1
+
+      - name: Generate CycloneDX SBOMs
+        shell: bash
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_FILE_METADATA_SELECTION: all
+        run: |
+          set -euo pipefail
+          identity="${SOUFFLE_REVISION:0:8}-${GITHUB_SHA:0:8}"
+          for platform in linux windows; do
+            name="docgraph-logic-runtime-${platform}-x86_64-$identity"
+            extension=tar.gz
+            if [[ $platform == windows ]]; then
+              extension=zip
+            fi
+            "${{ steps.syft.outputs.cmd }}" scan "dir:target/logic-runtime/package/$name" \
+              --source-name "$name" \
+              --source-version "$SOUFFLE_REVISION" \
+              --output "cyclonedx-json=target/logic-runtime/release/$name.$extension.cdx.json"
+          done
+
+      - name: Verify release evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          identity="${SOUFFLE_REVISION:0:8}-${GITHUB_SHA:0:8}"
+          release_root=target/logic-runtime/release
+          expected=(
+            "docgraph-logic-runtime-linux-x86_64-$identity.tar.gz"
+            "docgraph-logic-runtime-linux-x86_64-$identity.tar.gz.sha256"
+            "docgraph-logic-runtime-linux-x86_64-$identity.tar.gz.cdx.json"
+            "docgraph-logic-runtime-windows-x86_64-$identity.zip"
+            "docgraph-logic-runtime-windows-x86_64-$identity.zip.sha256"
+            "docgraph-logic-runtime-windows-x86_64-$identity.zip.cdx.json"
+          )
+          for artifact in "${expected[@]}"; do
+            test -s "$release_root/$artifact"
+          done
+          (cd "$release_root" && sha256sum --check --strict *.sha256)
+          jq --exit-status . "$release_root"/*.cdx.json >/dev/null
+          test "$(find "$release_root" -maxdepth 1 -type f | wc -l)" -eq "${#expected[@]}"
+
+      - name: Attest companion archives, checksums, and SBOMs
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/logic-runtime/release/*
+
+      - name: Publish immutable companions
+        if: ${{ inputs.publish }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          identity="${SOUFFLE_REVISION:0:8}-${GITHUB_SHA:0:8}"
+          for platform in linux windows; do
+            tag="logic-runtime-${platform}-$identity"
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Refusing to replace existing companion release $tag." >&2
+              exit 1
+            fi
+          done
+
+          gh release create "logic-runtime-linux-$identity" \
+            target/logic-runtime/release/docgraph-logic-runtime-linux-x86_64-$identity.* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Pinned Linux logic runtime $identity" \
+            --notes "Pinned Linux x86-64 logic runtime companion for docgraph release packaging."
+          gh release create "logic-runtime-windows-$identity" \
+            target/logic-runtime/release/docgraph-logic-runtime-windows-x86_64-$identity.* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Pinned Windows logic runtime $identity" \
+            --notes "Pinned Windows x86-64 logic runtime companion for docgraph release packaging."

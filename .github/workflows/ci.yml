@@ -48,6 +48,8 @@ jobs:
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           install_args: cargo-binstall rust cargo:cargo-deny cargo:cargo-machete cargo:cargo-nextest cargo:cargo-dist cargo:committed
+          cache_key: "{{cache_key_prefix}}-{{platform}}-{{file_hash}}"
+          cache_save: true
 
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2

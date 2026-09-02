@@ -48,7 +48,7 @@ git -C $source checkout --detach $souffleRevision
 $staticSqlitePatch = Join-Path $PSScriptRoot "static-sqlite-windows.patch"
 $sourceDiff = git -C $source diff -- src/CMakeLists.txt
 if ([string]::IsNullOrWhiteSpace(($sourceDiff -join "`n"))) {
-    git -C $source apply $staticSqlitePatch
+    git -C $source apply --ignore-space-change $staticSqlitePatch
 } elseif (($sourceDiff -join "`n") -notmatch "if \(EXISTS.*SQLite3_LIBRARY_DIR") {
     throw "The cached Souffle source contains an unexpected modification."
 }

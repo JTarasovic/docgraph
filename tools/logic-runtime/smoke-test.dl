@@ -1,0 +1,6 @@
+.decl seed(value: number)
+seed(42).
+
+.decl successor(value: number)
+successor(x) :- seed(x).
+.output successor
