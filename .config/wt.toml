@@ -1,5 +1,7 @@
-# Install the pinned toolchain and development tools in each new worktree.
-pre-start = "mise install"
+# Seed expensive ignored artifacts while mise installs the pinned toolchain in the background.
+[post-start]
+cache = "wt step copy-ignored --require-include"
+tools = "mise install"
 
 # Keep commit-time checks quick and independent.
 [pre-commit]
