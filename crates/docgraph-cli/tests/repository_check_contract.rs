@@ -343,10 +343,12 @@ fn portable_release_automation_uses_bash() {
         let shell = root.join(format!("tools/release/{script}.sh"));
         let powershell = root.join(format!("tools/release/{script}.ps1"));
         assert!(shell.is_file(), "missing portable release script: {script}");
+        let contents = fs::read_to_string(shell).unwrap();
         assert!(
-            fs::read_to_string(shell)
-                .unwrap()
-                .starts_with("#!/usr/bin/env bash\nset -euo pipefail\n"),
+            contents
+                .lines()
+                .take(2)
+                .eq(["#!/usr/bin/env bash", "set -euo pipefail"]),
             "release script must use strict Bash: {script}"
         );
         assert!(
