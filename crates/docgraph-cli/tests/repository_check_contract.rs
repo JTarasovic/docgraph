@@ -27,6 +27,7 @@ const WINDOWS_PATHS: [&str; 11] = [
     "tools/action/**",
     "tools/logic-runtime/**",
 ];
+const MISE_CACHE_KEY: &str = "{{cache_key_prefix}}-{{platform}}-{{file_hash}}";
 
 fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -141,7 +142,11 @@ fn mise_and_ci_share_one_required_check_contract() {
             "cargo-binstall rust cargo:cargo-deny cargo:cargo-machete cargo:cargo-nextest cargo:cargo-dist cargo:committed"
         )
     );
-    assert_eq!(linux_install["with"]["cache_save"].as_bool(), Some(false));
+    assert_eq!(
+        linux_install["with"]["cache_key"].as_str(),
+        Some(MISE_CACHE_KEY)
+    );
+    assert_eq!(linux_install["with"]["cache_save"].as_bool(), Some(true));
     assert_eq!(
         named_step(linux_steps, "Smoke-test released validation action")["with"]["version"]
             .as_str(),
@@ -186,7 +191,8 @@ fn mise_and_ci_share_one_required_check_contract() {
         install["with"]["install_args"].as_str(),
         Some("cargo-binstall rust cargo:cargo-nextest")
     );
-    assert_eq!(install["with"]["cache_save"].as_bool(), Some(false));
+    assert_eq!(install["with"]["cache_key"].as_str(), Some(MISE_CACHE_KEY));
+    assert_eq!(install["with"]["cache_save"].as_bool(), Some(true));
     let windows_test = named_step(windows_steps, "Run Windows end-to-end tests");
     assert_eq!(
         windows_test["run"].as_str(),
@@ -403,6 +409,7 @@ fn pull_request_titles_are_checked_on_every_relevant_change() {
 
     let title_steps = steps(&workflow, "conventional-title");
     let install = named_step(title_steps, "Install pinned commit validator");
+    assert_eq!(install["with"]["cache_key"].as_str(), Some(MISE_CACHE_KEY));
     assert_eq!(install["with"]["cache_save"].as_bool(), Some(false));
     let validation = named_step(title_steps, "Validate pull-request title");
     assert!(validation["env"]["DOCGRAPH_COMMIT_MESSAGE"].is_string());
