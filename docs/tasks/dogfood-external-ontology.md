@@ -44,6 +44,10 @@ and state, relate it to canonical plans or tasks, query it through repository po
 perform one safely previewed supported mutation, refresh, and continue from a warm
 cache offline.
 
+Include the current #12 case: a direct lookup should reveal that
+`task:attest-release-artifacts` addresses the GitHub issue, rather than returning the
+local task and remote issue as unrelated work candidates or requiring a prose grep.
+
 <a id="s-6J89RYBQJF"></a>
 ## Acceptance
 
