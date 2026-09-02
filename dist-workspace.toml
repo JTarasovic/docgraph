@@ -20,6 +20,15 @@ include = [
 cargo-auditable = false
 cargo-cyclonedx = true
 github-attestations = true
+github-attestations-phase = "host"
+github-attestations-filters = [
+  "*.tar.gz",
+  "*.tar.gz.sha256",
+  "*.zip",
+  "*.zip.sha256",
+  "*.cdx.xml",
+  "sha256.sum",
+]
 github-build-setup = "../release-build-setup.yml"
 global-artifacts-jobs = ["./release-smoke"]
 pr-run-mode = "plan"

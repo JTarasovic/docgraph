@@ -43,6 +43,26 @@ fn named_step<'a>(steps: &'a [YamlValue], name: &str) -> &'a YamlValue {
         .unwrap_or_else(|| panic!("missing `{name}` step"))
 }
 
+fn assert_actions_are_pinned(source: &str) {
+    for line in source.lines() {
+        let Some(reference) = line.trim().strip_prefix("uses: ") else {
+            continue;
+        };
+        let reference = reference.split_whitespace().next().unwrap();
+        if reference.starts_with("./") {
+            continue;
+        }
+        let revision = reference
+            .rsplit_once('@')
+            .unwrap_or_else(|| panic!("external action is not pinned: {reference}"))
+            .1;
+        assert!(
+            revision.len() == 40 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            "external action is not pinned to a full commit: {reference}"
+        );
+    }
+}
+
 fn path_set<'a>(workflow: &'a YamlValue, event: &str) -> BTreeSet<&'a str> {
     workflow["on"][event]["paths"]
         .as_sequence()
@@ -197,23 +217,8 @@ fn generated_release_workflow_is_pinned_and_smoke_gated() {
 
     let smoke_source =
         fs::read_to_string(root.join(".github/workflows/release-smoke.yml")).unwrap();
-    for line in source.lines().chain(smoke_source.lines()) {
-        let Some(reference) = line.trim().strip_prefix("uses: ") else {
-            continue;
-        };
-        let reference = reference.split_whitespace().next().unwrap();
-        if reference.starts_with("./") {
-            continue;
-        }
-        let revision = reference
-            .rsplit_once('@')
-            .unwrap_or_else(|| panic!("external action is not pinned: {reference}"))
-            .1;
-        assert!(
-            revision.len() == 40 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()),
-            "external action is not pinned to a full commit: {reference}"
-        );
-    }
+    assert_actions_are_pinned(&source);
+    assert_actions_are_pinned(&smoke_source);
 
     let workflow = serde_yaml_ng::from_str::<YamlValue>(&source).unwrap();
     let host_needs = workflow["jobs"]["host"]["needs"]
@@ -226,6 +231,150 @@ fn generated_release_workflow_is_pinned_and_smoke_gated() {
         host_needs.contains("custom-release-smoke"),
         "publishing must wait for native clean-install smoke tests"
     );
+    let local_steps = steps(&workflow, "build-local-artifacts");
+    assert!(
+        local_steps
+            .iter()
+            .all(|step| step["name"].as_str() != Some("Attest")),
+        "release evidence must be attested together after global artifacts exist"
+    );
+    let host_steps = steps(&workflow, "host");
+    let attest = named_step(host_steps, "Attest");
+    assert_eq!(
+        attest["with"]["subject-path"].as_str(),
+        Some(
+            "artifacts/*.tar.gz\nartifacts/*.tar.gz.sha256\nartifacts/*.zip\nartifacts/*.zip.sha256\nartifacts/*.cdx.xml\nartifacts/sha256.sum\n"
+        )
+    );
+    assert_eq!(
+        workflow["jobs"]["host"]["permissions"]["attestations"].as_str(),
+        Some("write")
+    );
+    assert_eq!(
+        workflow["jobs"]["host"]["permissions"]["id-token"].as_str(),
+        Some("write")
+    );
+}
+
+#[test]
+fn logic_runtime_companions_are_manual_native_builds_with_evidence() {
+    let root = repository_root();
+    let source = fs::read_to_string(root.join(".github/workflows/logic-runtime.yml")).unwrap();
+    assert_actions_are_pinned(&source);
+
+    let workflow = serde_yaml_ng::from_str::<YamlValue>(&source).unwrap();
+    let triggers = workflow["on"]
+        .as_mapping()
+        .unwrap()
+        .keys()
+        .map(|event| event.as_str().unwrap())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(triggers, ["workflow_dispatch"].into_iter().collect());
+    assert_eq!(
+        workflow["on"]["workflow_dispatch"]["inputs"]["publish"]["default"].as_bool(),
+        Some(false)
+    );
+
+    let jobs = workflow["jobs"]
+        .as_mapping()
+        .unwrap()
+        .keys()
+        .map(|job| job.as_str().unwrap())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        jobs,
+        ["evidence", "linux", "windows"].into_iter().collect(),
+        "runtime builds should fan in from explicit native jobs"
+    );
+    assert!(!source.contains("matrix:"));
+
+    for job in ["linux", "windows"] {
+        let runtime_steps = steps(&workflow, job);
+        named_step(runtime_steps, "Build runtime");
+        let smoke = named_step(runtime_steps, "Smoke-test runtime")["run"]
+            .as_str()
+            .unwrap();
+        assert!(smoke.contains("tools/logic-runtime/smoke-test.dl"));
+        assert!(smoke.contains("successor.csv"));
+        let attest = named_step(runtime_steps, "Attest native runtime binary");
+        assert!(
+            attest["with"]["subject-path"]
+                .as_str()
+                .unwrap()
+                .contains("docgraph-logic-runtime")
+        );
+        assert_eq!(
+            named_step(runtime_steps, "Upload runtime")["with"]["retention-days"].as_i64(),
+            Some(1)
+        );
+    }
+
+    let evidence_needs = workflow["jobs"]["evidence"]["needs"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .map(|job| job.as_str().unwrap())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(evidence_needs, ["linux", "windows"].into_iter().collect());
+    let evidence_steps = steps(&workflow, "evidence");
+    assert_eq!(
+        named_step(evidence_steps, "Download native runtimes")["with"]["pattern"].as_str(),
+        Some("logic-runtime-*-x86_64")
+    );
+    assert_eq!(
+        named_step(evidence_steps, "Install Syft")["with"]["syft-version"].as_str(),
+        Some("v1.51.1")
+    );
+    let generate = named_step(evidence_steps, "Generate CycloneDX SBOMs")["run"]
+        .as_str()
+        .unwrap();
+    assert!(generate.contains("for platform in linux windows"));
+    assert!(generate.contains("${GITHUB_SHA:0:8}"));
+    assert!(generate.contains("--source-version \"$SOUFFLE_REVISION\""));
+    assert!(generate.contains("cyclonedx-json="));
+    let attest = named_step(
+        evidence_steps,
+        "Attest companion archives, checksums, and SBOMs",
+    );
+    assert_eq!(
+        attest["with"]["subject-path"].as_str(),
+        Some("target/logic-runtime/release/*")
+    );
+    let publish_step = named_step(evidence_steps, "Publish immutable companions");
+    assert_eq!(publish_step["if"].as_str(), Some("${{ inputs.publish }}"));
+    let publish = publish_step["run"].as_str().unwrap();
+    assert!(publish.contains("${SOUFFLE_REVISION:0:8}-${GITHUB_SHA:0:8}"));
+    assert!(publish.contains("Refusing to replace existing companion release"));
+    assert!(!publish.contains("--clobber"));
+
+    let runtime_sources = fs::read_to_string(root.join("tools/logic-runtime/sources.toml"))
+        .unwrap()
+        .parse::<DocumentMut>()
+        .unwrap();
+    assert_eq!(
+        workflow["env"]["SOUFFLE_REVISION"].as_str(),
+        runtime_sources["souffle"]["revision"].as_str()
+    );
+    let revision = runtime_sources["souffle"]["revision"].as_str().unwrap();
+    let short = &revision[..8];
+    for (platform, operating_system, extension) in [
+        ("linux-x86_64", "linux", "tar.gz"),
+        ("windows-x86_64", "windows", "zip"),
+    ] {
+        let release = runtime_sources["artifact"][platform]["release"]
+            .as_str()
+            .unwrap();
+        assert!(release.starts_with(&format!("logic-runtime-{operating_system}-{short}")));
+        let url = runtime_sources["artifact"][platform]["url"]
+            .as_str()
+            .unwrap();
+        assert!(url.contains(&format!("/releases/download/{release}/")));
+        let file = url.rsplit('/').next().unwrap();
+        assert!(file.starts_with(&format!(
+            "docgraph-logic-runtime-{operating_system}-x86_64-{short}"
+        )));
+        assert!(file.ends_with(extension));
+    }
 }
 
 #[test]

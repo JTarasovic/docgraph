@@ -49,8 +49,12 @@ the published version it is testing.
 - Start a release branch from current origin/main with a clean working tree.
 - Choose an explicit version greater than the latest stable tag under Semantic
   Versioning and review all changes since that tag for user impact and security notes.
-- Confirm the pinned Windows and Linux companion-runtime artifacts exist and their
-  configured checksums verify.
+- Confirm the pinned Windows and Linux companion-runtime artifacts exist, their
+  configured checksums verify, and their producer attestations and Syft CycloneDX
+  SBOMs are present. Companion binaries are rebuilt only by the manually dispatched
+  native workflow when their source or build recipe changes, not by ordinary CI. Their
+  immutable release names identify both the upstream Souffle revision and the docgraph
+  producer commit.
 - Install the exact mise-managed Rust, cargo-release, git-cliff, dist,
   cargo-auditable, and cargo-cyclonedx versions.
 - Authenticate gh for the repository and confirm required Linux and Windows checks can
@@ -74,14 +78,16 @@ commit but neither a tag nor a push. Review and edit CHANGELOG.md for user impac
 amend that commit, then run the repository checks.
 
 Dist plan must show exactly the supported native targets, archives, SHA-256 outputs,
-release manifest, CycloneDX SBOM, and GitHub attestation work. The staging command
-downloads and verifies the current host's pinned companion runtime and lays out the
-portable skill and third-party notices for dist. Dist build consumes those inputs and
-builds the archive. Run tools/release/smoke-test.ps1 against the resulting archive. A
-local rehearsal proves only the current platform; the release pull request must
-exercise the other native runner. Cargo-auditable remains disabled because dist 0.32's
-generated installer for it is not version-pinned; issue 12 owns enabling auditable
-binaries without weakening the pinning contract.
+release manifest, cargo-cyclonedx workspace SBOM, and GitHub attestation work. The
+staging command downloads and verifies the current host's pinned companion runtime and
+lays out the portable skill and third-party notices for dist. Dist build consumes those
+inputs and builds the archive. Run tools/release/smoke-test.ps1 against the resulting
+archive. A local rehearsal proves only the current platform; the release pull request
+must exercise the other native runner. The native companion's separately attested Syft
+SBOM describes the Souffle payload and its shipped licenses; cargo-cyclonedx describes
+the Rust workspace. Cargo-auditable remains disabled because dist 0.32's generated
+installer for it is not version-pinned; issue 12 owns enabling auditable binaries
+without weakening the pinning contract.
 
 <a id="s-PPK9N1DX91"></a>
 ## Review the preparation commit
@@ -121,11 +127,12 @@ publishes only after both native build and smoke-test jobs succeed.
 <a id="s-8TZDE68XQA"></a>
 ## Verify and close out
 
-1. Confirm dist's tag workflow and every native build, smoke, checksum, SBOM, and
-   attestation job succeeded.
+1. Confirm dist's tag workflow and every native build, smoke, checksum, workspace SBOM,
+   and host attestation job succeeded.
 2. Download both archives and checksum outputs and verify them independently.
-3. Verify GitHub artifact attestations for each archive and checksum manifest. After
-   issue 12 is complete, also verify that each final SBOM is bound to its archive.
+3. Verify GitHub artifact attestations for each archive, checksum manifest, and
+   cargo-cyclonedx workspace SBOM. Separately verify each pinned native companion's
+   archive, checksum, and Syft SBOM against its producer workflow.
 4. In a clean directory, run docgraph --version and docgraph --help from each archive,
    then exercise the documented validation action at the exact published version.
 5. Confirm the GitHub release body matches the accepted changelog entry and that CI's
