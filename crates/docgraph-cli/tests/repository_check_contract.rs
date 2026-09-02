@@ -97,7 +97,21 @@ fn mise_and_ci_share_one_required_check_contract() {
     let linux_steps = steps(&linux, "rust");
     let linux_check = named_step(linux_steps, "Run implementation checks");
     assert_eq!(linux_check["run"].as_str(), Some("mise run check"));
-    assert!(linux_check["env"]["DOCGRAPH_CHANGE_BASE"].is_string());
+    assert_eq!(
+        linux_check["env"]["DOCGRAPH_CHANGE_BASE"].as_str(),
+        Some(
+            "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}"
+        )
+    );
+    assert_eq!(
+        linux_check["env"]["DOCGRAPH_CHANGE_HEAD"].as_str(),
+        Some(
+            "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        )
+    );
+    let commit_messages = mise["tasks"]["commit-messages"]["run"].as_str().unwrap();
+    assert!(commit_messages.contains("DOCGRAPH_CHANGE_BASE"));
+    assert!(commit_messages.contains("DOCGRAPH_CHANGE_HEAD"));
     let linux_checkout = named_step(linux_steps, "Check out repository");
     assert_eq!(linux_checkout["with"]["fetch-depth"].as_i64(), Some(0));
     let linux_install = named_step(linux_steps, "Install pinned development tools");

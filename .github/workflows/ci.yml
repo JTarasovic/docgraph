@@ -70,4 +70,5 @@ jobs:
       - name: Run implementation checks
         env:
           DOCGRAPH_CHANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          DOCGRAPH_CHANGE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: mise run check

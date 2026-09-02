@@ -36,7 +36,7 @@ depends = ["fmt", "lint", "test", "managed-changes", "release-check", "commit-me
 
 [tasks.commit-messages]
 description = "Require Conventional Commit subjects in the changed Git range"
-run = "committed \"{{ get_env(name='DOCGRAPH_CHANGE_BASE', default='HEAD') }}..HEAD\""
+run = "committed \"{{ get_env(name='DOCGRAPH_CHANGE_BASE', default='HEAD') }}..{{ get_env(name='DOCGRAPH_CHANGE_HEAD', default='HEAD') }}\""
 
 [tasks.release-check]
 description = "Reject stale generated release automation or invalid distribution plans"
