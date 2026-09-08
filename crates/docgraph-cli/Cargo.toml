@@ -33,7 +33,8 @@ pre-release-replacements = [
 [{{version}}]: https://github.com/JTarasovic/docgraph/compare/v$1..v{{version}}''', exactly = 1 },
 ]
 pre-release-hook = [
-  "bash",
-  "../../tools/release/update-changelog.sh",
-  "{{version}}",
+  "cargo",
+  "xtask",
+  "release",
+  "changelog",
 ]

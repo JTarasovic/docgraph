@@ -45,6 +45,14 @@ run = [
     "dist plan --allow-dirty",
 ]
 
+[tasks.release-stage]
+description = "Stage the current host's verified release payload"
+run = "cargo xtask release stage"
+
+[tasks.release-smoke]
+description = "Smoke-test one native release archive"
+run = "cargo xtask release smoke"
+
 [tasks.check-local]
 description = "Prepare the host runtime and run every required check"
 run = [

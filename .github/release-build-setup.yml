@@ -1,5 +1,4 @@
 - name: Stage pinned companion runtime and portable files
-  shell: bash
   env:
     GH_TOKEN: ${{ github.token }}
-  run: bash tools/release/stage-dist-inputs.sh
+  run: cargo xtask release stage

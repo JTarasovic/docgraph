@@ -19,8 +19,16 @@ target = "plan:harden-delivery-integrity#s-SBVSRRVQW0"
 type = "depends_on"
 target = "task:automate-release-preparation"
 
+[[relations]]
+type = "depends_on"
+target = "task:simplify-release-automation"
+
 [docgraph_generated]
 schema_version = 1
+
+[[docgraph_generated.backlinks]]
+source = "task:simplify-release-automation#s-559RWSY97B"
+target = "docs/tasks/attest-release-artifacts.md"
 
 +++
 <a id="s-MKS7YRDWHR"></a>
@@ -98,3 +106,8 @@ The remaining proof is the first docgraph release from this configuration. Its h
 job must attest both platform archives, their adjacent checksums, the cargo-cyclonedx
 workspace SBOM, and `sha256.sum`; post-publication verification must then exercise the
 documented GitHub CLI and mise consumer paths.
+
+The pre-publication implementation uses `cargo xtask release verify-inputs` to parse
+the dist manifest, checksum files, workspace SBOM, and native archives. Product
+attestations do not exist until dist's host phase publishes them, so their verification
+remains a post-publication proof and does not resolve this task by itself.

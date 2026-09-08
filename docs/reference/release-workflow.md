@@ -19,6 +19,10 @@ source = "reference:release-workflow"
 type = "implemented_by"
 target = "task:define-repeatable-release-workflow"
 
+[[docgraph_generated.backlinks]]
+source = "task:simplify-release-automation#s-559RWSY97B"
+target = "docs/reference/release-workflow.md"
+
 +++
 <a id="s-VZ0QKNRXQK"></a>
 # Release workflow
@@ -27,7 +31,7 @@ This runbook defines the contributor workflow selected in
 [decision:release-workflow-ownership](../decisions/release-workflow-ownership.md).
 The checked-in cargo-release, git-cliff, and dist configuration owns preparation and
 distribution; the repository keeps only its product-specific companion-payload staging
-and smoke-test seams.
+and smoke-test seams in `cargo xtask`.
 
 <a id="s-Q9JPZDVN2R"></a>
 ## Release contract
@@ -67,7 +71,7 @@ Use these commands, with 0.3.0 replaced by the intended numeric version:
 
     cargo release 0.3.0 --workspace
     cargo release 0.3.0 --workspace --execute
-    bash tools/release/stage-dist-inputs.sh
+    cargo xtask release stage
     dist plan --tag v0.3.0
     dist build --tag v0.3.0 --target <current-host-target>
 
@@ -81,8 +85,9 @@ Dist plan must show exactly the supported native targets, archives, SHA-256 outp
 release manifest, cargo-cyclonedx workspace SBOM, and GitHub attestation work. The
 staging command downloads and verifies the current host's pinned companion runtime and
 lays out the portable skill and third-party notices for dist. Dist build consumes those
-inputs and builds the archive. Run tools/release/smoke-test.sh against the resulting
-archive. A local rehearsal proves only the current platform; the release pull request
+inputs and builds the archive. Run `cargo xtask release smoke --target <target> --version
+<version> --archive <path>` against the resulting archive. A local rehearsal proves only
+the current platform; the release pull request
 must exercise the other native runner. The native companion's separately attested Syft
 SBOM describes the Souffle payload and its shipped licenses; cargo-cyclonedx describes
 the Rust workspace. Cargo-auditable remains disabled because dist 0.32's generated

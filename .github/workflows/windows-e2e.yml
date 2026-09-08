@@ -9,13 +9,13 @@ on:
       - action.yml
       - Cargo.lock
       - Cargo.toml
+      - xtask/**
       - crates/**
       - fixtures/**
       - mise.toml
       - skills/**
       - tools/action/**
       - tools/logic-runtime/**
-      - tools/release/**
   pull_request:
     paths:
       - .cargo/**
@@ -23,13 +23,13 @@ on:
       - action.yml
       - Cargo.lock
       - Cargo.toml
+      - xtask/**
       - crates/**
       - fixtures/**
       - mise.toml
       - skills/**
       - tools/action/**
       - tools/logic-runtime/**
-      - tools/release/**
 
 permissions:
   attestations: read
@@ -88,10 +88,9 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install packaged logic runtime
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash tools/release/stage-dist-inputs.sh --verify-attestations
+        run: cargo xtask release stage --verify-attestations
 
       - name: Run Windows end-to-end tests
         run: mise run --skip-tools windows-e2e

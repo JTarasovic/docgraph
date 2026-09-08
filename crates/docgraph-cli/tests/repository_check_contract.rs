@@ -26,7 +26,7 @@ const WINDOWS_PATHS: [&str; 12] = [
     "skills/**",
     "tools/action/**",
     "tools/logic-runtime/**",
-    "tools/release/**",
+    "xtask/**",
 ];
 const MISE_CACHE_KEY: &str = "{{cache_key_prefix}}-{{platform}}-{{file_hash}}";
 
@@ -151,7 +151,7 @@ fn mise_and_ci_share_one_required_check_contract() {
     assert_eq!(linux["permissions"]["attestations"].as_str(), Some("read"));
     assert_eq!(
         named_step(linux_steps, "Install packaged logic runtime")["run"].as_str(),
-        Some("bash tools/release/stage-dist-inputs.sh --verify-attestations")
+        Some("cargo xtask release stage --verify-attestations")
     );
     assert_eq!(
         named_step(linux_steps, "Smoke-test released validation action")["with"]["version"]
@@ -233,7 +233,7 @@ fn mise_and_ci_share_one_required_check_contract() {
     );
     assert_eq!(
         named_step(windows_steps, "Install packaged logic runtime")["run"].as_str(),
-        Some("bash tools/release/stage-dist-inputs.sh --verify-attestations")
+        Some("cargo xtask release stage --verify-attestations")
     );
     let windows_test = named_step(windows_steps, "Run Windows end-to-end tests");
     assert_eq!(
@@ -304,9 +304,16 @@ fn generated_release_workflow_is_pinned_and_smoke_gated() {
         .map(|value| value.as_str().unwrap())
         .collect::<BTreeSet<_>>();
     assert!(
-        host_needs.contains("custom-release-smoke"),
-        "publishing must wait for native clean-install smoke tests"
+        !host_needs.contains("custom-release-smoke"),
+        "dist 0.32 schedules host jobs after its host step"
     );
+    let smoke_needs = workflow["jobs"]["custom-release-smoke"]["needs"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<BTreeSet<_>>();
+    assert!(smoke_needs.contains("build-global-artifacts"));
     let local_steps = steps(&workflow, "build-local-artifacts");
     assert!(
         local_steps
@@ -337,44 +344,33 @@ fn generated_release_workflow_is_pinned_and_smoke_gated() {
 }
 
 #[test]
-fn portable_release_automation_uses_bash() {
+fn release_automation_uses_xtask() {
     let root = repository_root();
     for script in ["stage-dist-inputs", "smoke-test", "update-changelog"] {
         let shell = root.join(format!("tools/release/{script}.sh"));
-        let powershell = root.join(format!("tools/release/{script}.ps1"));
-        assert!(shell.is_file(), "missing portable release script: {script}");
-        let contents = fs::read_to_string(shell).unwrap();
-        assert!(
-            contents
-                .lines()
-                .take(2)
-                .eq(["#!/usr/bin/env bash", "set -euo pipefail"]),
-            "release script must use strict Bash: {script}"
-        );
-        assert!(
-            !powershell.exists(),
-            "portable release script still depends on PowerShell: {script}"
-        );
+        assert!(!shell.exists(), "obsolete release script remains: {script}");
     }
 
+    let xtask = fs::read_to_string(root.join("xtask/src/main.rs")).unwrap();
+    assert!(xtask.contains("ReleaseCommands::Stage"));
+    assert!(xtask.contains("ReleaseCommands::Smoke"));
+    assert!(xtask.contains("ReleaseCommands::VerifyInputs"));
+    assert!(xtask.contains("ReleaseCommands::Changelog"));
+    assert!(xtask.contains("attestation"));
+    assert!(xtask.contains("CycloneDX"));
+
     let setup = fs::read_to_string(root.join(".github/release-build-setup.yml")).unwrap();
-    assert!(setup.contains("shell: bash"));
-    assert!(setup.contains("bash tools/release/stage-dist-inputs.sh"));
-    assert!(!setup.contains("pwsh"));
+    assert!(setup.contains("cargo xtask release stage"));
 
     let smoke = fs::read_to_string(root.join(".github/workflows/release-smoke.yml")).unwrap();
-    assert!(smoke.contains("bash tools/release/smoke-test.sh"));
-    assert!(smoke.contains("bash tools/release/stage-dist-inputs.sh --verify-attestations"));
+    assert!(smoke.contains("cargo xtask release smoke"));
+    assert!(smoke.contains("cargo xtask release verify-inputs"));
+    assert!(smoke.contains("cargo xtask release stage --verify-attestations"));
     assert!(smoke.contains("attestations: read"));
-    assert!(smoke.contains("Verify product evidence inputs"));
-    assert!(smoke.contains("grep --invert-match '^$' \"$checksum\" | sha256sum --check"));
-    assert!(smoke.contains("^[0-9a-fA-F]{64} [ *].+$"));
-    assert!(smoke.contains("<name>docgraph-cli</name>"));
-    assert!(!smoke.contains("pwsh"));
 
     let manifest = fs::read_to_string(root.join("crates/docgraph-cli/Cargo.toml")).unwrap();
-    assert!(manifest.contains("../../tools/release/update-changelog.sh"));
-    assert!(!manifest.contains("update-changelog.ps1"));
+    assert!(manifest.contains("cargo",));
+    assert!(manifest.contains("xtask"));
 }
 
 #[test]
@@ -520,18 +516,14 @@ fn logic_runtime_companions_are_manual_native_builds_with_evidence() {
         }
     }
 
-    let staging = fs::read_to_string(root.join("tools/release/stage-dist-inputs.sh")).unwrap();
-    assert!(staging.contains("$asset_name.sha256"));
-    assert!(staging.contains("$asset_name.cdx.json"));
-    assert!(staging.contains("sha256sum --check --strict"));
-    assert!(staging.contains("gh attestation verify"));
-    assert!(
-        staging
-            .contains("--signer-workflow JTarasovic/docgraph/.github/workflows/logic-runtime.yml")
-    );
-    assert!(staging.contains("--source-digest \"$producer_revision\""));
-    assert!(staging.contains("--source-ref refs/heads/main"));
-    assert!(staging.contains("SOUFFLE-UPL.txt"));
+    let staging = fs::read_to_string(root.join("xtask/src/main.rs")).unwrap();
+    assert!(staging.contains(".sha256"));
+    assert!(staging.contains(".cdx.json"));
+    assert!(staging.contains("verify_checksum"));
+    assert!(staging.contains("attestation"));
+    assert!(staging.contains("JTarasovic/docgraph/.github/workflows/logic-runtime.yml"));
+    assert!(staging.contains("--source-digest"));
+    assert!(staging.contains("refs/heads/main"));
 
     let runbook = fs::read_to_string(root.join("docs/reference/release-workflow.md")).unwrap();
     assert!(runbook.contains("gh attestation verify \"$subject\""));

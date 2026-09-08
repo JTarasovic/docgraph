@@ -15,13 +15,27 @@ source = "task:define-repeatable-release-workflow"
 predicate = "implements"
 target = "decision:release-workflow-ownership"
 
+[[docgraph_generated.incoming]]
+source = "task:simplify-release-automation"
+predicate = "implements"
+target = "decision:release-workflow-ownership"
+
 [[docgraph_generated.inverses]]
 source = "decision:release-workflow-ownership"
 type = "implemented_by"
 target = "task:define-repeatable-release-workflow"
 
+[[docgraph_generated.inverses]]
+source = "decision:release-workflow-ownership"
+type = "implemented_by"
+target = "task:simplify-release-automation"
+
 [[docgraph_generated.backlinks]]
 source = "reference:release-workflow#s-VZ0QKNRXQK"
+target = "docs/decisions/release-workflow-ownership.md"
+
+[[docgraph_generated.backlinks]]
+source = "task:simplify-release-automation#s-559RWSY97B"
 target = "docs/decisions/release-workflow-ownership.md"
 
 +++
