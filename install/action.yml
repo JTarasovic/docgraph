@@ -1,0 +1,27 @@
+name: Install docgraph
+description: Install an exact docgraph release after checksum and producer attestation verification.
+inputs:
+  version:
+    description: Exact stable release tag (vMAJOR.MINOR.PATCH).
+    required: true
+  token:
+    description: Token with read access to docgraph releases and attestations.
+    default: ${{ github.token }}
+outputs:
+  version:
+    description: Installed version without the leading v.
+    value: ${{ steps.install.outputs.version }}
+  executable:
+    description: Absolute path to docgraph.
+    value: ${{ steps.install.outputs.executable }}
+runs:
+  using: composite
+  steps:
+    - name: Download, verify, and install docgraph
+      id: install
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token || github.token }}
+        DOCGRAPH_VERSION: ${{ inputs.version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/../tools/action/install.sh"

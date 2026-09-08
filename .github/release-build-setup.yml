@@ -1,4 +1,6 @@
+- name: Install pinned companion runtime
+  uses: ./install-runtime
+  id: runtime
+
 - name: Stage pinned companion runtime and portable files
-  env:
-    GH_TOKEN: ${{ github.token }}
-  run: cargo xtask release stage
+  run: cargo xtask release stage --runtime "${{ steps.runtime.outputs.executable }}"

@@ -30,7 +30,7 @@ github-attestations-filters = [
   "sha256.sum",
 ]
 github-build-setup = "../release-build-setup.yml"
-host-jobs = ["./release-smoke"]
+global-artifacts-jobs = ["./release-smoke"]
 github-custom-job-permissions = { "release-smoke" = { attestations = "read", contents = "read" } }
 pr-run-mode = "skip"
 

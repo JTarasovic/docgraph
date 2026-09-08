@@ -47,7 +47,9 @@ run = [
 
 [tasks.release-stage]
 description = "Stage the current host's verified release payload"
-run = "cargo xtask release stage"
+usage = 'arg "<runtime>" help="Path to the verified companion executable"'
+run = 'cargo xtask release stage --runtime "$usage_runtime"'
+run_windows = 'cargo xtask release stage --runtime "%usage_runtime%"'
 
 [tasks.release-smoke]
 description = "Smoke-test one native release archive"

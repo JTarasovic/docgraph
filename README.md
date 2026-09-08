@@ -38,22 +38,27 @@ docgraph --help
 
 ## GitHub Actions validation
 
-The root composite action installs a checksum-verified released archive and runs
-`docgraph validate` without requiring Rust, mise, or a docgraph source checkout.
-Pin both actions to reviewed full commit SHAs and select the exact docgraph binary
-release explicitly:
+Install a verified release, then validate with it. The public actions use `gh`
+and standard runner tools; consumers need no Rust, mise, or docgraph source checkout.
+Pin the actions to reviewed full commit SHAs and select the binary release explicitly:
 
 ```yaml
 permissions:
   contents: read
+  attestations: read
 
 steps:
   - uses: actions/checkout@<full-commit-sha>
-  - uses: JTarasovic/docgraph@<full-commit-sha>
+  - uses: JTarasovic/docgraph/install@<full-commit-sha>
     with:
       version: <exact-release-tag>
-      token: ${{ secrets.DOCGRAPH_RELEASE_TOKEN }} # only while releases are private
+  - uses: JTarasovic/docgraph@<full-commit-sha>
 ```
+
+The CLI installer includes its matching logic runtime.
+`JTarasovic/docgraph/install-runtime@<full-commit-sha>` also installs the pinned
+sidecar independently, for example when testing a source build. Both installers
+require valid producer attestations and SHA-256 checksums.
 
 See [the validation action contract](docs/reference/validation-action.md) for
 working-directory, change-aware validation, supported runners, and outputs.

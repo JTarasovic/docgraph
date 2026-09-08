@@ -14,12 +14,14 @@ const REQUIRED_CHECKS: [&str; 8] = [
     "release-check",
     "test",
 ];
-const WINDOWS_PATHS: [&str; 12] = [
+const WINDOWS_PATHS: [&str; 14] = [
     ".cargo/**",
     ".github/workflows/windows-e2e.yml",
     "Cargo.lock",
     "Cargo.toml",
     "action.yml",
+    "install/**",
+    "install-runtime/**",
     "crates/**",
     "fixtures/**",
     "mise.toml",
@@ -50,7 +52,11 @@ fn assert_actions_are_pinned(source: &str) {
         let Some(reference) = line.trim().strip_prefix("uses: ") else {
             continue;
         };
-        let reference = reference.split_whitespace().next().unwrap();
+        let reference = reference
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .trim_matches('"');
         if reference.starts_with("./") {
             continue;
         }
@@ -150,12 +156,11 @@ fn mise_and_ci_share_one_required_check_contract() {
     assert_eq!(linux_install["with"]["cache_save"].as_bool(), Some(true));
     assert_eq!(linux["permissions"]["attestations"].as_str(), Some("read"));
     assert_eq!(
-        named_step(linux_steps, "Install packaged logic runtime")["run"].as_str(),
-        Some("cargo xtask release stage --verify-attestations")
+        named_step(linux_steps, "Install packaged logic runtime")["uses"].as_str(),
+        Some("./install-runtime")
     );
     assert_eq!(
-        named_step(linux_steps, "Smoke-test released validation action")["with"]["version"]
-            .as_str(),
+        named_step(linux_steps, "Install released docgraph")["with"]["version"].as_str(),
         Some("${{ steps.released-docgraph.outputs.tag }}")
     );
     let linux_release = named_step(linux_steps, "Resolve latest stable release");
@@ -202,8 +207,7 @@ fn mise_and_ci_share_one_required_check_contract() {
         "Windows should keep the default shallow checkout"
     );
     assert_eq!(
-        named_step(windows_steps, "Smoke-test released validation action")["with"]["version"]
-            .as_str(),
+        named_step(windows_steps, "Install released docgraph")["with"]["version"].as_str(),
         Some("${{ steps.released-docgraph.outputs.tag }}")
     );
     let windows_release = named_step(windows_steps, "Resolve latest stable release");
@@ -232,8 +236,8 @@ fn mise_and_ci_share_one_required_check_contract() {
         Some("read")
     );
     assert_eq!(
-        named_step(windows_steps, "Install packaged logic runtime")["run"].as_str(),
-        Some("cargo xtask release stage --verify-attestations")
+        named_step(windows_steps, "Install packaged logic runtime")["uses"].as_str(),
+        Some("./install-runtime")
     );
     let windows_test = named_step(windows_steps, "Run Windows end-to-end tests");
     assert_eq!(
@@ -304,8 +308,8 @@ fn generated_release_workflow_is_pinned_and_smoke_gated() {
         .map(|value| value.as_str().unwrap())
         .collect::<BTreeSet<_>>();
     assert!(
-        !host_needs.contains("custom-release-smoke"),
-        "dist 0.32 schedules host jobs after its host step"
+        host_needs.contains("custom-release-smoke"),
+        "publishing must wait for native smoke tests"
     );
     let smoke_needs = workflow["jobs"]["custom-release-smoke"]["needs"]
         .as_sequence()
@@ -313,7 +317,15 @@ fn generated_release_workflow_is_pinned_and_smoke_gated() {
         .iter()
         .map(|value| value.as_str().unwrap())
         .collect::<BTreeSet<_>>();
-    assert!(smoke_needs.contains("build-global-artifacts"));
+    assert!(smoke_needs.contains("build-local-artifacts"));
+    assert!(!smoke_needs.contains("build-global-artifacts"));
+    assert!(
+        workflow["jobs"]["host"]["if"]
+            .as_str()
+            .unwrap()
+            .contains("needs.custom-release-smoke.result == 'success'"),
+        "a failed smoke test must block publication"
+    );
     let local_steps = steps(&workflow, "build-local-artifacts");
     assert!(
         local_steps
@@ -355,14 +367,15 @@ fn release_automation_uses_xtask() {
     assert!(xtask.contains("ReleaseCommands::Stage"));
     assert!(xtask.contains("ReleaseCommands::Smoke"));
     assert!(xtask.contains("ReleaseCommands::Changelog"));
-    assert!(xtask.contains("attestation"));
+    assert!(!xtask.contains("gh release"));
+    assert!(!xtask.contains("verify_attestations"));
 
     let setup = fs::read_to_string(root.join(".github/release-build-setup.yml")).unwrap();
     assert!(setup.contains("cargo xtask release stage"));
 
     let smoke = fs::read_to_string(root.join(".github/workflows/release-smoke.yml")).unwrap();
     assert!(smoke.contains("cargo xtask release smoke"));
-    assert!(smoke.contains("cargo xtask release stage --verify-attestations"));
+    assert!(setup.contains("uses: ./install-runtime"));
     assert!(smoke.contains("attestations: read"));
 
     let manifest = fs::read_to_string(root.join("crates/docgraph-cli/Cargo.toml")).unwrap();
@@ -455,7 +468,10 @@ fn logic_runtime_companions_are_manual_native_builds_with_evidence() {
         Some("target/logic-runtime/release/*")
     );
     let publish_step = named_step(evidence_steps, "Publish immutable companions");
-    assert_eq!(publish_step["if"].as_str(), Some("${{ inputs.publish }}"));
+    assert_eq!(
+        publish_step["if"].as_str(),
+        Some("${{ inputs.publish && github.ref == 'refs/heads/main' }}")
+    );
     let publish = publish_step["run"].as_str().unwrap();
     assert!(publish.contains("${SOUFFLE_REVISION:0:8}-${GITHUB_SHA:0:8}"));
     assert!(publish.contains("Refusing to replace existing companion release"));
@@ -469,18 +485,18 @@ fn logic_runtime_companions_are_manual_native_builds_with_evidence() {
         workflow["env"]["SOUFFLE_REVISION"].as_str(),
         runtime_sources["souffle"]["revision"].as_str()
     );
+    let artifacts: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(root.join("tools/logic-runtime/artifacts.json")).unwrap(),
+    )
+    .unwrap();
     let revision = runtime_sources["souffle"]["revision"].as_str().unwrap();
     let short = &revision[..8];
     for (platform, operating_system, extension) in [
         ("linux-x86_64", "linux", "tar.gz"),
         ("windows-x86_64", "windows", "zip"),
     ] {
-        let release = runtime_sources["artifact"][platform]["release"]
-            .as_str()
-            .unwrap();
-        let producer = runtime_sources["artifact"][platform]["producer_revision"]
-            .as_str()
-            .unwrap();
+        let release = artifacts[platform]["release"].as_str().unwrap();
+        let producer = artifacts[platform]["producer_revision"].as_str().unwrap();
         assert_eq!(producer.len(), 40);
         assert!(producer.bytes().all(|byte| byte.is_ascii_hexdigit()));
         assert_eq!(
@@ -490,9 +506,7 @@ fn logic_runtime_companions_are_manual_native_builds_with_evidence() {
                 &producer[..8]
             )
         );
-        let url = runtime_sources["artifact"][platform]["url"]
-            .as_str()
-            .unwrap();
+        let url = artifacts[platform]["url"].as_str().unwrap();
         assert!(url.contains(&format!("/releases/download/{release}/")));
         let file = url.rsplit('/').next().unwrap();
         assert!(file.starts_with(&format!(
@@ -505,20 +519,20 @@ fn logic_runtime_companions_are_manual_native_builds_with_evidence() {
             "sbom_sha256",
             "binary_sha256",
         ] {
-            let value = runtime_sources["artifact"][platform][digest]
-                .as_str()
-                .unwrap();
+            let value = artifacts[platform][digest].as_str().unwrap();
             assert_eq!(value.len(), 64);
             assert!(value.bytes().all(|byte| byte.is_ascii_hexdigit()));
         }
     }
 
-    let staging = fs::read_to_string(root.join("xtask/src/main.rs")).unwrap();
+    let staging = fs::read_to_string(root.join("tools/action/install-runtime.sh")).unwrap()
+        + &fs::read_to_string(root.join("tools/action/release.sh")).unwrap();
     assert!(staging.contains(".sha256"));
     assert!(staging.contains(".cdx.json"));
-    assert!(staging.contains("verify_checksum"));
+    assert!(staging.contains("sha256sum --check --strict"));
     assert!(staging.contains("attestation"));
-    assert!(staging.contains("JTarasovic/docgraph/.github/workflows/logic-runtime.yml"));
+    assert!(staging.contains("workflow=logic-runtime.yml"));
+    assert!(staging.contains("--signer-workflow"));
     assert!(staging.contains("--source-digest"));
     assert!(staging.contains("refs/heads/main"));
 

@@ -1,0 +1,2 @@
+# Git Bash executes the public action scripts on Windows as well as Linux.
+tools/action/*.sh text eol=lf

@@ -199,7 +199,7 @@ jobs:
           subject-path: target/logic-runtime/release/*
 
       - name: Publish immutable companions
-        if: ${{ inputs.publish }}
+        if: ${{ inputs.publish && github.ref == 'refs/heads/main' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -218,11 +218,13 @@ jobs:
             target/logic-runtime/release/docgraph-logic-runtime-linux-x86_64-$identity.* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
+            --latest=false \
             --title "Pinned Linux logic runtime $identity" \
             --notes "Pinned Linux x86-64 logic runtime companion for docgraph release packaging."
           gh release create "logic-runtime-windows-$identity" \
             target/logic-runtime/release/docgraph-logic-runtime-windows-x86_64-$identity.* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
+            --latest=false \
             --title "Pinned Windows logic runtime $identity" \
             --notes "Pinned Windows x86-64 logic runtime companion for docgraph release packaging."

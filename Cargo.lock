@@ -1873,10 +1873,10 @@ dependencies = [
  "clap",
  "flate2",
  "serde",
+ "serde_json",
  "sha2",
  "tar",
  "tempfile",
- "toml_edit",
  "zip",
 ]
 

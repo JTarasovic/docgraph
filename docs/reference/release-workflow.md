@@ -56,8 +56,10 @@ the published version it is testing.
 - Confirm the pinned Windows and Linux companion-runtime artifacts exist, their
   configured checksums verify, and their producer attestations and Syft CycloneDX
   SBOMs are present. Companion binaries are rebuilt only by the manually dispatched
-  native workflow when their source or build recipe changes, not by ordinary CI. Their
-  immutable release names identify both the upstream Souffle revision and the docgraph
+  native workflow from `main` when their source or build recipe changes, not by
+  ordinary CI. Companion publication uses `--latest=false` to leave the product
+  release as GitHub's latest release. Their immutable release names identify both
+  the upstream Souffle revision and the docgraph
   producer commit.
 - Install the exact mise-managed Rust, cargo-release, git-cliff, dist,
   cargo-auditable, and cargo-cyclonedx versions.
@@ -71,7 +73,7 @@ Use these commands, with 0.3.0 replaced by the intended numeric version:
 
     cargo release 0.3.0 --workspace
     cargo release 0.3.0 --workspace --execute
-    cargo xtask release stage
+    cargo xtask release stage --runtime <installed-runtime-path>
     dist plan --tag v0.3.0
     dist build --tag v0.3.0 --target <current-host-target>
 
@@ -82,9 +84,12 @@ commit but neither a tag nor a push. Review and edit CHANGELOG.md for user impac
 amend that commit, then run the repository checks.
 
 Dist plan must show exactly the supported native targets, archives, SHA-256 outputs,
-release manifest, cargo-cyclonedx workspace SBOM, and GitHub attestation work. The
-staging command downloads and verifies the current host's pinned companion runtime and
-lays out the portable skill and third-party notices for dist. Dist build consumes those
+release manifest, cargo-cyclonedx workspace SBOM, and GitHub attestation work.
+The public `install-runtime` action downloads and verifies the pinned companion
+in release CI. The staging command takes its `executable` output through
+`--runtime`, checks the pinned binary digest, and copies the runtime, portable
+skill, and third-party notices for dist. Local rehearsals supply a previously
+verified companion installation at that same argument. Dist build consumes those
 inputs and builds the archive. Run `cargo xtask release smoke --target <target> --version
 <version> --archive <path>` against the resulting archive. A local rehearsal proves only
 the current platform; the release pull request
@@ -127,7 +132,9 @@ the tree is clean, and create the reviewed annotated tag:
 
 Replace 0.3.0 with the reviewed version. Do not push unless git show identifies the
 merged preparation commit. The tag starts the generated dist workflow; its host phase
-publishes only after both native build and smoke-test jobs succeed.
+publishes only after both native build and smoke-test jobs succeed. Smoke tests
+are configured as `global-artifacts-jobs`, so they consume completed native
+archives and gate the host phase that attests and publishes the release.
 
 <a id="s-BW2KSCPQFH"></a>
 ## Verify published evidence
@@ -140,7 +147,7 @@ companion have separate CycloneDX SBOMs because cargo-cyclonedx cannot describe 
 Souffle binary or its bundled licenses.
 
 For a pinned companion, copy the release, archive, and full producer revision from
-`tools/logic-runtime/sources.toml`, then verify all three published subjects:
+`tools/logic-runtime/artifacts.json`, then verify all three published subjects:
 
     repository=JTarasovic/docgraph
     release=logic-runtime-linux-a1303be3-d85140ef
@@ -199,9 +206,10 @@ build definition and isolation required for that claim.
    cargo-cyclonedx workspace SBOM. Separately verify each pinned native companion's
    archive, checksum, and Syft SBOM against its producer workflow.
 4. In a clean directory, run docgraph --version and docgraph --help from each archive,
-   then exercise the documented validation action at the exact published version.
+   then exercise the public installer at the exact published version and run the
+   validation action using that installation.
 5. Confirm the GitHub release body matches the accepted changelog entry and that CI's
-   published-action compatibility check observes the new release dynamically.
+   public installer and validation checks observe the new release dynamically.
 6. Close the release issue only after artifacts, checksums, notes, attestations, and
    post-release validation are present.
 

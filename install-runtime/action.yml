@@ -1,0 +1,23 @@
+name: Install docgraph logic runtime
+description: Install and smoke-test the pinned sidecar after checksum and producer attestation verification.
+inputs:
+  token:
+    description: Token with read access to docgraph releases and attestations.
+    default: ${{ github.token }}
+outputs:
+  executable:
+    description: Absolute path to the logic runtime (also exported as DOCGRAPH_LOGIC_RUNTIME).
+    value: ${{ steps.install.outputs.executable }}
+  directory:
+    description: Installation directory, including runtime licenses.
+    value: ${{ steps.install.outputs.directory }}
+runs:
+  using: composite
+  steps:
+    - name: Download, verify, and install logic runtime
+      id: install
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token || github.token }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/../tools/action/install-runtime.sh"

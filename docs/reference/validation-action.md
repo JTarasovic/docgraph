@@ -33,47 +33,72 @@ target = "task:publish-validation-action"
 <a id="s-3CMEBZVCCG"></a>
 # Validation action
 
-The repository root publishes a composite GitHub Action through `action.yml`.
-It installs one exact docgraph release, verifies the release archive against its
-adjacent SHA-256 file, checks the packaged CLI version and adjacent logic runtime,
-adds the installation directory to the job path, and validates the configured
-corpus.
+Three public composite actions separate installation from validation:
 
-The action supports the `x86_64-pc-windows-msvc` and
-`x86_64-unknown-linux-gnu` release targets. It selects dist's exact archive and
-checksum pair from release metadata; the legacy v0.2.0 names remain accepted for
-compatibility. Unsupported operating systems and architectures fail with an
-actionable diagnostic.
+- `JTarasovic/docgraph/install-runtime@<sha>` installs the pinned native logic
+  runtime and exports `DOCGRAPH_LOGIC_RUNTIME`.
+- `JTarasovic/docgraph/install@<sha>` installs an exact released CLI and its
+  bundled runtime, adds the installation to `PATH`, and exports
+  `DOCGRAPH_EXECUTABLE` and `DOCGRAPH_LOGIC_RUNTIME`.
+- `JTarasovic/docgraph@<sha>` runs `docgraph validate` using the installed
+  executable and runtime. It performs no installation.
 
-Inputs:
+The installers use `gh release download`, `gh attestation verify`,
+`sha256sum`, and standard archive tools. The standalone runtime installer also
+uses `jq` to read its pins and validate its SBOM. These commands and Bash are
+available on GitHub-hosted Linux and Windows runners; self-hosted runners must
+provide them. Consumers need no Rust, mise, package manager, or docgraph source
+checkout. Supported release targets are x86-64 Linux and Windows.
 
-- `version` is required and must be an exact semantic release tag in
-  `v<major>.<minor>.<patch>` form. Floating versions are rejected.
-- `working-directory` defaults to `.` relative to `github.workspace`.
-- `changes` optionally supplies the Git ref for `docgraph validate --changes`.
-- `token` defaults to the workflow token. Public releases need no additional
-  access; a consumer downloading from a private docgraph repository must supply a
-  token that can read its releases.
+Every downloaded archive and adjacent checksum must have a valid attestation
+from `JTarasovic/docgraph` and the expected producer workflow. CLI evidence must
+match `release.yml` and the requested release tag. Standalone runtime evidence
+must match `logic-runtime.yml`, `refs/heads/main`, and the full producer commit
+pinned in `tools/logic-runtime/artifacts.json`. Self-hosted producers are rejected.
+Missing or invalid attestations fail installation; there is no checksum-only
+fallback. Archives are verified before extraction or execution.
 
-Outputs expose the installed semantic `version` without `v` and the absolute
-`executable` path. The executable is also available to later job steps through
-`PATH`.
+The standalone runtime installer also verifies its attested CycloneDX SBOM,
+checks pinned archive, checksum-file, SBOM, and executable digests, and runs a small logic program.
+The CLI installer checks the packaged version and presence of its bundled runtime.
+Installations live in fresh runner temporary directories, so an existing cache
+cannot bypass verification.
 
-Consumers should pin the action itself to a reviewed full commit SHA and request
-only read access:
+The `install` action requires `version` in exact `vMAJOR.MINOR.PATCH` form.
+Floating versions and historical archive layouts are unsupported. Both installers
+accept an optional `token`, defaulting to `github.token`; private release access
+requires a token that can read the producer repository's releases and attestations.
+
+The validation action accepts `working-directory` (default `.`, relative to
+`github.workspace`) and optional `changes`, passed as one argument to
+`docgraph validate --changes`. Change-aware validation needs sufficient checkout
+history. It propagates the CLI exit status.
+
+Pin the actions to reviewed full commit SHAs:
 
 ```yaml
 permissions:
   contents: read
+  attestations: read
 
 steps:
   - uses: actions/checkout@<full-commit-sha>
-  - uses: JTarasovic/docgraph@<full-commit-sha>
+  - uses: JTarasovic/docgraph/install@<full-commit-sha>
     with:
       version: <exact-release-tag>
-      token: ${{ secrets.DOCGRAPH_RELEASE_TOKEN }} # only while releases are private
+  - uses: JTarasovic/docgraph@<full-commit-sha>
 ```
 
-Pull-request validation that supplies `changes` must check out enough history for
-that Git ref to be available. The action requires neither Rust, mise, a source
-checkout of docgraph, nor a separately installed logic runtime.
+The CLI installation includes its matching runtime. To explicitly select the
+standalone pinned runtime, run `install-runtime` after `install` and before
+validation. Source-build CI uses `install-runtime` on its own; release packaging
+uses that same action, then stages its installed payload.
+
+`install` outputs `version` (without `v`) and the absolute `executable`.
+`install-runtime` outputs the absolute `executable` and installation `directory`,
+which includes licenses. The most recent installer sets the runtime for subsequent
+steps, including PowerShell steps on Windows.
+
+When migrating from the previous all-in-one root action, move `version` and
+`token` to a preceding `install` step and read installation outputs from that
+step. Keep validation inputs on the root action.

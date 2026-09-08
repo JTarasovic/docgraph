@@ -1,7 +1,5 @@
 use std::{
-    env,
-    ffi::OsString,
-    fs, io,
+    env, fs, io,
     path::{Component, Path, PathBuf},
     process::Command,
 };
@@ -35,7 +33,7 @@ struct Release {
 enum ReleaseCommands {
     Stage {
         #[arg(long)]
-        verify_attestations: bool,
+        runtime: PathBuf,
     },
     Smoke(SmokeArgs),
     Changelog,
@@ -52,19 +50,8 @@ struct SmokeArgs {
 }
 
 #[derive(Deserialize)]
-struct Sources {
-    artifact: std::collections::BTreeMap<String, Artifact>,
-}
-#[derive(Deserialize)]
 struct Artifact {
-    name: String,
-    release: String,
-    url: String,
-    archive_sha256: String,
-    checksum_sha256: String,
-    sbom_sha256: String,
     binary_sha256: String,
-    producer_revision: String,
 }
 
 fn main() {
@@ -77,9 +64,7 @@ fn main() {
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Commands::Release(release) => match release.command {
-            ReleaseCommands::Stage {
-                verify_attestations,
-            } => stage(verify_attestations),
+            ReleaseCommands::Stage { runtime } => stage(&runtime),
             ReleaseCommands::Smoke(args) => smoke(&args),
             ReleaseCommands::Changelog => changelog(),
         },
@@ -100,14 +85,6 @@ fn root() -> Result<PathBuf, String> {
 }
 fn display(error: impl std::fmt::Display) -> String {
     error.to_string()
-}
-fn command(program: &str, args: &[OsString]) -> Result<(), String> {
-    let status = Command::new(program).args(args).status().map_err(display)?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("{program} exited with {status}"))
-    }
 }
 fn sha256(path: &Path) -> Result<String, String> {
     let mut file = fs::File::open(path).map_err(display)?;
@@ -134,77 +111,19 @@ fn platform() -> Result<&'static str, String> {
     }
 }
 
-fn stage(verify_attestations: bool) -> Result<(), String> {
+fn stage(runtime: &Path) -> Result<(), String> {
     let repository = root()?;
-    let source: Sources = toml_edit::de::from_str(
-        &fs::read_to_string(repository.join("tools/logic-runtime/sources.toml"))
+    let sources: std::collections::BTreeMap<String, Artifact> = serde_json::from_str(
+        &fs::read_to_string(repository.join("tools/logic-runtime/artifacts.json"))
             .map_err(display)?,
     )
     .map_err(display)?;
-    let artifact = source
-        .artifact
+    let artifact = sources
         .get(platform()?)
         .ok_or("missing host artifact source")?;
-    let asset = artifact
-        .url
-        .rsplit('/')
-        .next()
-        .ok_or("invalid artifact URL")?;
-    let scratch = TempDir::new().map_err(display)?;
-    let archive = scratch.path().join(asset);
-    let checksum = scratch.path().join(format!("{asset}.sha256"));
-    let sbom = scratch.path().join(format!("{asset}.cdx.json"));
-    let args = vec![
-        OsString::from("release"),
-        OsString::from("download"),
-        OsString::from(&artifact.release),
-        OsString::from("--repo"),
-        OsString::from("JTarasovic/docgraph"),
-        OsString::from("--pattern"),
-        OsString::from(asset),
-        OsString::from("--pattern"),
-        OsString::from(format!("{asset}.sha256")),
-        OsString::from("--pattern"),
-        OsString::from(format!("{asset}.cdx.json")),
-        OsString::from("--dir"),
-        scratch.path().as_os_str().to_os_string(),
-    ];
-    command("gh", &args)?;
-    for (path, expected) in [
-        (&archive, &artifact.archive_sha256),
-        (&checksum, &artifact.checksum_sha256),
-        (&sbom, &artifact.sbom_sha256),
-    ] {
-        require_hash(path, expected)?;
-    }
-    verify_checksum(&checksum, scratch.path())?;
-    if verify_attestations {
-        for subject in [&archive, &checksum, &sbom] {
-            command(
-                "gh",
-                &[
-                    OsString::from("attestation"),
-                    OsString::from("verify"),
-                    subject.as_os_str().to_os_string(),
-                    OsString::from("--repo"),
-                    OsString::from("JTarasovic/docgraph"),
-                    OsString::from("--signer-workflow"),
-                    OsString::from("JTarasovic/docgraph/.github/workflows/logic-runtime.yml"),
-                    OsString::from("--source-digest"),
-                    OsString::from(&artifact.producer_revision),
-                    OsString::from("--source-ref"),
-                    OsString::from("refs/heads/main"),
-                    OsString::from("--deny-self-hosted-runners"),
-                ],
-            )?;
-        }
-    }
-    let extracted = scratch.path().join("extracted");
-    fs::create_dir(&extracted).map_err(display)?;
-    extract(&archive, &extracted)?;
-    let runtime = find_named_file(&extracted, &artifact.name)?
-        .ok_or_else(|| format!("archive lacks {}", artifact.name))?;
-    require_hash(&runtime, &artifact.binary_sha256)?;
+    // Installation and producer verification belong to the public action. Staging
+    // only accepts the pinned binary and copies the product-specific payload.
+    require_hash(runtime, &artifact.binary_sha256)?;
     let licenses = runtime
         .parent()
         .ok_or("runtime has no parent")?
@@ -219,7 +138,7 @@ fn stage(verify_attestations: bool) -> Result<(), String> {
     }
     fs::create_dir_all(replacement.join("skills")).map_err(display)?;
     fs::create_dir_all(replacement.join("THIRD_PARTY_LICENSES/souffle")).map_err(display)?;
-    fs::copy(&runtime, replacement.join("docgraph-logic-runtime")).map_err(display)?;
+    fs::copy(runtime, replacement.join("docgraph-logic-runtime")).map_err(display)?;
     copy_dir(
         &repository.join("skills/docgraph"),
         &replacement.join("skills/docgraph"),
@@ -297,14 +216,6 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
         }
     }
     Ok(())
-}
-fn verify_checksum(checksum: &Path, directory: &Path) -> Result<(), String> {
-    let line = fs::read_to_string(checksum).map_err(display)?;
-    let (expected, name) = line
-        .split_once(char::is_whitespace)
-        .ok_or("malformed checksum")?;
-    let name = name.trim().trim_start_matches('*');
-    require_hash(&directory.join(name), expected)
 }
 fn smoke(args: &SmokeArgs) -> Result<(), String> {
     let archive = fs::canonicalize(&args.archive).map_err(display)?;
@@ -420,34 +331,5 @@ fn changelog() -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("git-cliff exited with {status}"))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn checksum_requires_the_named_file_to_match() {
-        let directory = TempDir::new().unwrap();
-        let artifact = directory.path().join("archive.tar.gz");
-        fs::write(&artifact, b"release artifact").unwrap();
-        let checksum = directory.path().join("archive.tar.gz.sha256");
-        fs::write(
-            &checksum,
-            format!("{}  archive.tar.gz\n", sha256(&artifact).unwrap()),
-        )
-        .unwrap();
-        verify_checksum(&checksum, directory.path()).unwrap();
-        fs::write(&artifact, b"corrupt artifact").unwrap();
-        assert!(verify_checksum(&checksum, directory.path()).is_err());
-    }
-
-    #[test]
-    fn malformed_checksum_is_rejected() {
-        let directory = TempDir::new().unwrap();
-        let checksum = directory.path().join("checksum");
-        fs::write(&checksum, "not a checksum").unwrap();
-        assert!(verify_checksum(&checksum, directory.path()).is_err());
     }
 }

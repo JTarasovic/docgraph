@@ -17,8 +17,8 @@ release = false
 clap.workspace = true
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 serde.workspace = true
+serde_json.workspace = true
 sha2 = "0.10.9"
 tar = "0.4.44"
 tempfile = "3.24.0"
-toml_edit.workspace = true
 zip = { version = "7.2.0", default-features = false, features = ["deflate-flate2"] }

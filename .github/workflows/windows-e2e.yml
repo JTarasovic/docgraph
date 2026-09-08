@@ -7,6 +7,8 @@ on:
       - .cargo/**
       - .github/workflows/windows-e2e.yml
       - action.yml
+      - install/**
+      - install-runtime/**
       - Cargo.lock
       - Cargo.toml
       - xtask/**
@@ -21,6 +23,8 @@ on:
       - .cargo/**
       - .github/workflows/windows-e2e.yml
       - action.yml
+      - install/**
+      - install-runtime/**
       - Cargo.lock
       - Cargo.toml
       - xtask/**
@@ -46,7 +50,6 @@ jobs:
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
-      DOCGRAPH_LOGIC_RUNTIME: ${{ github.workspace }}\target\release-inputs\docgraph-logic-runtime
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,10 +75,13 @@ jobs:
           }
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke-test released validation action
-        uses: ./
+      - name: Install released docgraph
+        uses: ./install
         with:
           version: ${{ steps.released-docgraph.outputs.tag }}
+
+      - name: Smoke-test released validation action
+        uses: ./
 
       - name: Install Windows test tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
@@ -89,9 +95,10 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install packaged logic runtime
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: cargo xtask release stage --verify-attestations
+        uses: ./install-runtime
+
+      - name: Validate with standalone runtime
+        uses: ./
 
       - name: Run Windows end-to-end tests
         run: mise run --skip-tools windows-e2e
