@@ -63,7 +63,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --exclude-drafts \
             --exclude-pre-releases \
-            --limit 100 \
+            --limit 10 \
             --json tagName \
             --jq '[.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | first')
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
