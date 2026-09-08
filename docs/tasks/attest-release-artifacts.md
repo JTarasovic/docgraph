@@ -107,7 +107,5 @@ job must attest both platform archives, their adjacent checksums, the cargo-cycl
 workspace SBOM, and `sha256.sum`; post-publication verification must then exercise the
 documented GitHub CLI and mise consumer paths.
 
-The pre-publication implementation uses `cargo xtask release verify-inputs` to parse
-the dist manifest, checksum files, workspace SBOM, and native archives. Product
-attestations do not exist until dist's host phase publishes them, so their verification
-remains a post-publication proof and does not resolve this task by itself.
+Product attestations do not exist until dist's host phase publishes them, so their
+verification remains a post-publication proof and does not resolve this task by itself.

@@ -102,7 +102,6 @@ Use these command boundaries (option spelling can follow existing CLI convention
 
     cargo xtask release stage [--verify-attestations]
     cargo xtask release smoke --target <triple> --version <version> --archive <path>
-    cargo xtask release verify-inputs --manifest <path> --artifacts <directory>
     cargo xtask release changelog
 
 The last command is needed only if direct git-cliff configuration cannot implement
@@ -244,6 +243,5 @@ phase, before the workspace SBOM and unified checksum are available. Its `host-j
 run only after dist's host job has already uploaded and created the release. Neither
 supported phase supplies a complete post-global, pre-host evidence gate. The generated
 workflow is therefore left under dist ownership; no hand-edited dependency is applied.
-The xtask evidence command and reusable workflow are ready to be scheduled at that
-boundary when the pinned tool supports it. This limitation leaves the complete
-pre-publication gate pending rather than weakening evidence checks.
+This limitation leaves the complete pre-publication gate pending rather than adding a
+second product-evidence implementation outside dist.

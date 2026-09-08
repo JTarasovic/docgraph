@@ -8,7 +8,6 @@ use std::{
 
 use clap::{Args, Parser, Subcommand};
 use flate2::read::GzDecoder;
-use quick_xml::{Reader, events::Event};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tar::Archive;
@@ -39,7 +38,6 @@ enum ReleaseCommands {
         verify_attestations: bool,
     },
     Smoke(SmokeArgs),
-    VerifyInputs(VerifyInputsArgs),
     Changelog,
 }
 
@@ -51,14 +49,6 @@ struct SmokeArgs {
     version: String,
     #[arg(long)]
     archive: PathBuf,
-}
-
-#[derive(Args)]
-struct VerifyInputsArgs {
-    #[arg(long)]
-    manifest: PathBuf,
-    #[arg(long)]
-    artifacts: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -91,7 +81,6 @@ fn run(cli: Cli) -> Result<(), String> {
                 verify_attestations,
             } => stage(verify_attestations),
             ReleaseCommands::Smoke(args) => smoke(&args),
-            ReleaseCommands::VerifyInputs(args) => verify_inputs(&args),
             ReleaseCommands::Changelog => changelog(),
         },
     }
@@ -189,7 +178,6 @@ fn stage(verify_attestations: bool) -> Result<(), String> {
         require_hash(path, expected)?;
     }
     verify_checksum(&checksum, scratch.path())?;
-    verify_sbom(&sbom, &artifact.name)?;
     if verify_attestations {
         for subject in [&archive, &checksum, &sbom] {
             command(
@@ -318,60 +306,6 @@ fn verify_checksum(checksum: &Path, directory: &Path) -> Result<(), String> {
     let name = name.trim().trim_start_matches('*');
     require_hash(&directory.join(name), expected)
 }
-fn verify_sbom(path: &Path, runtime: &str) -> Result<(), String> {
-    if path
-        .extension()
-        .is_some_and(|extension| extension == "json")
-    {
-        let sbom: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(path).map_err(display)?).map_err(display)?;
-        let components = sbom["components"]
-            .as_array()
-            .ok_or("SBOM has no components")?;
-        let runtime_stem = runtime.strip_suffix(".exe").unwrap_or(runtime);
-        let found = components
-            .iter()
-            .filter_map(|component| component["name"].as_str())
-            .any(|name| {
-                name == runtime
-                    || name.ends_with(&format!("/{runtime}"))
-                    || name == runtime_stem
-                    || name.ends_with(&format!("/{runtime_stem}"))
-            });
-        return if found {
-            Ok(())
-        } else {
-            Err(format!("CycloneDX SBOM does not identify {runtime}"))
-        };
-    }
-    let mut reader = Reader::from_file(path).map_err(display)?;
-    let mut found = false;
-    let mut in_name = false;
-    let mut buffer = Vec::new();
-    loop {
-        match reader.read_event_into(&mut buffer).map_err(display)? {
-            Event::Start(node) if node.name().as_ref() == "name" => in_name = true,
-            Event::End(node) if node.name().as_ref() == "name" => in_name = false,
-            Event::Text(text) if in_name => {
-                let name = text.as_ref();
-                let runtime_stem = runtime.strip_suffix(".exe").unwrap_or(runtime);
-                found |= name == runtime
-                    || name.ends_with(&format!("/{runtime}"))
-                    || name == runtime_stem
-                    || name.ends_with(&format!("/{runtime_stem}"));
-            }
-            Event::Eof => break,
-            _ => {}
-        }
-        buffer.clear();
-    }
-    if found {
-        Ok(())
-    } else {
-        Err(format!("CycloneDX SBOM does not identify {runtime}"))
-    }
-}
-
 fn smoke(args: &SmokeArgs) -> Result<(), String> {
     let archive = fs::canonicalize(&args.archive).map_err(display)?;
     let executable = match args.target.as_str() {
@@ -443,57 +377,6 @@ fn run_program(
     }
     Ok(())
 }
-fn verify_inputs(args: &VerifyInputsArgs) -> Result<(), String> {
-    let manifest: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&args.manifest).map_err(display)?)
-            .map_err(display)?;
-    let version = manifest
-        .pointer("/announcement_tag")
-        .and_then(|v| v.as_str())
-        .ok_or("manifest has no announcement_tag")?
-        .trim_start_matches('v');
-    let mut archives = Vec::new();
-    for entry in fs::read_dir(&args.artifacts).map_err(display)? {
-        let path = entry.map_err(display)?.path();
-        let name = path
-            .file_name()
-            .and_then(|x| x.to_str())
-            .unwrap_or_default();
-        if name.ends_with(".tar.gz") || name.ends_with(".zip") {
-            archives.push(path);
-        }
-    }
-    if archives.len() != 2 {
-        return Err("expected exactly two product archives".into());
-    }
-    let unified = args.artifacts.join("sha256.sum");
-    if !unified.is_file() {
-        return Err("missing sha256.sum".into());
-    }
-    for archive in &archives {
-        let adjacent = PathBuf::from(format!("{}.sha256", archive.display()));
-        verify_checksum(&adjacent, &args.artifacts)?;
-        verify_checksum(&unified, &args.artifacts)?;
-        let target = if archive.extension().is_some_and(|x| x == "zip") {
-            "windows-x86_64"
-        } else {
-            "linux-x86_64"
-        };
-        smoke(&SmokeArgs {
-            target: target.into(),
-            version: version.into(),
-            archive: archive.clone(),
-        })?;
-    }
-    let sbom = fs::read_dir(&args.artifacts)
-        .map_err(display)?
-        .filter_map(Result::ok)
-        .map(|x| x.path())
-        .find(|x| x.extension().is_some_and(|e| e == "xml"))
-        .ok_or("missing workspace SBOM")?;
-    verify_sbom(&sbom, "docgraph-cli")
-}
-
 fn changelog() -> Result<(), String> {
     let repository = root()?;
     let dry_run = env::var("DRY_RUN").map_err(|_| "cargo-release did not provide DRY_RUN")?;

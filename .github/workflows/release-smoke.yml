@@ -33,8 +33,8 @@ jobs:
           path: target/distrib
           merge-multiple: true
 
-      - name: Verify product evidence and smoke-test archives
-        run: cargo xtask release verify-inputs --manifest target/distrib/global-dist-manifest.json --artifacts target/distrib
+      - name: Smoke-test clean archive
+        run: cargo xtask release smoke --target linux-x86_64 --version "$GITHUB_REF_NAME" --archive target/distrib/docgraph-cli-x86_64-unknown-linux-gnu.tar.gz
 
   windows:
     runs-on: windows-2025

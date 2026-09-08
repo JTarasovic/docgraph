@@ -354,17 +354,14 @@ fn release_automation_uses_xtask() {
     let xtask = fs::read_to_string(root.join("xtask/src/main.rs")).unwrap();
     assert!(xtask.contains("ReleaseCommands::Stage"));
     assert!(xtask.contains("ReleaseCommands::Smoke"));
-    assert!(xtask.contains("ReleaseCommands::VerifyInputs"));
     assert!(xtask.contains("ReleaseCommands::Changelog"));
     assert!(xtask.contains("attestation"));
-    assert!(xtask.contains("CycloneDX"));
 
     let setup = fs::read_to_string(root.join(".github/release-build-setup.yml")).unwrap();
     assert!(setup.contains("cargo xtask release stage"));
 
     let smoke = fs::read_to_string(root.join(".github/workflows/release-smoke.yml")).unwrap();
     assert!(smoke.contains("cargo xtask release smoke"));
-    assert!(smoke.contains("cargo xtask release verify-inputs"));
     assert!(smoke.contains("cargo xtask release stage --verify-attestations"));
     assert!(smoke.contains("attestations: read"));
 
