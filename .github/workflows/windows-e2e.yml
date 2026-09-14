@@ -56,27 +56,19 @@ jobs:
 
       - name: Resolve latest stable release
         id: released-docgraph
-        shell: bash
+        uses: cardinalby/git-get-release-action@2ab178299eecb253f820dcf2cce11f62be1178f7 # Node 24
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag=$(gh release list \
-            --repo "$GITHUB_REPOSITORY" \
-            --exclude-drafts \
-            --exclude-pre-releases \
-            --limit 10 \
-            --json tagName \
-            --jq '[.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | first')
-          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "Latest release tag is not stable semantic version: $tag" >&2
-            exit 1
-          }
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          repo: JTarasovic/docgraph
+          releaseNameRegEx: '^(docgraph )?v?[0-9]+\.[0-9]+\.[0-9]+($| - )'
+          draft: false
+          prerelease: false
 
       - name: Install and validate with the public action
         uses: ./
         with:
-          version: ${{ steps.released-docgraph.outputs.tag }}
+          version: ${{ steps.released-docgraph.outputs.tag_name }}
 
       - name: Install Windows test tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0

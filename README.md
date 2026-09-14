@@ -41,7 +41,8 @@ docgraph --help
 The validation action installs a verified release and its matching runtime by default.
 The public actions use `gh`
 and standard runner tools; consumers need no Rust, mise, or docgraph source checkout.
-Pin the actions to reviewed full commit SHAs and select the binary release explicitly:
+Pin the actions to reviewed full commit SHAs. Omit `version` to install the latest
+stable docgraph release, or select an exact release explicitly:
 
 ```yaml
 permissions:
@@ -55,9 +56,11 @@ steps:
       version: <exact-release-tag>
 ```
 
-Set `install: false` to validate with tools already installed; `version` and `token`
-are then unnecessary. `JTarasovic/docgraph/install@<full-commit-sha>` installs the
-CLI and matching runtime without validation.
+Set `install: false` to validate with tools already installed; `version` is then
+unused. Release lookup still runs using `token` (the workflow token by default).
+`JTarasovic/docgraph/install@<full-commit-sha>` installs the
+CLI and matching runtime with checksum and attestation verification, but does not
+run `docgraph validate` against your repository's documents.
 `JTarasovic/docgraph/install-runtime@<full-commit-sha>` also installs the pinned
 sidecar independently, for example when testing a source build. Both installers
 require valid producer attestations and SHA-256 checksums.

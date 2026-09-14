@@ -39,8 +39,8 @@ Three public composite actions support combined or separate installation and val
   and exports `DOCGRAPH_LOGIC_RUNTIME`.
 - `JTarasovic/docgraph/install@<sha>` installs an exact released CLI and its
   bundled runtime. It exports `DOCGRAPH_EXECUTABLE` and `DOCGRAPH_LOGIC_RUNTIME`.
-- `JTarasovic/docgraph@<sha>` installs the requested CLI and its bundled runtime,
-  then validates. Set `install: false` to use tools already installed.
+- `JTarasovic/docgraph@<sha>` installs the requested or latest stable CLI and its
+  bundled runtime, then validates. Set `install: false` to use tools already installed.
 
 The installers delegate download, verification, and extraction to the SHA-pinned
 `JTarasovic/download-verify-install` action. Docgraph supplies asset names,
@@ -69,11 +69,17 @@ Validation accepts `working-directory` (default `.`, relative to
 `docgraph validate --changes`. Check out enough history for that ref.
 Validation propagates the CLI exit status.
 
+The root action always looks up the latest stable docgraph release using the
+SHA-pinned `cardinalby/git-get-release-action` and `token` (the workflow token by
+default). Lookup excludes drafts and prereleases and matches product release
+names such as `docgraph v0.2.0` or `0.3.0 - 2026-09-01`, excluding runtime
+companions. Lookup failure fails the action, even when installation is disabled.
+
 The root action's `install` input defaults to `true`. It composes a SHA-pinned
-public CLI installer, requiring `version` and accepting `token` with the same
-semantics as `install`. The release already contains the matching runtime, so no
-second runtime download is needed. With `install: false`, it does not download
-anything or change the selected tools; `version` and `token` are unused.
+public CLI installer, using an explicit `version` when provided or the lookup's
+tag otherwise. The release already contains the matching runtime, so no second
+runtime download is needed. With `install: false`, it does not download release
+assets or change the selected tools; `version` is unused, but lookup still runs.
 
 ```yaml
 permissions:
