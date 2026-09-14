@@ -26,7 +26,7 @@ dist = true
 [package.metadata.release]
 pre-release-replacements = [
   { file = "../../skills/docgraph/skill.toml", search = 'cli_version = "[^"]+"', replace = 'cli_version = "{{version}}"', exactly = 1 },
-  { file = "../../CHANGELOG.md", search = '(?m)^\[Unreleased\]: https://github\.com/JTarasovic/docgraph/compare/v([^\s]+)\.\.HEAD$', replace = '''[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v{{version}}..HEAD
+  { file = "../../CHANGELOG.md", search = '(?m)^\[Unreleased\]: https://github\.com/JTarasovic/docgraph/compare/v([^\s]+)\.\.HEAD\r?$', replace = '''[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v{{version}}..HEAD
 [{{version}}]: https://github.com/JTarasovic/docgraph/compare/v$1..v{{version}}''', exactly = 1 },
 ]
 pre-release-hook = ["bash", "../../tools/release/changelog.sh"]
