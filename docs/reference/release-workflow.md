@@ -57,8 +57,10 @@ the published version it is testing.
   configured checksums verify, and their producer attestations and Syft CycloneDX
   SBOMs are present. Companion binaries are rebuilt only by the manually dispatched
   native workflow from `main` when their source or build recipe changes, not by
-  ordinary CI. Companion publication uses `--latest=false` to leave the product
-  release as GitHub's latest release. Their immutable release names identify both
+  ordinary CI. Companion publication uses the SHA-pinned `softprops/action-gh-release`
+  action with `make_latest: false` and `overwrite_files: false`. The repository's
+  immutable-release setting protects published assets and tags. Companions do not
+  displace the product as GitHub's latest release. Their release names identify both
   the upstream Souffle revision and the docgraph
   producer commit.
 - Install the exact mise-managed Rust, cargo-release, git-cliff, dist,

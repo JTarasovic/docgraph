@@ -38,7 +38,8 @@ docgraph --help
 
 ## GitHub Actions validation
 
-Install a verified release, then validate with it. The public actions use `gh`
+The validation action installs a verified release and its matching runtime by default.
+The public actions use `gh`
 and standard runner tools; consumers need no Rust, mise, or docgraph source checkout.
 Pin the actions to reviewed full commit SHAs and select the binary release explicitly:
 
@@ -49,13 +50,14 @@ permissions:
 
 steps:
   - uses: actions/checkout@<full-commit-sha>
-  - uses: JTarasovic/docgraph/install@<full-commit-sha>
+  - uses: JTarasovic/docgraph@<full-commit-sha>
     with:
       version: <exact-release-tag>
-  - uses: JTarasovic/docgraph@<full-commit-sha>
 ```
 
-The CLI installer includes its matching logic runtime.
+Set `install: false` to validate with tools already installed; `version` and `token`
+are then unnecessary. `JTarasovic/docgraph/install@<full-commit-sha>` installs the
+CLI and matching runtime without validation.
 `JTarasovic/docgraph/install-runtime@<full-commit-sha>` also installs the pinned
 sidecar independently, for example when testing a source build. Both installers
 require valid producer attestations and SHA-256 checksums.

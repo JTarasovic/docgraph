@@ -121,11 +121,13 @@ jobs:
           path: target/logic-runtime/input
 
       - name: Package companions and checksums
+        id: package
         shell: bash
         run: |
           set -euo pipefail
           command -v zip >/dev/null
           identity="${SOUFFLE_REVISION:0:8}-${GITHUB_SHA:0:8}"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
           package_root=target/logic-runtime/package
           release_root=target/logic-runtime/release
           linux_name="docgraph-logic-runtime-linux-x86_64-$identity"
@@ -198,33 +200,28 @@ jobs:
         with:
           subject-path: target/logic-runtime/release/*
 
-      - name: Publish immutable companions
+      - name: Publish Linux companion
         if: ${{ inputs.publish && github.ref == 'refs/heads/main' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          identity="${SOUFFLE_REVISION:0:8}-${GITHUB_SHA:0:8}"
-          for platform in linux windows; do
-            tag="logic-runtime-${platform}-$identity"
-            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "Refusing to replace existing companion release $tag." >&2
-              exit 1
-            fi
-          done
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: logic-runtime-linux-${{ steps.package.outputs.identity }}
+          target_commitish: ${{ github.sha }}
+          name: Pinned Linux logic runtime ${{ steps.package.outputs.identity }}
+          body: Pinned Linux x86-64 logic runtime companion for docgraph release packaging.
+          make_latest: false
+          overwrite_files: false
+          fail_on_unmatched_files: true
+          files: target/logic-runtime/release/docgraph-logic-runtime-linux-x86_64-${{ steps.package.outputs.identity }}.*
 
-          gh release create "logic-runtime-linux-$identity" \
-            target/logic-runtime/release/docgraph-logic-runtime-linux-x86_64-$identity.* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --latest=false \
-            --title "Pinned Linux logic runtime $identity" \
-            --notes "Pinned Linux x86-64 logic runtime companion for docgraph release packaging."
-          gh release create "logic-runtime-windows-$identity" \
-            target/logic-runtime/release/docgraph-logic-runtime-windows-x86_64-$identity.* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --latest=false \
-            --title "Pinned Windows logic runtime $identity" \
-            --notes "Pinned Windows x86-64 logic runtime companion for docgraph release packaging."
+      - name: Publish Windows companion
+        if: ${{ inputs.publish && github.ref == 'refs/heads/main' }}
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: logic-runtime-windows-${{ steps.package.outputs.identity }}
+          target_commitish: ${{ github.sha }}
+          name: Pinned Windows logic runtime ${{ steps.package.outputs.identity }}
+          body: Pinned Windows x86-64 logic runtime companion for docgraph release packaging.
+          make_latest: false
+          overwrite_files: false
+          fail_on_unmatched_files: true
+          files: target/logic-runtime/release/docgraph-logic-runtime-windows-x86_64-${{ steps.package.outputs.identity }}.*

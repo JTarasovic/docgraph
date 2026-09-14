@@ -1,7 +1,16 @@
 name: Validate with docgraph
-description: Validate a repository corpus using the installed docgraph binary and logic runtime.
+description: Install verified docgraph and its runtime, then validate a repository corpus.
 author: docgraph contributors
 inputs:
+  install:
+    description: Install docgraph and its bundled logic runtime before validation. Set to false to use existing tools.
+    default: "true"
+  version:
+    description: Exact stable release tag (vMAJOR.MINOR.PATCH), required when install is true.
+    default: ""
+  token:
+    description: Token with read access to docgraph releases and attestations, used only when installing.
+    default: ${{ github.token }}
   working-directory:
     description: Directory containing the .docgraph configuration, relative to github.workspace.
     default: .
@@ -11,6 +20,13 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install docgraph and its bundled runtime
+      if: ${{ inputs.install != 'false' }}
+      uses: JTarasovic/docgraph/install@c7df5bdbc7fa157bd3006a0004d12d15bb1cb675 # verified installer
+      with:
+        version: ${{ inputs.version }}
+        token: ${{ inputs.token }}
+
     - name: Validate corpus
       shell: bash
       working-directory: ${{ github.workspace }}/${{ inputs.working-directory }}

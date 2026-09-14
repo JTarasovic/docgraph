@@ -73,18 +73,14 @@ jobs:
           }
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Install released docgraph
-        uses: ./install
+      - name: Install and validate with the public action
+        uses: ./
         with:
           version: ${{ steps.released-docgraph.outputs.tag }}
-
-      - name: Smoke-test released validation action
-        uses: ./
 
       - name: Install Windows test tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          version: 2026.9.2
           install_args: cargo-binstall rust cargo:cargo-nextest
           cache_key: "{{cache_key_prefix}}-{{platform}}-{{file_hash}}"
           cache_save: true
@@ -97,6 +93,8 @@ jobs:
 
       - name: Validate with standalone runtime
         uses: ./
+        with:
+          install: false
 
       - name: Run Windows end-to-end tests
         run: mise run --skip-tools windows-e2e

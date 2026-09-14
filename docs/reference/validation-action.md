@@ -33,13 +33,14 @@ target = "task:publish-validation-action"
 <a id="s-3CMEBZVCCG"></a>
 # Validation action
 
-Three public composite actions separate installation from validation:
+Three public composite actions support combined or separate installation and validation:
 
 - `JTarasovic/docgraph/install-runtime@<sha>` installs the pinned native sidecar
   and exports `DOCGRAPH_LOGIC_RUNTIME`.
 - `JTarasovic/docgraph/install@<sha>` installs an exact released CLI and its
   bundled runtime. It exports `DOCGRAPH_EXECUTABLE` and `DOCGRAPH_LOGIC_RUNTIME`.
-- `JTarasovic/docgraph@<sha>` runs validation using the installed tools.
+- `JTarasovic/docgraph@<sha>` installs the requested CLI and its bundled runtime,
+  then validates. Set `install: false` to use tools already installed.
 
 The installers delegate download, verification, and extraction to the SHA-pinned
 `JTarasovic/download-verify-install` action. Docgraph supplies asset names,
@@ -68,6 +69,12 @@ Validation accepts `working-directory` (default `.`, relative to
 `docgraph validate --changes`. Check out enough history for that ref.
 Validation propagates the CLI exit status.
 
+The root action's `install` input defaults to `true`. It composes a SHA-pinned
+public CLI installer, requiring `version` and accepting `token` with the same
+semantics as `install`. The release already contains the matching runtime, so no
+second runtime download is needed. With `install: false`, it does not download
+anything or change the selected tools; `version` and `token` are unused.
+
 ```yaml
 permissions:
   contents: read
@@ -75,16 +82,16 @@ permissions:
 
 steps:
   - uses: actions/checkout@<full-commit-sha>
-  - uses: JTarasovic/docgraph/install@<full-commit-sha>
+  - uses: JTarasovic/docgraph@<full-commit-sha>
     with:
       version: <exact-release-tag>
-  - uses: JTarasovic/docgraph@<full-commit-sha>
 ```
 
 Pin actions to reviewed full commit SHAs. The CLI includes its matching runtime.
-To select the standalone sidecar, run `install-runtime` after `install`.
+To select the standalone sidecar, run `install-runtime` after `install`, then
+validate with `install: false`.
 Source-build CI uses `install-runtime` on its own. The last installer sets the
 runtime for subsequent steps, including Windows PowerShell steps.
 
-Migration: move `version`, `token`, and installation output references from
-the former all-in-one root action to the preceding `install` step.
+Existing split-install workflows must set `install: false` on their validation
+step. Installation outputs remain available from the separate installer actions.
