@@ -19,8 +19,16 @@ target = "plan:harden-delivery-integrity#s-SBVSRRVQW0"
 type = "depends_on"
 target = "task:automate-release-preparation"
 
+[[relations]]
+type = "depends_on"
+target = "task:simplify-release-automation"
+
 [docgraph_generated]
 schema_version = 1
+
+[[docgraph_generated.backlinks]]
+source = "task:simplify-release-automation#s-559RWSY97B"
+target = "docs/tasks/attest-release-artifacts.md"
 
 +++
 <a id="s-MKS7YRDWHR"></a>
@@ -81,3 +89,22 @@ publishing a newly named companion generation whose identity includes both the u
 Souffle revision and producer commit, updating `sources.toml` to its verified digests,
 and making release staging require the companion attestation and SBOM before the first
 hardened product release.
+
+<a id="s-WC3P93NNW5"></a>
+## Published companion evidence
+
+The `logic-runtime-linux-a1303be3-d85140ef` and
+`logic-runtime-windows-a1303be3-d85140ef` releases were produced by successful run
+`33661406059` from commit `d85140ef7c6369ff003a90d4adc860c8c77484e7`.
+Their archives, adjacent checksums, and Syft CycloneDX SBOMs all verify against the
+`logic-runtime.yml` signer. The public runtime action pins that release identity and producer commit. It verifies
+the archive attestation and checksum before installation; the producer workflow
+verifies and attests the SBOM separately.
+
+The remaining proof is the first docgraph release from this configuration. Its host
+job must attest both platform archives, their adjacent checksums, the cargo-cyclonedx
+workspace SBOM, and `sha256.sum`; post-publication verification must then exercise the
+documented public actions and GitHub CLI verification commands.
+
+Product attestations do not exist until dist's host phase publishes them, so their
+verification remains a post-publication proof and does not resolve this task by itself.

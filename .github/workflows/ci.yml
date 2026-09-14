@@ -6,6 +6,7 @@ on:
   pull_request:
 
 permissions:
+  attestations: read
   contents: read
 
 concurrency:
@@ -19,7 +20,6 @@ jobs:
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
-      DOCGRAPH_LOGIC_RUNTIME: ${{ github.workspace }}/target/logic-runtime/linux-x86_64/docgraph-logic-runtime
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,20 +29,19 @@ jobs:
 
       - name: Resolve latest stable release
         id: released-docgraph
+        uses: cardinalby/git-get-release-action@2ab178299eecb253f820dcf2cce11f62be1178f7 # Node 24
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
-          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "Latest release tag is not stable semantic version: $tag" >&2
-            exit 1
-          }
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          repo: JTarasovic/docgraph
+          releaseNameRegEx: '^(docgraph )?v?[0-9]+\.[0-9]+\.[0-9]+($| - )'
+          draft: false
+          prerelease: false
 
-      - name: Smoke-test released validation action
+      - name: Install and validate with the public action
         uses: ./
         with:
-          version: ${{ steps.released-docgraph.outputs.tag }}
+          version: ${{ steps.released-docgraph.outputs.tag_name }}
 
       - name: Install pinned development tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
@@ -55,19 +54,12 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install packaged logic runtime
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          archive="$RUNNER_TEMP/docgraph-logic-runtime.tar.gz"
-          gh release download logic-runtime-linux-a1303be3 \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern 'docgraph-logic-runtime-linux-x86_64-a1303be3.tar.gz' \
-            --output "$archive"
-          echo "5f24f24cc95c57cd32518763249281c9c19f21be637dcde3fddf57661536bbe6  $archive" \
-            | sha256sum --check
-          destination=$(dirname "$DOCGRAPH_LOGIC_RUNTIME")
-          mkdir -p "$destination"
-          tar -xzf "$archive" --strip-components=1 -C "$destination"
+        uses: ./install-runtime
+
+      - name: Validate with standalone runtime
+        uses: ./
+        with:
+          install: false
 
       - name: Run implementation checks
         env:

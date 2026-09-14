@@ -126,11 +126,14 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
+      - name: "Install pinned companion runtime"
+        id: "runtime"
+        uses: "./install-runtime"
       - name: "Stage pinned companion runtime and portable files"
-        run: "pwsh -NoProfile -File tools/release/stage-dist-inputs.ps1"
-        shell: "pwsh"
+        run: "bash tools/release/stage.sh \"$RELEASE_RUNTIME\""
+        shell: "bash"
         env:
-          "GH_TOKEN": "${{ github.token }}"
+          "RELEASE_RUNTIME": "${{ steps.runtime.outputs.executable }}"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest

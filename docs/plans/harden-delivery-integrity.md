@@ -68,6 +68,11 @@ source = "task:dogfood-validation-action"
 predicate = "part_of"
 target = "plan:harden-delivery-integrity"
 
+[[docgraph_generated.incoming]]
+source = "task:simplify-release-automation"
+predicate = "part_of"
+target = "plan:harden-delivery-integrity"
+
 [[docgraph_generated.inverses]]
 source = "plan:harden-delivery-integrity"
 type = "contains"
@@ -92,6 +97,11 @@ target = "task:define-repeatable-release-workflow"
 source = "plan:harden-delivery-integrity"
 type = "contains"
 target = "task:dogfood-validation-action"
+
+[[docgraph_generated.inverses]]
+source = "plan:harden-delivery-integrity"
+type = "contains"
+target = "task:simplify-release-automation"
 
 [[docgraph_generated.inverses]]
 source = "plan:harden-delivery-integrity#s-683VPY7SC0"

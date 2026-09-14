@@ -1,5 +1,9 @@
+- name: Install pinned companion runtime
+  uses: ./install-runtime
+  id: runtime
+
 - name: Stage pinned companion runtime and portable files
-  shell: pwsh
+  shell: bash
   env:
-    GH_TOKEN: ${{ github.token }}
-  run: pwsh -NoProfile -File tools/release/stage-dist-inputs.ps1
+    RELEASE_RUNTIME: ${{ steps.runtime.outputs.executable }}
+  run: bash tools/release/stage.sh "$RELEASE_RUNTIME"

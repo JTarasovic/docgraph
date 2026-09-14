@@ -46,8 +46,9 @@ not complete by itself. Before merging such a pull request:
 
 1. Rebuild and smoke-test the Windows and Linux runtime companions.
 2. Publish both immutable companion releases for the new source revision.
-3. Update the release names, archive URLs, archive checksums, and binary checksums
-   in `tools/logic-runtime/sources.toml` and the CI/release workflows.
+3. Update the pinned release identity and producer commit
+   in `install-runtime/action.yml` (release identity and producer commit). Source and build dependencies remain
+   in `tools/logic-runtime/sources.toml`; CI and releases use the public installer.
 4. Run the same `mise run check-local` contract required for authored changes.
 
 Renovate pull requests use the normal pull-request workflow and receive no CI or

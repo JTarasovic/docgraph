@@ -12,19 +12,3 @@ packages = ["sqlite3"]
 version = "2.5.25"
 url_template = "https://github.com/lexxmark/winflexbison/releases/download/v{version}/win_flex_bison-{version}.zip"
 sha256 = "8d324b62be33604b2c45ad1dd34ab93d722534448f55a16ca7292de32b6ac135"
-
-[artifact.windows-x86_64]
-name = "docgraph-logic-runtime.exe"
-release = "logic-runtime-windows-a1303be3"
-url = "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-windows-a1303be3/docgraph-logic-runtime-windows-x86_64-a1303be3.zip"
-archive_sha256 = "65880b97ad4c0242e457917afbce6c59aad1ee6fffa6a9490cd31f62117ee267"
-binary_sha256 = "769468c7d3e55ed4842d5ee57c42bb742c3a4fda07d8d375cc7d38056280b50b"
-features = ["64-bit-domain", "sqlite", "static-crt"]
-
-[artifact.linux-x86_64]
-name = "docgraph-logic-runtime"
-release = "logic-runtime-linux-a1303be3"
-url = "https://github.com/JTarasovic/docgraph/releases/download/logic-runtime-linux-a1303be3/docgraph-logic-runtime-linux-x86_64-a1303be3.tar.gz"
-archive_sha256 = "5f24f24cc95c57cd32518763249281c9c19f21be637dcde3fddf57661536bbe6"
-binary_sha256 = "db2747c2233d267b76a2e606c4fddd27a21be5cf35c2f5083f6a560dc8c2980e"
-features = ["64-bit-domain", "sqlite", "static-cxx-runtime"]

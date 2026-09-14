@@ -1,0 +1,54 @@
+name: Install docgraph logic runtime
+description: Install the pinned sidecar after checksum and producer attestation verification.
+inputs:
+  token:
+    description: Token with read access to docgraph releases and attestations.
+    default: ${{ github.token }}
+outputs:
+  executable:
+    description: Absolute path to the logic runtime (also exported as DOCGRAPH_LOGIC_RUNTIME).
+    value: ${{ steps.install.outputs.executable }}
+  directory:
+    description: Installation directory, including runtime licenses.
+    value: ${{ steps.register.outputs.directory }}
+runs:
+  using: composite
+  steps:
+    - name: Select pinned runtime asset
+      id: asset
+      shell: bash
+      env:
+        RUNTIME_VERSION: a1303be3-d85140ef
+      run: |
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64) os=linux; extension=tar.gz; executable=docgraph-logic-runtime ;;
+          Windows-X64) os=windows; extension=zip; executable=docgraph-logic-runtime.exe ;;
+          *) echo 'docgraph supports Linux and Windows X64 runners.' >&2; exit 1 ;;
+        esac
+        payload="docgraph-logic-runtime-$os-x86_64-$RUNTIME_VERSION"
+        printf 'tag=logic-runtime-%s-%s\nasset=%s.%s\nexecutable=%s/%s\n' \
+          "$os" "$RUNTIME_VERSION" "$payload" "$extension" "$payload" "$executable" >> "$GITHUB_OUTPUT"
+
+    - name: Download, verify, and install logic runtime
+      id: install
+      uses: JTarasovic/download-verify-install@ce65b6505fb3f275e6c4c28871be3079876bd85a # v1.0.0
+      with:
+        source-repository: JTarasovic/docgraph
+        tag: ${{ steps.asset.outputs.tag }}
+        asset: ${{ steps.asset.outputs.asset }}
+        checksum-asset: ${{ steps.asset.outputs.asset }}.sha256
+        executable-path: ${{ steps.asset.outputs.executable }}
+        expected-signer-workflow: JTarasovic/docgraph/.github/workflows/logic-runtime.yml
+        expected-source-ref: refs/heads/main
+        expected-source-commit: d85140ef7c6369ff003a90d4adc860c8c77484e7
+        add-to-path: true
+        token: ${{ inputs.token || github.token }}
+
+    - name: Register logic runtime
+      id: register
+      shell: bash
+      env:
+        EXECUTABLE: ${{ steps.install.outputs.executable }}
+      run: |
+        printf 'DOCGRAPH_LOGIC_RUNTIME=%s\n' "$EXECUTABLE" >> "$GITHUB_ENV"
+        printf 'directory=%s\n' "$(dirname "$EXECUTABLE")" >> "$GITHUB_OUTPUT"

@@ -45,6 +45,12 @@ run = [
     "dist plan --allow-dirty",
 ]
 
+[tasks.release-stage]
+description = "Stage the current host's verified release payload"
+usage = 'arg "<runtime>" help="Path to the verified companion executable"'
+run = 'bash tools/release/stage.sh "$usage_runtime"'
+run_windows = 'bash tools/release/stage.sh "%usage_runtime%"'
+
 [tasks.check-local]
 description = "Prepare the host runtime and run every required check"
 run = [

@@ -20,9 +20,6 @@ serde.workspace = true
 serde_json.workspace = true
 toml_edit.workspace = true
 
-[dev-dependencies]
-serde_yaml_ng.workspace = true
-
 [package.metadata.dist]
 dist = true
 
@@ -32,10 +29,4 @@ pre-release-replacements = [
   { file = "../../CHANGELOG.md", search = '(?m)^\[Unreleased\]: https://github\.com/JTarasovic/docgraph/compare/v([^\s]+)\.\.HEAD$', replace = '''[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v{{version}}..HEAD
 [{{version}}]: https://github.com/JTarasovic/docgraph/compare/v$1..v{{version}}''', exactly = 1 },
 ]
-pre-release-hook = [
-  "pwsh",
-  "-NoProfile",
-  "-File",
-  "../../tools/release/update-changelog.ps1",
-  "{{version}}",
-]
+pre-release-hook = ["bash", "../../tools/release/changelog.sh"]
