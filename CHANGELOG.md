@@ -7,6 +7,30 @@ All notable changes to docgraph are documented here. The format follows
 ## [Unreleased]
 
 <!-- git-cliff: end of header -->
+## [0.4.0] - 2026-09-14
+
+### Added
+
+- Added reusable actions to install a released CLI or the pinned native runtime
+  with checksum and producer-attestation verification.
+- Added native-runtime SBOMs and attestations, and product-release attestation
+  coverage for archives, checksums, and the Rust workspace SBOM.
+
+### Changed
+
+- Simplified validation and release automation around the shared installers.
+  The validation action installs the latest stable docgraph release by default;
+  an exact version or an existing installation can also be selected.
+
+### Fixed
+
+- Excluded companion-runtime releases when resolving the latest docgraph version.
+- Accepted Windows line endings when preparing changelog comparison links.
+
+### Security
+
+- Updated rustls to address RUSTSEC-2026-0285.
+
 ## [0.3.0] - 2026-09-01
 ### Added
 
@@ -44,7 +68,8 @@ All notable changes to docgraph are documented here. The format follows
 - Published the first docgraph CLI with graph validation, querying, managed mutations,
   and native Windows and Linux release bundles.
 
-[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v0.3.0..HEAD
+[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v0.4.0..HEAD
+[0.4.0]: https://github.com/JTarasovic/docgraph/compare/v0.3.0..v0.4.0
 [0.3.0]: https://github.com/JTarasovic/docgraph/compare/v0.2.0..v0.3.0
 [0.2.0]: https://github.com/JTarasovic/docgraph/compare/v0.1.0..v0.2.0
 [0.1.0]: https://github.com/JTarasovic/docgraph/tree/v0.1.0
