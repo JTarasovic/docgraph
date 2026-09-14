@@ -31,7 +31,7 @@ This runbook defines the contributor workflow selected in
 [decision:release-workflow-ownership](../decisions/release-workflow-ownership.md).
 The checked-in cargo-release, git-cliff, and dist configuration owns preparation and
 distribution; the repository keeps only its product-specific companion-payload staging
-and smoke-test seams in `cargo xtask`.
+and smoke-test commands under `tools/release/`.
 
 <a id="s-Q9JPZDVN2R"></a>
 ## Release contract
@@ -73,7 +73,7 @@ Use these commands, with 0.3.0 replaced by the intended numeric version:
 
     cargo release 0.3.0 --workspace
     cargo release 0.3.0 --workspace --execute
-    cargo xtask release stage --runtime <installed-runtime-path>
+    bash tools/release/stage.sh <installed-runtime-path>
     dist plan --tag v0.3.0
     dist build --tag v0.3.0 --target <current-host-target>
 
@@ -86,12 +86,11 @@ amend that commit, then run the repository checks.
 Dist plan must show exactly the supported native targets, archives, SHA-256 outputs,
 release manifest, cargo-cyclonedx workspace SBOM, and GitHub attestation work.
 The public `install-runtime` action downloads and verifies the pinned companion
-in release CI. The staging command takes its `executable` output through
-`--runtime`, checks the pinned binary digest, and copies the runtime, portable
+in release CI. The staging command takes its `executable` output as
+its argument, and copies the runtime, portable
 skill, and third-party notices for dist. Local rehearsals supply a previously
 verified companion installation at that same argument. Dist build consumes those
-inputs and builds the archive. Run `cargo xtask release smoke --target <target> --version
-<version> --archive <path>` against the resulting archive. A local rehearsal proves only
+inputs and builds the archive. Run `bash tools/release/smoke.sh <archive-path> <version>` against the resulting archive. A local rehearsal proves only
 the current platform; the release pull request
 must exercise the other native runner. The native companion's separately attested Syft
 SBOM describes the Souffle payload and its shipped licenses; cargo-cyclonedx describes
@@ -147,7 +146,7 @@ companion have separate CycloneDX SBOMs because cargo-cyclonedx cannot describe 
 Souffle binary or its bundled licenses.
 
 For a pinned companion, copy the release, archive, and full producer revision from
-`tools/logic-runtime/artifacts.json`, then verify all three published subjects:
+`install-runtime/action.yml`, then verify all three published subjects:
 
     repository=JTarasovic/docgraph
     release=logic-runtime-linux-a1303be3-d85140ef
@@ -168,8 +167,7 @@ For a pinned companion, copy the release, archive, and full producer revision fr
       '.bomFormat == "CycloneDX" and (.components | length > 0)' \
       "$archive.cdx.json"
 
-Use the Windows release and `.zip` archive values from the adjacent source section to
-verify the Windows companion identically.
+For Windows, substitute `windows` for `linux` and `.zip` for `.tar.gz`.
 
 For a docgraph release, download the complete evidence set, verify both checksum
 layers, then verify every archive, adjacent checksum, workspace SBOM, and unified

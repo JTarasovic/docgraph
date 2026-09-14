@@ -25,7 +25,7 @@
       "groupName": "native logic runtime inputs",
       "dependencyDashboardApproval": true,
       "prBodyNotes": [
-        "Rebuild both native runtime artifacts and update their release names, URLs, and checksums in `tools/logic-runtime/artifacts.json` before merging."
+        "Rebuild both native runtime artifacts and update their release identity and producer commit in `install-runtime/action.yml` before merging."
       ]
     }
   ],

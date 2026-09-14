@@ -11,12 +11,11 @@ on:
       - install-runtime/**
       - Cargo.lock
       - Cargo.toml
-      - xtask/**
+      - tools/release/**
       - crates/**
       - fixtures/**
       - mise.toml
       - skills/**
-      - tools/action/**
       - tools/logic-runtime/**
   pull_request:
     paths:
@@ -27,12 +26,11 @@ on:
       - install-runtime/**
       - Cargo.lock
       - Cargo.toml
-      - xtask/**
+      - tools/release/**
       - crates/**
       - fixtures/**
       - mise.toml
       - skills/**
-      - tools/action/**
       - tools/logic-runtime/**
 
 permissions:

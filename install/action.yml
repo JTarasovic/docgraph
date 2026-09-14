@@ -10,18 +10,48 @@ inputs:
 outputs:
   version:
     description: Installed version without the leading v.
-    value: ${{ steps.install.outputs.version }}
+    value: ${{ steps.asset.outputs.version }}
   executable:
     description: Absolute path to docgraph.
     value: ${{ steps.install.outputs.executable }}
 runs:
   using: composite
   steps:
-    - name: Download, verify, and install docgraph
-      id: install
+    - name: Select release asset
+      id: asset
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.token || github.token }}
         DOCGRAPH_VERSION: ${{ inputs.version }}
-        ACTION_PATH: ${{ github.action_path }}
-      run: bash "$ACTION_PATH/../tools/action/install.sh"
+      run: |
+        [[ $DOCGRAPH_VERSION =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || exit 1
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64) asset=docgraph-cli-x86_64-unknown-linux-gnu.tar.gz; executable=docgraph-cli-x86_64-unknown-linux-gnu/docgraph ;;
+          Windows-X64) asset=docgraph-cli-x86_64-pc-windows-msvc.zip; executable=docgraph.exe ;;
+          *) echo 'docgraph supports Linux and Windows X64 runners.' >&2; exit 1 ;;
+        esac
+        printf 'asset=%s\nexecutable=%s\nversion=%s\n' "$asset" "$executable" "${DOCGRAPH_VERSION#v}" >> "$GITHUB_OUTPUT"
+
+    - name: Download, verify, and install docgraph
+      id: install
+      uses: JTarasovic/download-verify-install@ce65b6505fb3f275e6c4c28871be3079876bd85a # v1.0.0
+      with:
+        source-repository: JTarasovic/docgraph
+        tag: ${{ inputs.version }}
+        asset: ${{ steps.asset.outputs.asset }}
+        checksum-asset: ${{ steps.asset.outputs.asset }}.sha256
+        executable-path: ${{ steps.asset.outputs.executable }}
+        expected-signer-workflow: JTarasovic/docgraph/.github/workflows/release.yml
+        expected-source-ref: refs/tags/${{ inputs.version }}
+        add-to-path: true
+        token: ${{ inputs.token || github.token }}
+
+    - name: Register docgraph and its bundled runtime
+      shell: bash
+      env:
+        EXECUTABLE: ${{ steps.install.outputs.executable }}
+        VERSION: ${{ steps.asset.outputs.version }}
+      run: |
+        [[ $("$EXECUTABLE" --version) == "docgraph $VERSION" ]]
+        runtime="$(dirname "$EXECUTABLE")/docgraph-logic-runtime"
+        test -f "$runtime"
+        printf 'DOCGRAPH_EXECUTABLE=%s\nDOCGRAPH_LOGIC_RUNTIME=%s\n' "$EXECUTABLE" "$runtime" >> "$GITHUB_ENV"

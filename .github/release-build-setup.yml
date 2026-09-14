@@ -3,4 +3,7 @@
   id: runtime
 
 - name: Stage pinned companion runtime and portable files
-  run: cargo xtask release stage --runtime "${{ steps.runtime.outputs.executable }}"
+  shell: bash
+  env:
+    RELEASE_RUNTIME: ${{ steps.runtime.outputs.executable }}
+  run: bash tools/release/stage.sh "$RELEASE_RUNTIME"
