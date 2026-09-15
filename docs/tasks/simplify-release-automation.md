@@ -2,7 +2,7 @@
 
 id = "task:simplify-release-automation"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Simplify release installation and automation"
@@ -35,7 +35,7 @@ target = "task:attest-release-artifacts"
 <a id="s-559RWSY97B"></a>
 ## Outcome
 
-[PR #26](https://github.com/JTarasovic/docgraph/pull/26) addresses
+[PR #26](https://github.com/JTarasovic/docgraph/pull/26), merged September 14, 2026, addresses
 [#23](https://github.com/JTarasovic/docgraph/issues/23) with three public actions:
 install the pinned runtime, install a released CLI, and validate with installed tools.
 CI and release builds use those same actions.
@@ -55,3 +55,11 @@ See the [release runbook](../reference/release-workflow.md) and
 [release decision](../decisions/release-workflow-ownership.md).
 Published-release evidence remains tracked in the
 [attestation task](attest-release-artifacts.md).
+
+The [v0.4.1 release workflow](https://github.com/JTarasovic/docgraph/actions/runs/34962720140)
+succeeded on September 15, 2026. The same commit passed
+[Linux CI](https://github.com/JTarasovic/docgraph/actions/runs/34962715184) and
+[Windows CI](https://github.com/JTarasovic/docgraph/actions/runs/34962715164), including
+public-action installation and validation with both bundled and standalone runtimes.
+This completes the simplification scope; action compatibility acceptance remains in
+the [dogfooding task](dogfood-validation-action.md).
