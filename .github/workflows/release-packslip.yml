@@ -1,0 +1,53 @@
+name: Release packslip manifest
+# Global-artifacts job wired into the dist release via `global-artifacts-jobs`. It
+# builds a signed packslip manifest over the archives the build-local jobs already
+# produced, so docgraph is installable through mise's packslip backend
+# (`mise use packslip:github.com/JTarasovic/docgraph`). It runs with `upload: false`
+# and instead uploads the bundle as an `artifacts-*` artifact, so dist's host job
+# publishes it as part of the single immutable release rather than appending an asset
+# afterwards. The manifest signs the same archive bytes and links their build
+# provenance, so it is complementary to the archives' existing dist attestations, not a
+# replacement.
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write # keyless Sigstore signing of the manifest via this job's OIDC identity
+jobs:
+  packslip:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: artifacts-build-local-*
+          path: target/distrib
+          merge-multiple: true
+      - name: Create signed packslip manifest
+        id: packslip
+        # `attest: link` embeds each archive's provenance URL by digest without a second
+        # attestation; the host job attests the same archive bytes, so the links
+        # resolve. `bin: docgraph` locates the executable inside each archive by name,
+        # covering both the tarball's target-triple subdir and the flat zip. Platform is
+        # inferred from the target-triple filenames.
+        uses: jdx/packslip@74c75db7d611b36dd5a157999ec16cf823ccf80c # v1.2.0
+        with:
+          artifacts: |
+            target/distrib/*.tar.gz
+            target/distrib/*.zip
+          bin: docgraph
+          tag: ${{ fromJson(inputs.plan).announcement_tag }}
+          attest: link
+          upload: false
+      - name: Upload packslip manifest for the release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v5.0.0
+        with:
+          name: artifacts-packslip
+          path: ${{ steps.packslip.outputs.bundle }}
+          if-no-files-found: error

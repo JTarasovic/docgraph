@@ -10,9 +10,19 @@ role = "design"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "plan:distribute-via-packslip"
+predicate = "implements"
+target = "reference:release-workflow"
+
+[[docgraph_generated.incoming]]
 source = "task:define-repeatable-release-workflow"
 predicate = "implements"
 target = "reference:release-workflow"
+
+[[docgraph_generated.inverses]]
+source = "reference:release-workflow"
+type = "implemented_by"
+target = "plan:distribute-via-packslip"
 
 [[docgraph_generated.inverses]]
 source = "reference:release-workflow"
@@ -40,6 +50,13 @@ Docgraph publishes one x86-64 Windows archive and one x86-64 Linux archive from 
 immutable vMAJOR.MINOR.PATCH tag. Each contains the CLI, matching native logic runtime,
 project and third-party licenses, README, and portable skill. Each archive has a
 SHA-256 checksum and passes a clean-install smoke test on its native runner.
+
+The same tag also publishes a signed `packslip.sigstore.json` manifest as a release
+asset so docgraph installs through mise's packslip backend
+(`mise use packslip:github.com/JTarasovic/docgraph`). The manifest is an additional
+distribution surface over the same archives, not a second source of truth; it signs the
+published archive bytes and links their build provenance, so it complements rather than
+replaces the archives' dist attestations.
 
 Cargo.toml workspace.package.version is the only canonical checked-in version.
 Cargo-release derives Cargo.lock and the portable skill's cli_version. Dist derives
@@ -209,6 +226,32 @@ published.
 These attestations support a SLSA Build Level 2 claim. They do not establish Level 3:
 the current generated workflow does not provide the stronger, separately administered
 build definition and isolation required for that claim.
+
+<a id="s-D4KEVEE01D"></a>
+## Packslip distribution
+
+Dist's release also publishes a signed packslip manifest so docgraph installs through
+mise's packslip backend. The `release-packslip` global-artifacts job, wired through
+`global-artifacts-jobs` in dist-workspace.toml, runs after the build-local jobs, builds
+the manifest over their archives with the SHA-pinned `jdx/packslip` action
+(`upload: false`, `attest: link`, `bin: docgraph`), and uploads it as an `artifacts-*`
+artifact. The host job then publishes `packslip.sigstore.json` into the single immutable
+release and attests it through the `packslip.sigstore.json` attestation filter. Because
+the release is immutable, the manifest must be part of the initial release; it is never
+appended afterward.
+
+The manifest is keyless-signed with the job's OIDC identity and describes the same
+archive bytes the release already ships, so it does not alter or supersede the archives'
+dist attestations. Consumers install and verify it with mise:
+
+    mise use packslip:github.com/JTarasovic/docgraph@0.3.0
+    docgraph --version
+
+mise verifies the manifest signature against this repository's workflow identity, then
+the selected artifact's digest and size, before unpacking. Regenerate dist's workflow
+with `dist generate --mode ci` after changing the packslip wiring, and confirm the
+`custom-release-packslip` job, the host job's dependency on it, and the
+`artifacts/packslip.sigstore.json` attestation subject are present.
 
 <a id="s-8TZDE68XQA"></a>
 ## Verify and close out

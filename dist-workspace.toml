@@ -28,9 +28,10 @@ github-attestations-filters = [
   "*.zip.sha256",
   "*.cdx.xml",
   "sha256.sum",
+  "packslip.sigstore.json",
 ]
 github-build-setup = "../release-build-setup.yml"
-global-artifacts-jobs = ["./release-smoke"]
+global-artifacts-jobs = ["./release-smoke", "./release-packslip"]
 pr-run-mode = "skip"
 
 [dist.github-custom-runners]
