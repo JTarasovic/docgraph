@@ -50,120 +50,151 @@ are not provided yet.
 
 ## Installation
 
-Install a released build from the
-[latest GitHub release](https://github.com/JTarasovic/docgraph/releases/latest):
+Prebuilt archives for `x86_64-pc-windows-msvc` and `x86_64-unknown-linux-gnu` are
+published on the
+[latest GitHub release](https://github.com/JTarasovic/docgraph/releases/latest).
+Each archive bundles the `docgraph` executable, its `docgraph-logic-runtime`
+sidecar, the portable agent skill under `skills/docgraph`, and the license files.
 
-- Download the archive for `x86_64-pc-windows-msvc` or
-  `x86_64-unknown-linux-gnu`.
-- Unpack it, keeping the `docgraph` executable beside the adjacent
-  `docgraph-logic-runtime` and the license files included in the archive.
-- Put the unpacked directory on `PATH`, or invoke the executable by its full path.
-- Verify the install:
+### With mise (recommended)
 
-  ```text
-  docgraph --version
-  docgraph --help
-  ```
-
-The matching portable agent skill ships under `skills/docgraph` and is also
-embedded in the CLI for verified repository installation.
-
-### Verify the download
-
-Every release archive is published with an adjacent `.sha256` checksum and a
-producer attestation. Verify both before use:
-
-- **Checksum** — recompute the archive's SHA-256 and compare it with the adjacent
-  `.sha256` file.
-- **Attestation** — confirm the archive was built by this repository:
-
-  ```text
-  gh attestation verify <archive> --repo JTarasovic/docgraph
-  ```
-
-### Install with mise
-
-The GitHub-release backend installs a pinned release as an ordinary tool. Pin an
-exact release tag in `mise.toml`:
+Pin a release in `mise.toml` and install:
 
 ```toml
 [tools]
 "github:JTarasovic/docgraph" = "<release-tag>"
 ```
 
-Then run `mise install`. This works with the current cargo-dist release and
-attestation setup.
+```text
+mise install
+docgraph --version
+```
 
-> The packslip mise backend depends on build and release wiring that does not
-> exist yet; it is tracked in
+mise's GitHub backend installs both `docgraph` and its `docgraph-logic-runtime`
+sidecar, and **verifies the release's GitHub Artifact Attestation and SLSA
+provenance by default** (settings `github.github_attestations` and `github.slsa`,
+both on; env `MISE_GITHUB_GITHUB_ATTESTATIONS` / `MISE_GITHUB_SLSA`).
+
+To pin that verified result and make it auditable, enable a lockfile:
+
+```toml
+[settings]
+lockfile = true
+```
+
+Run `mise lock` (or `mise install` with the setting enabled) and commit
+`mise.lock`. Each platform entry records the artifact `checksum` and
+`provenance = "github-attestations"`, and the platform you lock on is marked
+`provenance_verified = true` — that is how you confirm verification happened. In
+CI, enforce re-verification on every install with
+`MISE_LOCKED_VERIFY_PROVENANCE=1 mise install`.
+
+### Manual install
+
+1. Download the archive for your platform and its adjacent `.sha256` from the
+   release.
+2. Verify the checksum and the producer attestation **before unpacking or
+   running**:
+
+   ```text
+   # <archive> is the .tar.gz (Linux) or .zip (Windows) asset for your platform
+   sha256sum -c <archive>.sha256    # macOS/BSD: shasum -a 256 -c
+   gh attestation verify <archive> --repo JTarasovic/docgraph
+   ```
+3. Unpack it, keeping `docgraph` beside `docgraph-logic-runtime` and the license
+   files.
+4. Put the unpacked directory on `PATH` (or invoke the executable by its full
+   path), then check it:
+
+   ```text
+   docgraph --version
+   docgraph --help
+   ```
+
+> A packslip mise backend depends on build and release wiring that does not exist
+> yet; it is tracked in
 > [#41](https://github.com/JTarasovic/docgraph/issues/41) and will be documented
 > once it lands.
 
 ## Quickstart
 
-The minimal path to a working repository. From a Git repository root, create the
-minimal configuration, compatible portable skill, agent guidance, and default
-`docs` directory:
+`docgraph init` writes a minimal configuration, the portable skill, agent guidance,
+and a `docs` directory — but an **empty ontology**. You declare the entity types,
+properties, relations, and workflows your repository needs; docgraph enforces
+whatever you declare. From a Git repository root:
 
 ```text
-docgraph init --dry-run
 docgraph init
-```
-
-Inspect the model and validate the corpus:
-
-```text
-docgraph describe
+docgraph describe    # review the model (initially empty)
 docgraph validate
 ```
 
-Create a managed document using a configured type and its required title:
+Declare your ontology under `.docgraph/`, as described in
+[config authorship](skills/docgraph/config-authorship.md) and the
+[configuration reference](docs/reference/v0-config-reference-grammar.md). Once a
+type is declared, create managed documents for it (preview with `--dry-run`
+first):
 
 ```text
-docgraph document create docs/tasks/next.md --id task:next --type task --title "Next task" --dry-run
-docgraph document create docs/tasks/next.md --id task:next --type task --title "Next task"
+docgraph document create docs/<type>/example.md --id <type>:example --type <type> --title "Example" --dry-run
+docgraph document create docs/<type>/example.md --id <type>:example --type <type> --title "Example"
 docgraph validate
 ```
 
-For adopting existing Markdown, external-entity sources, and the full command and
-configuration reference, see
-[`docs/reference/v0-config-reference-grammar.md`](docs/reference/v0-config-reference-grammar.md).
-Use `--json` on any command when a script or agent needs structured output.
+For adopting existing Markdown and external-entity sources, see the
+[configuration reference](docs/reference/v0-config-reference-grammar.md). Add
+`--json` to any command when a script or agent needs structured output.
 
 ## GitHub Actions validation
 
-The validation action installs a verified release and its matching runtime, then
-runs `docgraph validate` against your corpus. Consumers need no Rust, mise, or
-docgraph source checkout. Pin every action to a reviewed full commit SHA.
+The action installs a checksum- and attestation-verified release and its matching
+runtime, then runs `docgraph validate` against your corpus. Consumers need no Rust,
+mise, or docgraph source checkout. Pin every `uses:` to a reviewed full commit SHA
+(shown below as `<sha>`).
 
-### Basic usage
+The jobs below each show one supported mode:
 
 ```yaml
+# .github/workflows/docgraph.yml
+name: docgraph
+on: [push, pull_request]
+
 permissions:
   contents: read
-  attestations: read
+  attestations: read   # required for producer-attestation verification on install
 
-steps:
-  - uses: actions/checkout@<full-commit-sha>
-  - uses: JTarasovic/docgraph@<full-commit-sha>
-    with:
-      version: <exact-release-tag>
+jobs:
+  # Default: install a verified release + runtime, then run `docgraph validate`.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - uses: JTarasovic/docgraph@<sha>
+        with:
+          version: <exact-release-tag>   # optional; omit to use the latest stable release
+
+  # Validate with docgraph already on the runner. `version` is unused, but release
+  # lookup still runs using `token` (the workflow token by default).
+  validate-preinstalled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - uses: JTarasovic/docgraph@<sha>
+        with:
+          install: "false"
+
+  # Install only, without validating: the CLI + runtime (checksum + attestation
+  # verified), and separately just the runtime sidecar (e.g. testing a source build).
+  install-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: JTarasovic/docgraph/install@<sha>
+        with:
+          version: <exact-release-tag>
+      - uses: JTarasovic/docgraph/install-runtime@<sha>
+        with:
+          version: <exact-release-tag>
 ```
-
-### Pin to a SHA or select a version
-
-- Pin the action to a reviewed full commit SHA (not a tag or branch).
-- Omit `version` to install the latest stable docgraph release, or set it to an
-  exact release tag (`vMAJOR.MINOR.PATCH`) to install that release.
-
-### Install only or runtime only
-
-- `install: false` — validate with tools already on the runner; `version` is then
-  unused, but release lookup still runs using `token`.
-- `JTarasovic/docgraph/install@<full-commit-sha>` — install the CLI and matching
-  runtime with checksum and attestation verification, without running `validate`.
-- `JTarasovic/docgraph/install-runtime@<full-commit-sha>` — install only the
-  pinned runtime sidecar, for example when testing a source build.
 
 Both installers require valid producer attestations and SHA-256 checksums. See
 [the validation action contract](docs/reference/validation-action.md) for
@@ -181,8 +212,10 @@ run `docgraph validate`.
 
 Every release archive ships with a SHA-256 checksum and a producer attestation, so
 consumers can verify that an artifact was built from this repository before running
-it (see [Verify the download](#verify-the-download)). To report a vulnerability,
-follow [`SECURITY.md`](SECURITY.md).
+it. Installing [with mise](#with-mise-recommended) verifies the attestation by
+default; a [manual install](#manual-install) verifies it with `gh attestation
+verify`; and the [validation action](#github-actions-validation) installers verify
+it in CI. To report a vulnerability, follow [`SECURITY.md`](SECURITY.md).
 
 ## License
 
