@@ -58,90 +58,56 @@ sidecar, the portable agent skill under `skills/docgraph`, and the license files
 
 ### With mise (recommended)
 
-Pin a release in `mise.toml` and install:
-
 ```toml
+# mise.toml — installs docgraph + its logic-runtime sidecar and verifies the
+# release's GitHub attestation and SLSA provenance by default; lockfile = true
+# records the verified provenance so it is pinned and auditable.
+[settings]
+lockfile = true
+
 [tools]
 "github:JTarasovic/docgraph" = "<release-tag>"
 ```
 
-```text
-mise install
+```sh
+mise install       # verifies attestation, writes provenance_verified to mise.lock
 docgraph --version
 ```
 
-mise's GitHub backend installs both `docgraph` and its `docgraph-logic-runtime`
-sidecar, and **verifies the release's GitHub Artifact Attestation and SLSA
-provenance by default** (settings `github.github_attestations` and `github.slsa`,
-both on; env `MISE_GITHUB_GITHUB_ATTESTATIONS` / `MISE_GITHUB_SLSA`).
-
-To pin that verified result and make it auditable, enable a lockfile:
-
-```toml
-[settings]
-lockfile = true
-```
-
-Run `mise lock` (or `mise install` with the setting enabled) and commit
-`mise.lock`. Each platform entry records the artifact `checksum` and
-`provenance = "github-attestations"`, and the platform you lock on is marked
-`provenance_verified = true` — that is how you confirm verification happened. In
-CI, enforce re-verification on every install with
-`MISE_LOCKED_VERIFY_PROVENANCE=1 mise install`.
-
 ### Manual install
 
-1. Download the archive for your platform and its adjacent `.sha256` from the
-   release.
-2. Verify the checksum and the producer attestation **before unpacking or
-   running**:
-
-   ```text
-   # <archive> is the .tar.gz (Linux) or .zip (Windows) asset for your platform
-   sha256sum -c <archive>.sha256    # macOS/BSD: shasum -a 256 -c
-   gh attestation verify <archive> --repo JTarasovic/docgraph
-   ```
-3. Unpack it, keeping `docgraph` beside `docgraph-logic-runtime` and the license
-   files.
-4. Put the unpacked directory on `PATH` (or invoke the executable by its full
-   path), then check it:
-
-   ```text
-   docgraph --version
-   docgraph --help
-   ```
-
-> A packslip mise backend depends on build and release wiring that does not exist
-> yet; it is tracked in
-> [#41](https://github.com/JTarasovic/docgraph/issues/41) and will be documented
-> once it lands.
+```sh
+# gh is required for attestation verification anyway, so use it to fetch the release
+gh release download <release-tag> --repo JTarasovic/docgraph --pattern '*'
+gh attestation verify <archive> --repo JTarasovic/docgraph   # before unpacking
+# then unpack, keeping docgraph beside docgraph-logic-runtime, and put it on PATH
+```
 
 ## Quickstart
 
-`docgraph init` writes a minimal configuration, the portable skill, agent guidance,
-and a `docs` directory — but an **empty ontology**. You declare the entity types,
-properties, relations, and workflows your repository needs; docgraph enforces
-whatever you declare. From a Git repository root:
+`docgraph init` scaffolds the configuration but an **empty ontology** — you declare
+the entity types docgraph should enforce. From a Git repository root:
 
-```text
+```sh
 docgraph init
-docgraph describe    # review the model (initially empty)
+
+# Declare a minimal ontology: one entity type with a required title.
+cat > .docgraph/entities.toml <<'EOF'
+[entity.note]
+description = "A short note."
+
+[entity.note.property.title]
+type = "string"
+required = true
+EOF
+
+docgraph describe                 # confirm the "note" type is registered
+docgraph document create docs/notes/first.md --id note:first --type note --title "First note"
 docgraph validate
 ```
 
-Declare your ontology under `.docgraph/`, as described in
+Add properties, relations, and workflows the same way; see
 [config authorship](skills/docgraph/config-authorship.md) and the
-[configuration reference](docs/reference/v0-config-reference-grammar.md). Once a
-type is declared, create managed documents for it (preview with `--dry-run`
-first):
-
-```text
-docgraph document create docs/<type>/example.md --id <type>:example --type <type> --title "Example" --dry-run
-docgraph document create docs/<type>/example.md --id <type>:example --type <type> --title "Example"
-docgraph validate
-```
-
-For adopting existing Markdown and external-entity sources, see the
 [configuration reference](docs/reference/v0-config-reference-grammar.md). Add
 `--json` to any command when a script or agent needs structured output.
 
