@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "deepwiki": {
+      "type": "http",
+      "url": "https://mcp.deepwiki.com/mcp"
+    },
+    "rust-analyzer": {
+      "command": "mise",
+      "args": ["exec", "--", "rust-analyzer-mcp"]
+    }
+  }
+}

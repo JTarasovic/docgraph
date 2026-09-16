@@ -32,6 +32,18 @@ Cargo build and test commands use `Cargo.lock`.
 
 Run `mise run check-local` before handing off changes.
 
+## Agent tools
+
+Claude Code and Codex load the project MCP servers from `.mcp.json` and
+`.codex/config.toml`, respectively. Both provide DeepWiki for questions about
+public dependency repositories and rust-analyzer-mcp for Rust symbol navigation
+and diagnostics. Run `mise run install-agent-tools` before starting an agent
+session. This task installs rust-analyzer and standard library source for the
+Rust toolchain selected by `mise`, then builds rust-analyzer-mcp 0.4.0 because its
+release has no prebuilt binary for this repository's binstall-only policy.
+Restart the agent after installing or changing these servers. DeepWiki uses the public
+`https://mcp.deepwiki.com/mcp` endpoint and requires no credentials.
+
 ## Continuous integration
 
 Linux CI installs a checksum-verified packaged runtime, then runs the complete
