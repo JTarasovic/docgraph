@@ -2,7 +2,7 @@
 
 id = "task:attest-release-artifacts"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Attest release artifacts and publish an SBOM"
@@ -72,23 +72,23 @@ assert that each required subject exists before accepting a pass.
 - `sha256.sum` covers the dist archives, while each companion's adjacent checksum covers
   its archive. The SBOMs and checksum manifests are authenticated directly as
   attestation subjects instead of relying on a custom combined checksum or SBOM.
-- CI verifies attestation subjects, SBOM shape and required components, and documented
-  consumer commands before publication. Missing optional evidence must fail rather than
-  produce a vacuous green check.
-- Consumer-path verification proves both `gh attestation verify` and mise installation
-  use the expected archive subject, and verifies the published Rust and native-runtime
-  SBOM subjects explicitly.
+- The companion workflow checks its exact evidence set before publication. For the
+  product release, verify the complete published evidence set and its attestation
+  subjects after publication; the generated dist workflow cannot require an exact
+  set of product attestation subjects before creating the GitHub Release.
+- Consumer-path verification proves `gh attestation verify` and the public installation
+  action use the expected archive subject, and verifies the published Rust and
+  native-runtime SBOM subjects explicitly.
 - Documentation claims SLSA Build Level 2 only while the generated workflow uses the
   current GitHub-hosted builder model, and explains checksums separately from
   provenance.
 - Release notes and the runbook link to exact checksum, provenance, and SBOM
   verification instructions.
 
-The existing companion tags remain immutable. Completing this task therefore requires
-publishing a newly named companion generation whose identity includes both the upstream
-Souffle revision and producer commit, updating `sources.toml` to its verified digests,
-and making release staging require the companion attestation and SBOM before the first
-hardened product release.
+The existing companion tags remain immutable. The newly named companion generation
+includes both the upstream Souffle revision and producer commit. `sources.toml` pins
+its verified digests. The public runtime action verifies the companion archive and
+checksum during release staging; the companion producer checks and attests its SBOM.
 
 <a id="s-WC3P93NNW5"></a>
 ## Published companion evidence
@@ -101,10 +101,23 @@ Their archives, adjacent checksums, and Syft CycloneDX SBOMs all verify against 
 the archive attestation and checksum before installation; the producer workflow
 verifies and attests the SBOM separately.
 
-The remaining proof is the first docgraph release from this configuration. Its host
-job must attest both platform archives, their adjacent checksums, the cargo-cyclonedx
-workspace SBOM, and `sha256.sum`; post-publication verification must then exercise the
-documented public actions and GitHub CLI verification commands.
+**Product release evidence and accepted limitation.**
 
-Product attestations do not exist until dist's host phase publishes them, so their
-verification remains a post-publication proof and does not resolve this task by itself.
+The [v0.4.1 release workflow](https://github.com/JTarasovic/docgraph/actions/runs/34962720140)
+succeeded on September 15, 2026. The release contains both platform archives, their
+adjacent SHA-256 files, `docgraph-cli.cdx.xml`, and `sha256.sum`. Both archive hashes
+match their adjacent files and `sha256.sum`. All six files verify with
+`gh attestation verify` against the tagged release workflow and source commit
+`260680252b5c5adda469c886359b441324b2e4e0`. The workspace CycloneDX SBOM
+identifies `docgraph-cli` version 0.4.1 and contains dependency components. The
+[Linux](https://github.com/JTarasovic/docgraph/actions/runs/34962715184) and
+[Windows](https://github.com/JTarasovic/docgraph/actions/runs/34962715164) CI runs
+exercise the public installation and validation actions with that release.
+
+The generated dist 0.32.0 workflow attests files matching configured globs but does
+not assert that every expected product file exists. A missing optional file, especially
+the workspace SBOM, could therefore leave a green release job with incomplete evidence.
+The available generated workflow hooks do not place an exact-set check between the
+complete artifact download and GitHub Release creation. We accept this narrow gap and
+verify the published subject set after release; it is not a claim that future releases
+automatically fail when an optional evidence file is absent.

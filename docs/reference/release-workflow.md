@@ -175,6 +175,12 @@ For a docgraph release, download the complete evidence set, verify both checksum
 layers, then verify every archive, adjacent checksum, workspace SBOM, and unified
 checksum as an attestation subject:
 
+Dist 0.32.0's generated workflow attests files matching configured globs but does not
+require the complete expected set before creating the GitHub Release. Check that all
+six expected subjects were downloaded before accepting the post-release verification;
+a successful attestation of the files that exist does not prove an optional SBOM was
+published.
+
     repository=JTarasovic/docgraph
     tag=v0.3.1
     mkdir docgraph-evidence && cd docgraph-evidence
@@ -182,6 +188,14 @@ checksum as an attestation subject:
       --pattern '*.tar.gz' --pattern '*.tar.gz.sha256' \
       --pattern '*.zip' --pattern '*.zip.sha256' \
       --pattern '*.cdx.xml' --pattern sha256.sum
+    for subject in \
+      docgraph-cli-x86_64-unknown-linux-gnu.tar.gz \
+      docgraph-cli-x86_64-unknown-linux-gnu.tar.gz.sha256 \
+      docgraph-cli-x86_64-pc-windows-msvc.zip \
+      docgraph-cli-x86_64-pc-windows-msvc.zip.sha256 \
+      docgraph-cli.cdx.xml sha256.sum; do
+      test -s "$subject" || exit 1
+    done
     for checksum in *.sha256 sha256.sum; do
       grep --invert-match '^$' "$checksum" | sha256sum --check
     done
