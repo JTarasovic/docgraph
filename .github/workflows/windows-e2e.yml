@@ -41,7 +41,21 @@ concurrency:
   group: windows-e2e-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Keep runs clear of spurious tool chatter: silence Node's runtime
+  # DeprecationWarnings from bundled JavaScript actions and Git's default
+  # initial-branch advice emitted by the checkout action's `git init`.
+  NODE_OPTIONS: --no-deprecation
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 jobs:
+  # NOTE: This job is path-filtered (see `on:` above) and is therefore NOT a
+  # required status check on `main` — a required check that never reports on an
+  # unrelated PR would block merges. If this workflow ever loses that path
+  # filtering (or otherwise runs on every PR), add `windows-e2e` to the
+  # "Protect main" ruleset's required status checks.
   windows-e2e:
     runs-on: windows-2025
     timeout-minutes: 10

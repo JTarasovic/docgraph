@@ -19,8 +19,16 @@ confidence-threshold = 0.8
 ignore = true
 
 [bans]
-multiple-versions = "warn"
+multiple-versions = "deny"
 wildcards = "allow"
+# Known, unavoidable transitive version splits. Skipping them keeps `cargo deny
+# check` clean; any *new* duplicate fails the build instead of emitting an
+# unread warning.
+skip = [
+  { crate = "getrandom@0.2.17", reason = "Pulled in by ring; our direct path uses getrandom 0.4." },
+  { crate = "syn@3.0.4", reason = "Only clap_derive is on syn 3; the rest of the tree is on syn 2." },
+  { crate = "windows-sys@0.52.0", reason = "Older transitive Windows bindings alongside the current 0.61." },
+]
 
 [sources]
 unknown-registry = "deny"
