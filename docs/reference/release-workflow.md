@@ -97,7 +97,7 @@ Use these commands, with 0.3.0 replaced by the intended numeric version:
     dist build --tag v0.3.0 --target <current-host-target>
 
 The first cargo-release command is a non-mutating preview and is always run first. Its
-preview must show only Cargo.toml, Cargo.lock, skills/docgraph/skill.toml, and the
+preview must show only Cargo.toml, Cargo.lock, .agents/skills/docgraph/skill.toml, and the
 git-cliff changelog proposal. The execute command creates one consolidated preparation
 commit but neither a tag nor a push. Review and edit CHANGELOG.md for user impact,
 amend that commit, then run the repository checks.

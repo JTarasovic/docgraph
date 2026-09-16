@@ -94,7 +94,12 @@ gh attestation verify <archive> --repo JTarasovic/docgraph   # before unpacking
 the entity types docgraph should enforce. From a Git repository root:
 
 ```sh
-docgraph init
+# Claude example; see the configuration reference below for defaults and other targets.
+docgraph init \
+  --name my-project-name \
+  --documents docs \
+  --instruction-target CLAUDE.md \
+  --skill-target .claude/skills/docgraph
 
 # Declare a minimal ontology: one entity type with a required title.
 cat > .docgraph/entities.toml <<'EOF'
@@ -112,7 +117,7 @@ docgraph validate
 ```
 
 Add properties, relations, and workflows the same way; see
-[config authorship](skills/docgraph/config-authorship.md) and the
+[config authorship](.agents/skills/docgraph/config-authorship.md) and the
 [configuration reference](docs/reference/v0-config-reference-grammar.md). Add
 `--json` to any command when a script or agent needs structured output.
 

@@ -485,7 +485,8 @@ Tests: hierarchy, arguments, help text, read-only queries, transitions, relation
 Verify:
 
 - initialization in a fresh Git repository previews without writing, creates a
-  minimal valid configuration and document root, installs the embedded skill,
+  minimal valid configuration and document root, installs the embedded skill only
+  at explicitly requested targets,
   preserves authored instruction prose, validates, and is idempotent
 - initialization adopts valid existing configuration byte-for-byte and refuses
   conflicting options or ambiguous partial `.docgraph` state before writing

@@ -132,8 +132,19 @@ impl<'a> InstructionService<'a> {
 
     fn generated_block(&self) -> String {
         let appendix = self.repository_appendix();
+        let skill_guidance = if self
+            .config
+            .project
+            .agent_instructions
+            .skill_targets
+            .is_empty()
+        {
+            ""
+        } else {
+            "- Use the `docgraph` skill for detailed guidance.\n"
+        };
         format!(
-            "{BEGIN}\nThis repository uses docgraph.\n\n- Edit prose directly. Use `docgraph` commands for managed frontmatter and semantic relationships.\n- Inspect the repository model with `docgraph describe`; do not reconstruct semantic impact with grep.\n- Preview substantial changes with `--dry-run`, then run `docgraph validate`.\n- Keep generated frontmatter current with `docgraph frontmatter sync`.\n- Portable guidance lives in `skills/docgraph/SKILL.md`.\n\n{appendix}\n{END}"
+            "{BEGIN}\nThis repository uses docgraph.\n\n- Edit prose directly. Use `docgraph` commands for managed frontmatter and semantic relationships.\n- Inspect the repository model with `docgraph describe`; do not reconstruct semantic impact with grep.\n- Preview substantial changes with `--dry-run`, then run `docgraph validate`.\n- Keep generated frontmatter current with `docgraph frontmatter sync`.\n{skill_guidance}\n{appendix}\n{END}"
         )
     }
 

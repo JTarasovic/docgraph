@@ -15,7 +15,7 @@ on:
       - crates/**
       - fixtures/**
       - mise.toml
-      - skills/**
+      - .agents/skills/**
       - tools/logic-runtime/**
   pull_request:
     paths:
@@ -30,7 +30,7 @@ on:
       - crates/**
       - fixtures/**
       - mise.toml
-      - skills/**
+      - .agents/skills/**
       - tools/logic-runtime/**
 
 permissions:

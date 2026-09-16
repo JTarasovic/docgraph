@@ -59,5 +59,5 @@ This repository uses docgraph to manage its own `docs` corpus. Edit prose
 directly, but use `docgraph` commands for managed frontmatter, states, properties,
 relations, and lifecycle changes. Inspect the model with `docgraph describe`,
 preview substantial changes with `--dry-run`, and run `docgraph validate` before
-committing. Portable guidance lives in `skills/docgraph/SKILL.md`; repository
+committing. The release skill source lives in `.agents/skills/docgraph/SKILL.md`; repository
 guidance lives in `AGENTS.md`.

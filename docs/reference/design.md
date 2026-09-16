@@ -10,6 +10,11 @@ role = "design"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:configurable-skill-frontmatter"
+predicate = "affects"
+target = "reference:design#s-64KP745XR0"
+
+[[docgraph_generated.incoming]]
 source = "issue:search-index-includes-structured-frontmatter"
 predicate = "affects"
 target = "reference:design#s-FDMHXV5Q4Q"
@@ -138,6 +143,11 @@ target = "task:expose-complete-ontology-dump"
 source = "reference:design"
 type = "implemented_by"
 target = "task:version-portable-agent-skill"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-64KP745XR0"
+type = "affected_by"
+target = "issue:configurable-skill-frontmatter"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-64KP745XR0"
@@ -938,7 +948,7 @@ Agent guidance is part of the product interface.
 ### 11.1 Progressive-disclosure skill package
 
 ```text
-skills/docgraph/
+.agents/skills/docgraph/
   SKILL.md
   config-authorship.md
   commands.md
@@ -971,8 +981,9 @@ inspect
 
 Repository onboarding uses the same safe maintenance boundaries. `docgraph init`
 locates the Git worktree, creates a minimal project only when no configuration can be
-adopted, installs the exact CLI-embedded skill contract, and synchronizes configured
-instruction targets while preserving authored bytes. It previews the complete change,
+adopted, installs the exact CLI-embedded skill contract at explicitly configured
+skill targets, and synchronizes configured instruction targets while preserving
+authored bytes. It previews the complete change,
 is idempotent, adopts valid existing configuration without rewriting it, and refuses
 ambiguous or conflicting state before writing.
 
@@ -987,7 +998,7 @@ The instructions should tell agents:
 - this repository uses docgraph
 - managed semantic state must not be hand-edited
 - semantic impact should not be inferred with grep
-- where the docgraph skill lives
+- to use the `docgraph` skill, when a skill target is configured
 - how to inspect the repository model
 - to validate after relevant edits
 
@@ -1002,7 +1013,8 @@ The owned region is delimited by exact versioned markers:
 `docgraph instructions sync` creates or updates only that region and supports
 `--dry-run`; `docgraph instructions check` detects missing, stale, or malformed
 blocks without writing. The same commands install and verify the CLI-embedded
-portable skill bundle. Check distinguishes a missing bundle, modified managed
+portable skill bundle at each configured target. With no skill targets, no bundle is
+installed or checked. Check distinguishes a missing bundle, modified managed
 content, and an incompatible skill/CLI contract. Sync previews and replaces only
 the known managed skill files; additional repository-local files are preserved.
 Content outside a valid marker pair is preserved byte-for-byte.

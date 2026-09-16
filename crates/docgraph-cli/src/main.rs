@@ -5,11 +5,11 @@ use docgraph_core::{
     ExternalEntityCache, ExternalEntityService, ExternalEntityView, ExternalIdentity,
     FrontmatterConfig, GeneratedBlockStatus, GeneratedFrontmatterIndex, GithubExternalEntitySource,
     GraphIndex, GraphNode, GraphTraversal, InstructionService, InstructionStatus,
-    ManagedChangeValidator, MutationPlan, MutationRequest, MutationService, PORTABLE_SKILL_PATH,
-    PortableSkillService, PortableSkillStatus, ProjectConfig, PropertyConfig, PropertyType,
-    QueryValueType, RelationOrigin, Repository, RepositoryConfig, SCHEMA_VERSION, ScalarValue,
-    SemanticChange, SemanticChangeReviewer, SemanticSearchHit, SemanticSearchMode,
-    SemanticSearchResult, SemanticSection, TraversalDirection, ValidationConfig, Validator,
+    ManagedChangeValidator, MutationPlan, MutationRequest, MutationService, PortableSkillService,
+    PortableSkillStatus, ProjectConfig, PropertyConfig, PropertyType, QueryValueType,
+    RelationOrigin, Repository, RepositoryConfig, SCHEMA_VERSION, ScalarValue, SemanticChange,
+    SemanticChangeReviewer, SemanticSearchHit, SemanticSearchMode, SemanticSearchResult,
+    SemanticSection, TraversalDirection, ValidationConfig, Validator, validate_skill_targets,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -50,6 +50,9 @@ enum Command {
         /// Agent-instruction target for a new configuration. May be repeated.
         #[arg(long = "instruction-target", value_name = "PATH")]
         instruction_targets: Vec<PathBuf>,
+        /// Agent skill directory for a new configuration. May be repeated.
+        #[arg(long = "skill-target", value_name = "PATH")]
+        skill_targets: Vec<PathBuf>,
         #[arg(long)]
         dry_run: bool,
     },
@@ -522,11 +525,13 @@ fn run(cli: Cli) -> Result<(), CliError> {
             name,
             documents,
             instruction_targets,
+            skill_targets,
             dry_run,
         } => initialize(
             name.as_deref(),
             documents.as_deref(),
             &instruction_targets,
+            &skill_targets,
             dry_run,
             cli.json,
         ),
@@ -866,6 +871,7 @@ fn initialize(
     requested_name: Option<&str>,
     requested_documents: Option<&Path>,
     requested_targets: &[PathBuf],
+    requested_skill_targets: &[PathBuf],
     dry_run: bool,
     json_output: bool,
 ) -> Result<(), CliError> {
@@ -889,6 +895,11 @@ fn initialize(
         .iter()
         .map(|path| normalized_relative_path(path, "instruction target"))
         .collect::<Result<_, _>>()?;
+    let requested_skill_targets: Vec<_> = requested_skill_targets
+        .iter()
+        .map(|path| normalized_relative_path(path, "skill target"))
+        .collect::<Result<_, _>>()?;
+    validate_skill_targets(&requested_skill_targets).map_err(CliError::message)?;
     let mut unique_targets = HashSet::new();
     if requested_targets
         .iter()
@@ -930,6 +941,13 @@ fn initialize(
                 "existing instruction targets differ from --instruction-target values",
             ));
         }
+        if !requested_skill_targets.is_empty()
+            && requested_skill_targets != config.project.agent_instructions.skill_targets
+        {
+            return Err(CliError::message(
+                "existing skill targets differ from --skill-target values",
+            ));
+        }
         config
     } else {
         refuse_ambiguous_config_directory(repository.config_dir())?;
@@ -944,7 +962,12 @@ fn initialize(
         } else {
             requested_targets
         };
-        let source = minimal_project_source(&name, &documents, &instruction_targets)?;
+        let source = minimal_project_source(
+            &name,
+            &documents,
+            &instruction_targets,
+            &requested_skill_targets,
+        )?;
         project_change = Some(docgraph_core::FileChange {
             path: PathBuf::from(".docgraph/project.toml"),
             original: None,
@@ -962,6 +985,7 @@ fn initialize(
                 frontmatter: FrontmatterConfig::default(),
                 agent_instructions: AgentInstructionsConfig {
                     targets: instruction_targets,
+                    skill_targets: requested_skill_targets,
                 },
                 validation: ValidationConfig::default(),
                 references: Vec::new(),
@@ -986,7 +1010,11 @@ fn initialize(
     }
     let create_documents = !documents_path.exists();
 
-    let skill = PortableSkillService::new(&repository).map_err(CliError::boxed)?;
+    let skill = PortableSkillService::new(
+        &repository,
+        &config.project.agent_instructions.skill_targets,
+    )
+    .map_err(CliError::boxed)?;
     let skill_changes = skill.sync(true).map_err(CliError::boxed)?;
     let instructions = InstructionService::new(&repository, &config).map_err(CliError::boxed)?;
     let instruction_changes = instructions.sync(true).map_err(CliError::boxed)?;
@@ -1048,7 +1076,11 @@ fn initialize(
         instructions.sync(false).map_err(CliError::boxed)?;
 
         RepositoryConfig::load(&repository).map_err(CliError::boxed)?;
-        if skill.check().map_err(CliError::boxed)? != PortableSkillStatus::Current
+        if skill
+            .check()
+            .map_err(CliError::boxed)?
+            .iter()
+            .any(|(_, status)| *status != PortableSkillStatus::Current)
             || instructions
                 .check()
                 .map_err(CliError::boxed)?
@@ -1138,6 +1170,7 @@ fn minimal_project_source(
     name: &str,
     documents: &Path,
     instruction_targets: &[PathBuf],
+    skill_targets: &[PathBuf],
 ) -> Result<String, CliError> {
     let documents = documents
         .to_str()
@@ -1150,11 +1183,20 @@ fn minimal_project_source(
                 .ok_or_else(|| CliError::message("instruction target is not valid UTF-8"))?,
         );
     }
+    let mut skills = toml_edit::Array::new();
+    for target in skill_targets {
+        skills.push(
+            target
+                .to_str()
+                .ok_or_else(|| CliError::message("skill target is not valid UTF-8"))?,
+        );
+    }
     Ok(format!(
-        "schema_version = {SCHEMA_VERSION}\n\n[project]\nname = {}\n\n[documents]\nroot = {}\n\n[agent_instructions]\ntargets = {}\n",
+        "schema_version = {SCHEMA_VERSION}\n\n[project]\nname = {}\n\n[documents]\nroot = {}\n\n[agent_instructions]\ntargets = {}\nskill_targets = {}\n",
         Value::from(name),
         Value::from(documents),
-        targets
+        targets,
+        skills
     ))
 }
 
@@ -1748,6 +1790,7 @@ fn complete_description_json(config: &RepositoryConfig) -> JsonValue {
             },
             "agent_instructions": {
                 "targets": config.project.agent_instructions.targets.iter().map(|target| json_path(target)).collect::<Vec<_>>(),
+                "skill_targets": config.project.agent_instructions.skill_targets.iter().map(|target| json_path(target)).collect::<Vec<_>>(),
             },
             "validation": {
                 "broken_internal_links": severity_name(config.project.validation.broken_internal_links),
@@ -2738,7 +2781,11 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
     let context = Context::load()?;
     let service =
         InstructionService::new(&context.repository, &context.config).map_err(CliError::boxed)?;
-    let skill = PortableSkillService::new(&context.repository).map_err(CliError::boxed)?;
+    let skill = PortableSkillService::new(
+        &context.repository,
+        &context.config.project.agent_instructions.skill_targets,
+    )
+    .map_err(CliError::boxed)?;
     match action {
         InstructionAction::Sync { dry_run } => {
             let skill_changes = skill.sync(dry_run).map_err(CliError::boxed)?;
@@ -2799,8 +2846,10 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
         }
         InstructionAction::Check => {
             let statuses = service.check().map_err(CliError::boxed)?;
-            let skill_status = skill.check().map_err(CliError::boxed)?;
-            let current = skill_status == PortableSkillStatus::Current
+            let skill_statuses = skill.check().map_err(CliError::boxed)?;
+            let current = skill_statuses
+                .iter()
+                .all(|(_, status)| *status == PortableSkillStatus::Current)
                 && statuses
                     .iter()
                     .all(|(_, status)| *status == InstructionStatus::Current);
@@ -2808,10 +2857,7 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
                 print_json(json!({
                     "current": current,
                     "targets": statuses.iter().map(|(path, status)| json!({ "path": json_path(path), "status": format!("{status:?}").to_lowercase() })).collect::<Vec<_>>(),
-                    "skill": {
-                        "path": PORTABLE_SKILL_PATH,
-                        "status": format!("{skill_status:?}").to_lowercase(),
-                    },
+                    "skills": skill_statuses.iter().map(|(path, status)| json!({"path": json_path(path), "status": format!("{status:?}").to_lowercase()})).collect::<Vec<_>>(),
                 }))?;
             } else {
                 for (path, status) in statuses {
@@ -2821,10 +2867,13 @@ fn instructions(action: InstructionAction, json_output: bool) -> Result<(), CliE
                         format!("{status:?}").to_lowercase()
                     );
                 }
-                println!(
-                    "{PORTABLE_SKILL_PATH}\t{}",
-                    format!("{skill_status:?}").to_lowercase()
-                );
+                for (path, status) in skill_statuses {
+                    println!(
+                        "{}\t{}",
+                        path.display(),
+                        format!("{status:?}").to_lowercase()
+                    );
+                }
             }
             if current {
                 Ok(())

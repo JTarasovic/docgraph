@@ -15,6 +15,11 @@ predicate = "affects"
 target = "reference:config-grammar"
 
 [[docgraph_generated.incoming]]
+source = "issue:init-project-name-default"
+predicate = "affects"
+target = "reference:config-grammar#s-TW0V0THMJD"
+
+[[docgraph_generated.incoming]]
 source = "issue:multi-file-adoption-normalize-first"
 predicate = "affects"
 target = "reference:config-grammar#s-V5R4RB2AP1"
@@ -213,6 +218,11 @@ target = "issue:slow-logic-query-startup"
 source = "reference:config-grammar#s-T1A2GRA1JJ"
 type = "implemented_by"
 target = "plan:make-agent-guidance-portable"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-TW0V0THMJD"
+type = "affected_by"
+target = "issue:init-project-name-default"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-TW0V0THMJD"
@@ -1062,7 +1072,7 @@ docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 ## 20. Generic CLI Escape Hatches
 
 ```bash
-docgraph init [--name <name>] [--documents <path>] [--instruction-target <path>]... [--dry-run]
+docgraph init [--name <name>] [--documents <path>] [--instruction-target <path>]... [--skill-target <path>]... [--dry-run]
 docgraph describe
 docgraph describe --all [--json]
 docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>] [--dry-run]
@@ -1103,9 +1113,10 @@ docgraph frontmatter migrate [PATH]... [--dry-run]
 `docgraph init` must run inside a Git worktree. When `.docgraph/project.toml` is
 absent, it creates a minimal schema-versioned project using the worktree directory
 name, `docs`, and the default `AGENTS.md` and `CLAUDE.md` instruction targets unless
-the corresponding options override those values. It also installs the CLI-embedded
-portable skill, synchronizes each configured instruction target without replacing
-authored content, and creates the configured document root when missing.
+the corresponding options override those values. It installs the CLI-embedded
+portable skill only at explicitly requested `--skill-target` paths, synchronizes each
+configured instruction target without replacing authored content, and creates the
+configured document root when missing.
 
 When a valid project file already exists, `init` adopts it byte-for-byte and only
 converges the skill and instruction targets. Explicit options must equal the existing
@@ -1375,7 +1386,7 @@ Diagnostics should include config file and source span.
 ## 25. Agent Skill Structure
 
 ```text
-skills/docgraph/
+.agents/skills/docgraph/
   SKILL.md
   config-authorship.md
   commands.md
@@ -1420,16 +1431,25 @@ refuse modification and report the conflict. Manual edits inside a valid block a
 reported by `check` and replaced by an explicit `sync`. `sync` uses the safe mutation
 protocol and refuses to overwrite a concurrently changed target.
 
-Instruction maintenance also owns the versioned portable bundle at
-`skills/docgraph`. Its `skill.toml` records `schema_version`, `contract_version`,
+The release supplies the canonical portable bundle. `[agent_instructions].skill_targets`
+lists repository-relative directories where a consuming repository wants that bundle
+installed. The list defaults to empty; an omitted field opts out. `docgraph init`
+accepts repeatable `--skill-target PATH` options and writes their values to the new
+configuration. No option means no skill target. Existing configurations without the
+field also opt out, and existing bundle files are left untouched.
+Configured targets are real directories; docgraph refuses targets that pass through a
+symlink. Duplicate or nested skill targets are invalid. Consumers manage any
+additional links or copies themselves.
+
+Each installed bundle's `skill.toml` records `schema_version`, `contract_version`,
 the exact compatible `cli_version`, and the managed payload filenames. The CLI
-embeds that canonical payload. `instructions check` reports the bundle as
+embeds that canonical payload. `instructions check` reports each configured bundle as
 `current`, `missing`, `modified`, or `incompatible`; its JSON result includes a
-top-level `skill` object with `path` and `status`.
+`skills` array with each target's `path` and `status`.
 
 `instructions sync --dry-run` includes exact skill-file patches without writing.
-Applying sync creates or replaces only the manifest's CLI-owned files under
-`skills/docgraph`; unrecognized repository-local files are not deleted or
+Applying sync creates or replaces only the manifest's CLI-owned files under each
+configured skill target; unrecognized repository-local files are not deleted or
 rewritten. Release archives contain the same bundle and packaging rejects a
 manifest whose CLI version differs from the archive version.
 

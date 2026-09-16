@@ -2,7 +2,7 @@
 
 id = "task:define-portable-agent-skill-contract"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Define the portable agent skill contract"
@@ -45,20 +45,25 @@ target = "task:support-configurable-skill-targets"
 Define the product contract needed by
 [#18](https://github.com/JTarasovic/docgraph/issues/18) before changing installation
 behavior. Specify required `SKILL.md` discovery metadata, canonical payload ownership,
-default target behavior, multiple explicit targets, and compatibility across agents
+opt-in target behavior, multiple explicit targets, and compatibility across agents
 whose discovery directories differ.
 
-Resolve how the portable bundle path mentioned by generated repository instructions
-relates to configured install targets. Specify duplicate or overlapping targets,
+Generated repository instructions refer to the skill by name when a target is
+configured, without embedding a path. Specify duplicate or overlapping targets,
 symlinks, path escape, case sensitivity, target collisions, repository-owned files,
-and migration from the fixed `skills/docgraph` default.
+and migration from the fixed `skills/docgraph` behavior. Existing bundles are left
+for repository owners to clean up manually.
+
+Duplicate or nested skill targets are rejected. Configured targets must be real
+repository-relative directories, and links from those directories to other agents
+are outside docgraph's management.
 
 <a id="s-J3EZ9TQ85P"></a>
 ## Acceptance
 
 - Product references require valid skill name and description metadata.
 - Configuration supports zero or more explicit repository-relative skill targets and
-  defines backward-compatible defaults.
+  defaults to none.
 - Canonical payload, installed copies, and generated instruction links have one clear
   ownership model.
 - Check/sync behavior is specified per target, including conflicts and safe migration.

@@ -5,7 +5,7 @@ This repository uses docgraph.
 - Inspect the repository model with `docgraph describe`; do not reconstruct semantic impact with grep.
 - Preview substantial changes with `--dry-run`, then run `docgraph validate`.
 - Keep generated frontmatter current with `docgraph frontmatter sync`.
-- Portable guidance lives in `skills/docgraph/SKILL.md`.
+- Use the `docgraph` skill for detailed guidance.
 
 ## Docgraph repository model
 
