@@ -15,6 +15,11 @@ predicate = "affects"
 target = "reference:config-grammar"
 
 [[docgraph_generated.incoming]]
+source = "issue:init-project-name-default"
+predicate = "affects"
+target = "reference:config-grammar#s-TW0V0THMJD"
+
+[[docgraph_generated.incoming]]
 source = "issue:multi-file-adoption-normalize-first"
 predicate = "affects"
 target = "reference:config-grammar#s-V5R4RB2AP1"
@@ -213,6 +218,11 @@ target = "issue:slow-logic-query-startup"
 source = "reference:config-grammar#s-T1A2GRA1JJ"
 type = "implemented_by"
 target = "plan:make-agent-guidance-portable"
+
+[[docgraph_generated.inverses]]
+source = "reference:config-grammar#s-TW0V0THMJD"
+type = "affected_by"
+target = "issue:init-project-name-default"
 
 [[docgraph_generated.inverses]]
 source = "reference:config-grammar#s-TW0V0THMJD"

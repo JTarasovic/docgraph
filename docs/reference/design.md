@@ -10,6 +10,11 @@ role = "design"
 schema_version = 1
 
 [[docgraph_generated.incoming]]
+source = "issue:configurable-skill-frontmatter"
+predicate = "affects"
+target = "reference:design#s-64KP745XR0"
+
+[[docgraph_generated.incoming]]
 source = "issue:search-index-includes-structured-frontmatter"
 predicate = "affects"
 target = "reference:design#s-FDMHXV5Q4Q"
@@ -138,6 +143,11 @@ target = "task:expose-complete-ontology-dump"
 source = "reference:design"
 type = "implemented_by"
 target = "task:version-portable-agent-skill"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-64KP745XR0"
+type = "affected_by"
+target = "issue:configurable-skill-frontmatter"
 
 [[docgraph_generated.inverses]]
 source = "reference:design#s-64KP745XR0"
