@@ -2,7 +2,7 @@
 
 id = "task:preserve-packslip-verification-parity"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Preserve checksum and attestation parity for the packslip artifact"
@@ -34,3 +34,11 @@ procedure documented in the release-workflow runbook.
 
 Depends on the packslip publish step existing. Done when a rehearsed release's packslip
 artifact passes both checksum and attestation verification with parity to the archives.
+
+<a id="s-QGS2Y354TW"></a>
+## Resolution
+
+`packslip.sigstore.json` was added to the host-phase `github-attestations-filters`, so
+the manifest is attested alongside the archives. For v0.5.1, `gh attestation verify`
+passed for every archive, adjacent checksum, the workspace SBOM, `sha256.sum`, and
+`packslip.sigstore.json` against the release workflow, confirming full parity.

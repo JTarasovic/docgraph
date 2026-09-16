@@ -2,7 +2,7 @@
 
 id = "task:confirm-mise-packslip-install"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Confirm installability through mise's packslip backend"
@@ -34,3 +34,11 @@ matches the release tag.
 Depends on the packslip publish step existing. Done when a published (or rehearsed)
 release installs cleanly through the packslip backend and the README documents the
 verified install commands.
+
+<a id="s-VQR43JDFFQ"></a>
+## Resolution
+
+Verified against the v0.5.1 release. `mise use packslip:github.com/JTarasovic/docgraph`
+resolved the signed manifest, verified its Sigstore signature and the selected artifact's
+digest, and installed a working `docgraph 0.5.1`. The README documents packslip as the
+preferred install path with the GitHub backend as a fallback.

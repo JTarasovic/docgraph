@@ -2,7 +2,7 @@
 
 id = "task:add-packslip-publish-step"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Add a packslip package and publish step to the release pipeline"
@@ -54,3 +54,13 @@ hand-editing generated workflow YAML, so it survives the next `dist plan` regene
 
 Done when a rehearsed release produces a packslip artifact from the tagged archives and
 the release-workflow runbook documents the step.
+
+<a id="s-FFE3E4FEXK"></a>
+## Resolution
+
+Implemented as the `release-packslip` global-artifacts job wired through
+`global-artifacts-jobs`. It builds a keyless-signed `packslip.sigstore.json` over the
+build-local archives (`jdx/packslip`, `upload: false`, `attest: link`, `bin: docgraph`)
+and uploads it so the host job publishes it into the immutable release. The signing job
+gets `id-token: write` through dist's `github-custom-job-permissions`, keeping the
+generated `release.yml` free of drift. First published in v0.5.1.

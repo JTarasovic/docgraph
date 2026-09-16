@@ -60,17 +60,22 @@ sidecar, the portable agent skill under `skills/docgraph`, and the license files
 
 ```toml
 # mise.toml — installs docgraph + its logic-runtime sidecar and verifies the
-# release's GitHub attestation and SLSA provenance by default; lockfile = true
-# records the verified provenance so it is pinned and auditable.
+# release before use; lockfile = true records the verified provenance so it is
+# pinned and auditable.
 [settings]
 lockfile = true
 
 [tools]
-"github:JTarasovic/docgraph" = "<release-tag>"
+# Preferred: the packslip backend resolves docgraph's signed release manifest and
+# verifies its Sigstore signature and each artifact's digest before unpacking.
+"packslip:github.com/JTarasovic/docgraph" = "<release-tag>"
+# Fallback: the GitHub backend installs the same archives and verifies their
+# GitHub attestation and SLSA provenance.
+# "github:JTarasovic/docgraph" = "<release-tag>"
 ```
 
 ```sh
-mise install       # verifies attestation, writes provenance_verified to mise.lock
+mise install       # verifies signature/attestation, writes provenance to mise.lock
 docgraph --version
 ```
 

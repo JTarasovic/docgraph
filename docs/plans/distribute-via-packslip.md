@@ -2,7 +2,7 @@
 
 id = "plan:distribute-via-packslip"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Distribute docgraph via packslip"
