@@ -7,6 +7,15 @@ All notable changes to docgraph are documented here. The format follows
 ## [Unreleased]
 
 <!-- git-cliff: end of header -->
+## [0.5.1] - 2026-09-16
+
+### Fixed
+
+- Granted the packslip release job the `id-token` permission it needs for keyless
+  signing. The v0.5.0 tag produced no release artifacts because the Release workflow
+  failed at startup on that missing permission; this release ships the same 0.5.0
+  contents below from a new immutable tag.
+
 ## [0.5.0] - 2026-09-16
 
 ### Added
@@ -91,7 +100,8 @@ All notable changes to docgraph are documented here. The format follows
 - Published the first docgraph CLI with graph validation, querying, managed mutations,
   and native Windows and Linux release bundles.
 
-[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v0.5.0..HEAD
+[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v0.5.1..HEAD
+[0.5.1]: https://github.com/JTarasovic/docgraph/compare/v0.5.0..v0.5.1
 [0.5.0]: https://github.com/JTarasovic/docgraph/compare/v0.4.1..v0.5.0
 [0.4.1]: https://github.com/JTarasovic/docgraph/compare/v0.4.0..v0.4.1
 [0.4.0]: https://github.com/JTarasovic/docgraph/compare/v0.3.0..v0.4.0
