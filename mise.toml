@@ -22,6 +22,13 @@ cargo-binstall = "1.20.0"
 description = "Check Rust formatting"
 run = "cargo fmt --all --check"
 
+[tasks.install-agent-tools]
+description = "Install the pinned rust-analyzer MCP bridge from source"
+run = [
+    "rustup component add rust-analyzer rust-src",
+    "cargo install --locked --version 0.4.0 rust-analyzer-mcp",
+]
+
 [tasks.lint]
 description = "Lint all Rust targets"
 run = "cargo clippy --workspace --all-targets --all-features --locked --no-deps -- -D warnings"

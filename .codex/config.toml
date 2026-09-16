@@ -1,0 +1,6 @@
+[mcp_servers.deepwiki]
+url = "https://mcp.deepwiki.com/mcp"
+
+[mcp_servers.rust-analyzer]
+command = "mise"
+args = ["exec", "--", "rust-analyzer-mcp"]
