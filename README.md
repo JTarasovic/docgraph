@@ -111,6 +111,9 @@ docgraph document create docs/notes/first.md --id note:first --type note --title
 docgraph validate
 ```
 
+Agent skill installation is optional: pass `--skill-target <path>` to `init` for
+each directory docgraph should manage.
+
 Add properties, relations, and workflows the same way; see
 [config authorship](skills/docgraph/config-authorship.md) and the
 [configuration reference](docs/reference/v0-config-reference-grammar.md). Add

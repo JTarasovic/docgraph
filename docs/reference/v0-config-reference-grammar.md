@@ -1062,7 +1062,7 @@ docgraph task implements task:184 spec:retry#s-83JRT4K2P6
 ## 20. Generic CLI Escape Hatches
 
 ```bash
-docgraph init [--name <name>] [--documents <path>] [--instruction-target <path>]... [--dry-run]
+docgraph init [--name <name>] [--documents <path>] [--instruction-target <path>]... [--skill-target <path>]... [--dry-run]
 docgraph describe
 docgraph describe --all [--json]
 docgraph adopt <path> --id <entity> --type <type> [--property <name>=<value>] [--dry-run]
@@ -1103,9 +1103,10 @@ docgraph frontmatter migrate [PATH]... [--dry-run]
 `docgraph init` must run inside a Git worktree. When `.docgraph/project.toml` is
 absent, it creates a minimal schema-versioned project using the worktree directory
 name, `docs`, and the default `AGENTS.md` and `CLAUDE.md` instruction targets unless
-the corresponding options override those values. It also installs the CLI-embedded
-portable skill, synchronizes each configured instruction target without replacing
-authored content, and creates the configured document root when missing.
+the corresponding options override those values. It installs the CLI-embedded
+portable skill only at explicitly requested `--skill-target` paths, synchronizes each
+configured instruction target without replacing authored content, and creates the
+configured document root when missing.
 
 When a valid project file already exists, `init` adopts it byte-for-byte and only
 converges the skill and instruction targets. Explicit options must equal the existing

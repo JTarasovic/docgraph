@@ -972,8 +972,8 @@ inspect
 Repository onboarding uses the same safe maintenance boundaries. `docgraph init`
 locates the Git worktree, creates a minimal project only when no configuration can be
 adopted, installs the exact CLI-embedded skill contract at explicitly configured
-skill targets, and synchronizes configured
-instruction targets while preserving authored bytes. It previews the complete change,
+skill targets, and synchronizes configured instruction targets while preserving
+authored bytes. It previews the complete change,
 is idempotent, adopts valid existing configuration without rewriting it, and refuses
 ambiguous or conflicting state before writing.
 
