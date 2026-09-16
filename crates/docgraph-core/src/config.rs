@@ -6,7 +6,7 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -42,6 +42,12 @@ impl RepositoryConfig {
         let logic = read_optional_text(&logic_path)?;
         validate_embedding_config(&project_path, project_file.embeddings.as_ref())?;
         validate_external_entities_config(&project_path, &project_file.external_entities)?;
+        validate_skill_targets(&project_file.agent_instructions.skill_targets).map_err(
+            |message| ConfigLoadError::Invalid {
+                path: project_path.clone(),
+                message,
+            },
+        )?;
 
         Ok(Self {
             project: ProjectConfig {
@@ -283,6 +289,52 @@ impl Default for AgentInstructionsConfig {
             skill_targets: Vec::new(),
         }
     }
+}
+
+pub fn validate_skill_targets(targets: &[PathBuf]) -> Result<(), String> {
+    let mut normalized: Vec<(String, Vec<String>)> = Vec::new();
+    for target in targets {
+        if target.is_absolute() {
+            return Err(format!(
+                "skill target {} must be repository-relative",
+                target.display()
+            ));
+        }
+        let mut components = Vec::new();
+        for component in target.components() {
+            match component {
+                Component::Normal(value) => {
+                    let name = value.to_string_lossy().into_owned();
+                    components.push(if cfg!(windows) {
+                        name.to_lowercase()
+                    } else {
+                        name
+                    });
+                }
+                Component::CurDir => {}
+                _ => {
+                    return Err(format!(
+                        "skill target {} cannot escape the repository",
+                        target.display()
+                    ));
+                }
+            }
+        }
+        if components.is_empty() {
+            return Err("skill target cannot be empty".to_owned());
+        }
+        for (previous_path, previous) in &normalized {
+            if components.starts_with(previous) || previous.starts_with(&components) {
+                return Err(format!(
+                    "skill targets {} and {} overlap",
+                    previous_path,
+                    target.display()
+                ));
+            }
+        }
+        normalized.push((target.display().to_string(), components));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]

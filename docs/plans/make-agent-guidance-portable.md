@@ -2,7 +2,7 @@
 
 id = "plan:make-agent-guidance-portable"
 type = "plan"
-state = "active"
+state = "completed"
 
 [properties]
 title = "Make generated agent guidance portable"
@@ -97,8 +97,8 @@ target = "task:generate-dynamic-agent-guidance"
 <a id="s-09NE5NTE6V"></a>
 ## Objective
 
-Make the CLI-emitted docgraph skill discoverable and current in each configured agent
-environment without repository-specific copies or symlinks. Keep stable operating
+Make the CLI-emitted docgraph skill discoverable and current at each explicitly
+configured skill target. Consumers may manage additional links or copies. Keep stable operating
 guidance authored, but derive model inventories and compatibility metadata from their
 actual implementation or repository configuration.
 
@@ -130,7 +130,7 @@ only if `instructions check` verifies the locations agents actually load.
    compatibility contract in the product references.
 2. Classify skill content as authored guidance, CLI-contract material, or
    repository-specific generated context, and eliminate duplicate inventories.
-3. Implement multiple configured targets and verify every managed target while
+3. Implement multiple explicit targets and verify every managed target while
    preserving repository-owned additions.
 
 <a id="s-D8D68VN39H"></a>
@@ -157,7 +157,7 @@ paths with safe previews and precise per-target status.
 <a id="s-8AA9RT3YK1"></a>
 ## Completion
 
-A freshly initialized repository exposes a named, described docgraph skill to each
-configured agent without manual bridging. `instructions check` detects missing,
+A freshly initialized repository can expose a named, described docgraph skill at each
+explicitly requested target. `instructions check` detects missing,
 modified, or incompatible copies at every target, and generated inventories cannot
 drift from `docgraph describe` or the current repository model.

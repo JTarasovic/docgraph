@@ -9,7 +9,7 @@ use docgraph_core::{
     PortableSkillStatus, ProjectConfig, PropertyConfig, PropertyType, QueryValueType,
     RelationOrigin, Repository, RepositoryConfig, SCHEMA_VERSION, ScalarValue, SemanticChange,
     SemanticChangeReviewer, SemanticSearchHit, SemanticSearchMode, SemanticSearchResult,
-    SemanticSection, TraversalDirection, ValidationConfig, Validator,
+    SemanticSection, TraversalDirection, ValidationConfig, Validator, validate_skill_targets,
 };
 use docgraph_logic::{QueryEngine, QueryValue};
 use serde::Deserialize;
@@ -899,15 +899,7 @@ fn initialize(
         .iter()
         .map(|path| normalized_relative_path(path, "skill target"))
         .collect::<Result<_, _>>()?;
-    let mut unique_skill_targets = HashSet::new();
-    if requested_skill_targets
-        .iter()
-        .any(|target| !unique_skill_targets.insert(target.clone()))
-    {
-        return Err(CliError::message(
-            "--skill-target cannot contain duplicates",
-        ));
-    }
+    validate_skill_targets(&requested_skill_targets).map_err(CliError::message)?;
     let mut unique_targets = HashSet::new();
     if requested_targets
         .iter()

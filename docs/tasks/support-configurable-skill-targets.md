@@ -2,7 +2,7 @@
 
 id = "task:support-configurable-skill-targets"
 type = "task"
-state = "backlog"
+state = "done"
 
 [properties]
 title = "Support configurable agent skill targets"
@@ -48,5 +48,5 @@ path blindly.
 - Check reports current, missing, modified, incompatible, and conflicting targets.
 - Broken symlinks, path escapes, overlapping targets, and concurrent changes have
   deterministic safe behavior.
-- Existing repositories using the default path continue to work with a documented
-  migration path.
+- Existing repositories without explicit skill targets opt out; their old bundle files
+  remain untouched for owners to remove or reconfigure manually.

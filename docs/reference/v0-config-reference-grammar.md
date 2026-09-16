@@ -1427,7 +1427,8 @@ accepts repeatable `--skill-target PATH` options and writes their values to the 
 configuration. No option means no skill target. Existing configurations without the
 field also opt out, and existing bundle files are left untouched.
 Configured targets are real directories; docgraph refuses targets that pass through a
-symlink. Consumers manage any additional links or copies themselves.
+symlink. Duplicate or nested skill targets are invalid. Consumers manage any
+additional links or copies themselves.
 
 Each installed bundle's `skill.toml` records `schema_version`, `contract_version`,
 the exact compatible `cli_version`, and the managed payload filenames. The CLI

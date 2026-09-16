@@ -254,11 +254,30 @@ fn init_adopts_existing_configuration_without_rewriting_it() {
 #[test]
 fn init_installs_only_explicit_skill_targets() {
     let none = Fixture::git("init-no-skills");
+    fs::create_dir_all(none.0.join("skills/docgraph")).unwrap();
+    fs::write(none.0.join("skills/docgraph/legacy.md"), "keep me\n").unwrap();
     assert!(none.run(&["init"]).status.success());
-    assert!(!none.0.join("skills/docgraph").exists());
+    assert_eq!(
+        fs::read_to_string(none.0.join("skills/docgraph/legacy.md")).unwrap(),
+        "keep me\n"
+    );
+    assert!(!none.0.join("skills/docgraph/SKILL.md").exists());
     let check: Value =
         serde_json::from_slice(&none.run(&["--json", "instructions", "check"]).stdout).unwrap();
     assert_eq!(check["skills"], serde_json::json!([]));
+    let project_path = none.0.join(".docgraph/project.toml");
+    let project = fs::read_to_string(&project_path).unwrap();
+    fs::write(
+        &project_path,
+        project.replace(
+            "skill_targets = []",
+            "skill_targets = [\"skills/docgraph\", \"skills/docgraph/nested\"]",
+        ),
+    )
+    .unwrap();
+    let check = none.run(&["instructions", "check"]);
+    assert!(!check.status.success());
+    assert!(String::from_utf8_lossy(&check.stderr).contains("overlap"));
 
     let multiple = Fixture::git("init-multiple-skills");
     let init = multiple.run(&[
@@ -286,6 +305,18 @@ fn init_installs_only_explicit_skill_targets() {
     let check: Value = serde_json::from_slice(&check.stdout).unwrap();
     assert_eq!(check["skills"][0]["status"], "current");
     assert_eq!(check["skills"][1]["status"], "missing");
+
+    let overlap = Fixture::git("init-overlap-skills");
+    let init = overlap.run(&[
+        "init",
+        "--skill-target",
+        "skills/docgraph",
+        "--skill-target",
+        "skills/docgraph/nested",
+    ]);
+    assert!(!init.status.success());
+    assert!(String::from_utf8_lossy(&init.stderr).contains("overlap"));
+    assert!(!overlap.0.join(".docgraph/project.toml").exists());
 }
 
 #[test]
@@ -1260,6 +1291,14 @@ fn structured_describe_validate_and_unavailable_query_are_stable() {
     assert_eq!(
         complete["logic"]["predicates"],
         describe["logic"]["predicates"]
+    );
+    let historical = Fixture::copy("historical-research");
+    let historical_describe = historical.run(&["--json", "describe", "--all"]);
+    assert!(historical_describe.status.success());
+    let historical_describe: Value = serde_json::from_slice(&historical_describe.stdout).unwrap();
+    assert_eq!(
+        historical_describe["logic"]["predicates"],
+        complete["logic"]["predicates"]
     );
 
     let readable = fixture.run(&["describe", "--all"]);

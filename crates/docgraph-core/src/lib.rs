@@ -23,7 +23,7 @@ pub use config::{
     EntityTypeConfig, ExternalEntitiesConfig, ExternalSourceConfig, FrontmatterConfig,
     GitReferenceConfig, NamedQueryConfig, ProjectConfig, PropertyConfig, PropertyType,
     QueryArgumentConfig, QueryValueType, RelationTypeConfig, RepositoryConfig, ScalarType,
-    ScalarValue, SourceSpan, StateConfig, ValidationConfig, WorkflowConfig,
+    ScalarValue, SourceSpan, StateConfig, ValidationConfig, WorkflowConfig, validate_skill_targets,
 };
 pub use corpus::{CanonicalCorpus, CorpusError, CorpusFile, RepositoryFingerprint};
 pub use derived_index::DerivedSearchHit;

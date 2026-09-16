@@ -9,35 +9,9 @@ section IDs, headings, levels, parents, and line spans before reading a long doc
 positive limit with `--lines` or opt into the complete body with `--all`. Structured
 results distinguish explicit relations, Markdown links, and search matches.
 
-Repository rules in `.docgraph/logic.dl` may call these built-in predicates. The
-argument names also appear in `docgraph describe` and `docgraph describe --all`:
-
-```text
-entity[id]
-entity_type[id, type]
-entity_state[id, state]
-entity_property_string[id, key, value]
-entity_property_integer[id, key, value]
-entity_property_float[id, key, value]
-entity_property_boolean[id, key, value]
-entity_property_datetime[id, key, value]
-relation[source, predicate, target]
-relation_property_string[source, predicate, target, key, value]
-relation_property_integer[source, predicate, target, key, value]
-relation_property_float[source, predicate, target, key, value]
-relation_property_boolean[source, predicate, target, key, value]
-relation_property_datetime[source, predicate, target, key, value]
-section[id, document, heading]
-document[path]
-external_entity[id]
-external_entity_provider[id, provider]
-external_entity_kind[id, kind]
-external_entity_state[id, state]
-external_entity_title[id, title]
-external_entity_url[id, url]
-external_entity_freshness[id, freshness]
-external_entity_attribute[id, key, value]
-```
+Repository rules in `.docgraph/logic.dl` may call built-in predicates. Run
+`docgraph describe --all` for the current names, arities, ordered arguments, and
+value shapes under `logic.predicates`.
 
 Property predicates preserve the declared scalar type. An array uses the predicate
 for its declared item type and contributes one fact per member. For example,
