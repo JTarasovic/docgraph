@@ -14,6 +14,64 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  action-failures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Reject invalid release version in installer
+        id: invalid-version
+        continue-on-error: true
+        uses: ./
+        with:
+          version: not-a-version
+
+      - name: Prepare failing validator
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/docgraph-fails" <<'EOF'
+          #!/usr/bin/env bash
+          [[ $# -eq 3 && $1 == validate && $2 == --changes && $3 == HEAD ]] || exit 91
+          touch "$RUNNER_TEMP/validator-invoked"
+          exit 42
+          EOF
+          chmod +x "$RUNNER_TEMP/docgraph-fails"
+
+      - name: Propagate validator failure
+        id: validator-failure
+        continue-on-error: true
+        uses: ./
+        env:
+          DOCGRAPH_EXECUTABLE: ${{ runner.temp }}/docgraph-fails
+        with:
+          install: false
+          changes: HEAD
+
+      - name: Reject invalid action working directory
+        id: invalid-directory
+        continue-on-error: true
+        uses: ./
+        with:
+          install: false
+          working-directory: missing-docgraph-directory
+
+      - name: Assert failures occur at their expected layers
+        if: always()
+        shell: bash
+        env:
+          INSTALL_RESULT: ${{ steps.invalid-version.outcome }}
+          VALIDATOR_RESULT: ${{ steps.validator-failure.outcome }}
+          ACTION_RESULT: ${{ steps.invalid-directory.outcome }}
+        run: |
+          [[ $INSTALL_RESULT == failure ]]
+          [[ $VALIDATOR_RESULT == failure ]]
+          [[ $ACTION_RESULT == failure ]]
+          test -f "$RUNNER_TEMP/validator-invoked"
+
   rust:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

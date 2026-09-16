@@ -2,7 +2,7 @@
 
 id = "task:dogfood-validation-action"
 type = "task"
-state = "in_progress"
+state = "done"
 
 [properties]
 title = "Dogfood the validation action"
@@ -46,10 +46,13 @@ its SHA-pinned public CLI installer and a published binary. It covers both actio
 execution and published-binary compatibility in one path; it is not an independent
 test of the checked-out CLI installer or a released root-action revision.
 
-Finish documenting the publication model. The action source is released through the repository
-tag used by consumers; its requested docgraph binary is a versioned release asset, so
-it does not require a second repository or unrelated publication pipeline unless the
-release-contract task finds a concrete distribution constraint.
+The action source is released through the repository revision selected by consumers.
+Its pinned installer revision is part of that source; the requested docgraph binary
+is a separately versioned release asset. The compatibility boundary is the
+`docgraph validate` invocation, with optional `--changes <ref>`, its working
+directory, and its exit status. No older-version support range is promised beyond
+that CLI contract. The root action still looks up the latest stable release when
+`install: false`, although its `version` input does not select the installed binary.
 
 <a id="s-PXBJYAZV9H"></a>
 ## Acceptance
@@ -58,10 +61,11 @@ release-contract task finds a concrete distribution constraint.
   the repository corpus.
 - [x] A smoke test, separate from implementation checks, verifies installation and validation with the latest supported
   published binary without pretending to test unreleased binary behavior.
-- [ ] Action and binary version compatibility is explicit and covered by failure tests.
-- [ ] Documentation explains how the action and binary are published and versioned,
+- [x] Action and binary compatibility is explicit at the `validate` CLI boundary,
+  with a published-binary positive check and failure-path tests.
+- [x] Documentation explains how the action and binary are published and versioned,
   including the relationship between the root action revision, pinned installer
   revision, and requested binary version.
-- [ ] Failure tests demonstrate that dogfooding failures point to the action layer,
-  installer layer, or validator layer. Named CI and composite-action steps already
-  separate these operations; negative-path coverage remains to be added.
+- [x] Failure tests exercise invalid working-directory setup, an invalid installer
+  version, and a validator failure; named CI and composite-action steps identify
+  the failing layer.

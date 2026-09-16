@@ -81,6 +81,17 @@ tag otherwise. The release already contains the matching runtime, so no second
 runtime download is needed. With `install: false`, it does not download release
 assets or change the selected tools; `version` is unused, but lookup still runs.
 
+The root action source is published at the repository revision selected by the
+consumer's `uses` SHA. Its pinned installer revision is part of that action source;
+the requested `version` selects a separate, published CLI release asset. The
+validation compatibility contract is the CLI invocation: `docgraph validate`,
+optionally followed by `--changes <ref>`, in the requested working directory. A
+binary that supports this invocation and returns a nonzero status on validation
+failure can be used with the action. This does not imply support for every older
+binary version. CI exercises the checked-out action with the latest stable
+published binary on Linux and Windows and checks that action setup, installation,
+and validation failures stop the action.
+
 ```yaml
 permissions:
   contents: read
