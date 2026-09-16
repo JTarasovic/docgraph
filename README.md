@@ -94,9 +94,9 @@ gh attestation verify <archive> --repo JTarasovic/docgraph   # before unpacking
 the entity types docgraph should enforce. From a Git repository root:
 
 ```sh
-# Claude example; see the configuration reference below for other targets.
+# Claude example; see the configuration reference below for defaults and other targets.
 docgraph init \
-  --name notes \
+  --name my-project-name \
   --documents docs \
   --instruction-target CLAUDE.md \
   --skill-target .claude/skills/docgraph
