@@ -244,7 +244,7 @@ The manifest is keyless-signed with the job's OIDC identity and describes the sa
 archive bytes the release already ships, so it does not alter or supersede the archives'
 dist attestations. Consumers install and verify it with mise:
 
-    mise use packslip:github.com/JTarasovic/docgraph@0.3.0
+    mise use packslip:github.com/JTarasovic/docgraph@0.5.1
     docgraph --version
 
 mise verifies the manifest signature against this repository's workflow identity, then
@@ -252,6 +252,12 @@ the selected artifact's digest and size, before unpacking. Regenerate dist's wor
 with `dist generate --mode ci` after changing the packslip wiring, and confirm the
 `custom-release-packslip` job, the host job's dependency on it, and the
 `artifacts/packslip.sigstore.json` attestation subject are present.
+
+The signing job needs `id-token: write` for keyless Sigstore signing. Because it is a
+reusable workflow, that permission must be granted on the calling job through dist's
+`github-custom-job-permissions` (`release-packslip = { id-token = "write", contents =
+"read" }`); the top-level `contents: write` alone is not enough, and a missing grant
+fails the whole release at startup.
 
 <a id="s-8TZDE68XQA"></a>
 ## Verify and close out

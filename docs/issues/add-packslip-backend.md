@@ -2,7 +2,7 @@
 
 id = "issue:add-packslip-backend"
 type = "issue"
-state = "open"
+state = "resolved"
 
 [properties]
 title = "Add a packslip backend for release distribution"
