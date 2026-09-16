@@ -273,12 +273,14 @@ impl Default for FrontmatterConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct AgentInstructionsConfig {
     pub targets: Vec<PathBuf>,
+    pub skill_targets: Vec<PathBuf>,
 }
 
 impl Default for AgentInstructionsConfig {
     fn default() -> Self {
         Self {
             targets: vec![PathBuf::from("AGENTS.md"), PathBuf::from("CLAUDE.md")],
+            skill_targets: Vec::new(),
         }
     }
 }

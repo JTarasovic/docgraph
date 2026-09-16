@@ -55,8 +55,8 @@ pub use mutation::{
 pub use repository::{DiscoveryError, Repository};
 pub use retrieval::{GraphTraversal, Neighbor, TraversalDirection, TraversalStep};
 pub use skill::{
-    PORTABLE_SKILL_CONTRACT_VERSION, PORTABLE_SKILL_PATH, PortableSkillChange, PortableSkillError,
-    PortableSkillService, PortableSkillStatus,
+    PORTABLE_SKILL_CONTRACT_VERSION, PortableSkillChange, PortableSkillError, PortableSkillService,
+    PortableSkillStatus,
 };
 pub use state::{DerivedState, DerivedStateError, DerivedStatePaths, IndexStatus};
 pub use validation::{ValidationDiagnostic, ValidationLocation, ValidationReport, Validator};

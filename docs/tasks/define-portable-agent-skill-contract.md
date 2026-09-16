@@ -2,7 +2,7 @@
 
 id = "task:define-portable-agent-skill-contract"
 type = "task"
-state = "backlog"
+state = "in_progress"
 
 [properties]
 title = "Define the portable agent skill contract"

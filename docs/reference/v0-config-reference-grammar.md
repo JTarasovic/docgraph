@@ -1420,16 +1420,24 @@ refuse modification and report the conflict. Manual edits inside a valid block a
 reported by `check` and replaced by an explicit `sync`. `sync` uses the safe mutation
 protocol and refuses to overwrite a concurrently changed target.
 
-Instruction maintenance also owns the versioned portable bundle at
-`skills/docgraph`. Its `skill.toml` records `schema_version`, `contract_version`,
+The release supplies the canonical portable bundle. `[agent_instructions].skill_targets`
+lists repository-relative directories where a consuming repository wants that bundle
+installed. The list defaults to empty; an omitted field opts out. `docgraph init`
+accepts repeatable `--skill-target PATH` options and writes their values to the new
+configuration. No option means no skill target. Existing configurations without the
+field also opt out, and existing bundle files are left untouched.
+Configured targets are real directories; docgraph refuses targets that pass through a
+symlink. Consumers manage any additional links or copies themselves.
+
+Each installed bundle's `skill.toml` records `schema_version`, `contract_version`,
 the exact compatible `cli_version`, and the managed payload filenames. The CLI
-embeds that canonical payload. `instructions check` reports the bundle as
+embeds that canonical payload. `instructions check` reports each configured bundle as
 `current`, `missing`, `modified`, or `incompatible`; its JSON result includes a
-top-level `skill` object with `path` and `status`.
+`skills` array with each target's `path` and `status`.
 
 `instructions sync --dry-run` includes exact skill-file patches without writing.
-Applying sync creates or replaces only the manifest's CLI-owned files under
-`skills/docgraph`; unrecognized repository-local files are not deleted or
+Applying sync creates or replaces only the manifest's CLI-owned files under each
+configured skill target; unrecognized repository-local files are not deleted or
 rewritten. Release archives contain the same bundle and packaging rejects a
 manifest whose CLI version differs from the archive version.
 

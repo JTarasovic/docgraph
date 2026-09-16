@@ -6,7 +6,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub const PORTABLE_SKILL_CONTRACT_VERSION: i64 = 1;
-pub const PORTABLE_SKILL_PATH: &str = "skills/docgraph";
 
 const MANAGED_FILES: &[(&str, &str)] = &[
     (
@@ -73,17 +72,32 @@ pub struct PortableSkillChange {
 pub struct PortableSkillService<'a> {
     repository: &'a Repository,
     state: DerivedState,
+    targets: &'a [PathBuf],
 }
 
 impl<'a> PortableSkillService<'a> {
-    pub fn new(repository: &'a Repository) -> Result<Self, PortableSkillError> {
+    pub fn new(
+        repository: &'a Repository,
+        targets: &'a [PathBuf],
+    ) -> Result<Self, PortableSkillError> {
         let state = DerivedState::discover(repository)
             .map_err(|error| PortableSkillError::State(error.to_string()))?;
-        Ok(Self { repository, state })
+        Ok(Self {
+            repository,
+            state,
+            targets,
+        })
     }
 
-    pub fn check(&self) -> Result<PortableSkillStatus, PortableSkillError> {
-        let manifest_path = self.skill_path().join("skill.toml");
+    pub fn check(&self) -> Result<Vec<(PathBuf, PortableSkillStatus)>, PortableSkillError> {
+        self.targets
+            .iter()
+            .map(|target| Ok((target.clone(), self.check_target(target)?)))
+            .collect()
+    }
+
+    fn check_target(&self, target: &Path) -> Result<PortableSkillStatus, PortableSkillError> {
+        let manifest_path = self.skill_path(target)?.join("skill.toml");
         let manifest = match fs::read_to_string(&manifest_path) {
             Ok(source) => source,
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -97,7 +111,7 @@ impl<'a> PortableSkillService<'a> {
 
         let mut modified = false;
         for (name, intended) in MANAGED_FILES {
-            let path = self.skill_path().join(name);
+            let path = self.skill_path(target)?.join(name);
             match fs::read_to_string(&path) {
                 Ok(source) if normalized(&source) == normalized(intended) => {}
                 Ok(_) => modified = true,
@@ -116,20 +130,22 @@ impl<'a> PortableSkillService<'a> {
 
     pub fn sync(&self, dry_run: bool) -> Result<Vec<PortableSkillChange>, PortableSkillError> {
         let mut changes = Vec::new();
-        for (name, embedded) in MANAGED_FILES {
-            let path = self.skill_path().join(name);
-            let original = match fs::read_to_string(&path) {
-                Ok(source) => Some(source),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-                Err(source) => return Err(PortableSkillError::io(&path, source)),
-            };
-            let intended = normalized(embedded);
-            if original.as_deref().map(normalized).as_deref() != Some(&intended) {
-                changes.push(PortableSkillChange {
-                    path: PathBuf::from(PORTABLE_SKILL_PATH).join(name),
-                    original,
-                    intended,
-                });
+        for target in self.targets {
+            for (name, embedded) in MANAGED_FILES {
+                let path = self.skill_path(target)?.join(name);
+                let original = match fs::read_to_string(&path) {
+                    Ok(source) => Some(source),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+                    Err(source) => return Err(PortableSkillError::io(&path, source)),
+                };
+                let intended = normalized(embedded);
+                if original.as_deref().map(normalized).as_deref() != Some(&intended) {
+                    changes.push(PortableSkillChange {
+                        path: target.join(name),
+                        original,
+                        intended,
+                    });
+                }
             }
         }
         if dry_run || changes.is_empty() {
@@ -146,7 +162,7 @@ impl<'a> PortableSkillService<'a> {
             }
         })?;
         for change in &changes {
-            let absolute = self.repository.root().join(&change.path);
+            let absolute = self.skill_path(&change.path)?;
             let current = match fs::read_to_string(&absolute) {
                 Ok(source) => Some(source),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -157,7 +173,7 @@ impl<'a> PortableSkillService<'a> {
             }
         }
         for change in &changes {
-            let absolute = self.repository.root().join(&change.path);
+            let absolute = self.skill_path(&change.path)?;
             if let Some(parent) = absolute.parent() {
                 fs::create_dir_all(parent)
                     .map_err(|source| PortableSkillError::io(parent, source))?;
@@ -167,8 +183,31 @@ impl<'a> PortableSkillService<'a> {
         Ok(changes)
     }
 
-    fn skill_path(&self) -> PathBuf {
-        self.repository.root().join(PORTABLE_SKILL_PATH)
+    fn skill_path(&self, target: &Path) -> Result<PathBuf, PortableSkillError> {
+        if target.as_os_str().is_empty()
+            || target.is_absolute()
+            || target.components().any(|component| {
+                matches!(
+                    component,
+                    std::path::Component::ParentDir | std::path::Component::Prefix(_)
+                )
+            })
+        {
+            return Err(PortableSkillError::InvalidTarget(target.to_path_buf()));
+        }
+        let mut path = self.repository.root().to_path_buf();
+        for component in target.components() {
+            path.push(component);
+            match fs::symlink_metadata(&path) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(PortableSkillError::SymlinkTarget(target.to_path_buf()));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(source) => return Err(PortableSkillError::io(&path, source)),
+            }
+        }
+        Ok(path)
     }
 }
 
@@ -203,6 +242,8 @@ fn replace_file(path: &Path, intended: &str) -> Result<(), PortableSkillError> {
 #[derive(Debug)]
 pub enum PortableSkillError {
     State(String),
+    InvalidTarget(PathBuf),
+    SymlinkTarget(PathBuf),
     ConcurrentEdit(PathBuf),
     Locked(PathBuf),
     Io { path: PathBuf, source: io::Error },
@@ -221,6 +262,16 @@ impl fmt::Display for PortableSkillError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::State(message) => formatter.write_str(message),
+            Self::InvalidTarget(path) => write!(
+                formatter,
+                "skill target {} must be repository-relative",
+                path.display()
+            ),
+            Self::SymlinkTarget(path) => write!(
+                formatter,
+                "skill target {} passes through a symlink",
+                path.display()
+            ),
             Self::ConcurrentEdit(path) => {
                 write!(
                     formatter,

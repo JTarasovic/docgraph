@@ -2,7 +2,7 @@
 
 id = "plan:make-agent-guidance-portable"
 type = "plan"
-state = "proposed"
+state = "active"
 
 [properties]
 title = "Make generated agent guidance portable"

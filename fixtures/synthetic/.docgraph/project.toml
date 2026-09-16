@@ -8,6 +8,7 @@ root = "docs"
 
 [agent_instructions]
 targets = ["AGENTS.md", "CLAUDE.md"]
+skill_targets = ["skills/docgraph"]
 
 [references.git]
 provider = "github"

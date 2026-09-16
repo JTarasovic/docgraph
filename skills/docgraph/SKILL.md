@@ -1,3 +1,8 @@
+---
+name: docgraph
+description: Use docgraph to inspect and maintain a repository's configured document graph, including managed frontmatter, relationships, workflows, and validation.
+---
+
 # docgraph
 
 Use docgraph for repository-native document graphs. In an unconfigured Git

@@ -116,7 +116,14 @@ fn init_previews_bootstraps_and_is_idempotent() {
     let authored = "# Repository guidance\n\nKeep this prose.\n";
     fs::write(&agents, authored).unwrap();
 
-    let preview = fixture.run(&["init", "--name", "example", "--dry-run"]);
+    let preview = fixture.run(&[
+        "init",
+        "--name",
+        "example",
+        "--skill-target",
+        ".claude/skills/docgraph",
+        "--dry-run",
+    ]);
     assert!(
         preview.status.success(),
         "{}",
@@ -124,7 +131,8 @@ fn init_previews_bootstraps_and_is_idempotent() {
     );
     let preview = String::from_utf8_lossy(&preview.stdout);
     assert!(preview.contains(".docgraph/project.toml"));
-    assert!(preview.contains("skills/docgraph/SKILL.md"));
+    assert!(preview.contains(".claude"));
+    assert!(preview.contains("SKILL.md"));
     assert!(preview.contains("AGENTS.md"));
     assert!(preview.contains("CLAUDE.md"));
     assert!(preview.contains("would create directory docs"));
@@ -133,7 +141,13 @@ fn init_previews_bootstraps_and_is_idempotent() {
     assert!(!fixture.0.join("docs").exists());
     assert_eq!(fs::read_to_string(&agents).unwrap(), authored);
 
-    let apply = fixture.run(&["init", "--name", "example"]);
+    let apply = fixture.run(&[
+        "init",
+        "--name",
+        "example",
+        "--skill-target",
+        ".claude/skills/docgraph",
+    ]);
     assert!(
         apply.status.success(),
         "{}",
@@ -143,8 +157,14 @@ fn init_previews_bootstraps_and_is_idempotent() {
     assert!(project.contains("name = \"example\""));
     assert!(project.contains("root = \"docs\""));
     assert!(project.contains("targets = [\"AGENTS.md\", \"CLAUDE.md\"]"));
+    assert!(project.contains("skill_targets = ["));
     assert!(fixture.0.join("docs").is_dir());
-    assert!(fixture.0.join("skills/docgraph/skill.toml").is_file());
+    assert!(
+        fixture
+            .0
+            .join(".claude/skills/docgraph/skill.toml")
+            .is_file()
+    );
     assert!(fixture.0.join("CLAUDE.md").is_file());
     let agents_after = fs::read_to_string(&agents).unwrap();
     assert!(agents_after.starts_with(authored));
@@ -223,12 +243,49 @@ fn init_adopts_existing_configuration_without_rewriting_it() {
     );
     assert_eq!(fs::read_to_string(project_path).unwrap(), project);
     assert!(fixture.0.join("knowledge").is_dir());
-    assert!(fixture.0.join("skills/docgraph/skill.toml").is_file());
+    assert!(!fixture.0.join("skills/docgraph/skill.toml").is_file());
     let guidance = fs::read_to_string(guidance).unwrap();
     assert!(guidance.starts_with(authored));
     assert!(guidance.contains("<!-- docgraph:agent-instructions:v1:begin -->"));
     assert!(!fixture.0.join("AGENTS.md").exists());
     assert!(!fixture.0.join("CLAUDE.md").exists());
+}
+
+#[test]
+fn init_installs_only_explicit_skill_targets() {
+    let none = Fixture::git("init-no-skills");
+    assert!(none.run(&["init"]).status.success());
+    assert!(!none.0.join("skills/docgraph").exists());
+    let check: Value =
+        serde_json::from_slice(&none.run(&["--json", "instructions", "check"]).stdout).unwrap();
+    assert_eq!(check["skills"], serde_json::json!([]));
+
+    let multiple = Fixture::git("init-multiple-skills");
+    let init = multiple.run(&[
+        "init",
+        "--skill-target",
+        ".claude/skills/docgraph",
+        "--skill-target",
+        ".agents/skills/docgraph",
+    ]);
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+    for target in [".claude/skills/docgraph", ".agents/skills/docgraph"] {
+        assert!(multiple.0.join(target).join("SKILL.md").is_file());
+    }
+    let check = multiple.run(&["--json", "instructions", "check"]);
+    assert!(check.status.success());
+    let check: Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check["skills"].as_array().unwrap().len(), 2);
+    fs::remove_file(multiple.0.join(".agents/skills/docgraph/SKILL.md")).unwrap();
+    let check = multiple.run(&["--json", "instructions", "check"]);
+    assert!(!check.status.success());
+    let check: Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check["skills"][0]["status"], "current");
+    assert_eq!(check["skills"][1]["status"], "missing");
 }
 
 #[test]
@@ -1704,7 +1761,7 @@ fn generated_agent_guidance_is_checked_and_safely_synchronized() {
     let incompatible_check = fixture.run(&["--json", "instructions", "check"]);
     assert!(!incompatible_check.status.success());
     let incompatible_check: Value = serde_json::from_slice(&incompatible_check.stdout).unwrap();
-    assert_eq!(incompatible_check["skill"]["status"], "incompatible");
+    assert_eq!(incompatible_check["skills"][0]["status"], "incompatible");
     assert!(fixture.run(&["instructions", "sync"]).status.success());
 
     let skill = fixture.0.join("skills/docgraph/querying.md");
@@ -1712,7 +1769,7 @@ fn generated_agent_guidance_is_checked_and_safely_synchronized() {
     let missing_check = fixture.run(&["--json", "instructions", "check"]);
     assert!(!missing_check.status.success());
     let missing_check: Value = serde_json::from_slice(&missing_check.stdout).unwrap();
-    assert_eq!(missing_check["skill"]["status"], "missing");
+    assert_eq!(missing_check["skills"][0]["status"], "missing");
     assert!(fixture.run(&["instructions", "sync"]).status.success());
 
     let stale_skill = format!("{}\nLocal mutation.\n", fs::read_to_string(&skill).unwrap());
@@ -1722,7 +1779,7 @@ fn generated_agent_guidance_is_checked_and_safely_synchronized() {
     let skill_check = fixture.run(&["--json", "instructions", "check"]);
     assert!(!skill_check.status.success());
     let skill_check: Value = serde_json::from_slice(&skill_check.stdout).unwrap();
-    assert_eq!(skill_check["skill"]["status"], "modified");
+    assert_eq!(skill_check["skills"][0]["status"], "modified");
 
     let skill_preview = fixture.run(&["instructions", "sync", "--dry-run"]);
     assert!(skill_preview.status.success());
