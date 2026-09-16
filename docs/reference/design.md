@@ -948,7 +948,7 @@ Agent guidance is part of the product interface.
 ### 11.1 Progressive-disclosure skill package
 
 ```text
-skills/docgraph/
+.agents/skills/docgraph/
   SKILL.md
   config-authorship.md
   commands.md

@@ -12,7 +12,7 @@ pull-request titles.
 
 ## Dogfooding boundary
 
-Docgraph manages only the configured `docs` corpus. Use its CLI for managed frontmatter changes; prose remains directly editable. Do not interpret ordinary links as graph policy. Generated docgraph instructions may extend this file inside their marked block; they do not replace these implementation instructions.
+Docgraph manages only the configured `docs` corpus. Use the `docgraph` skill for task guidance and its CLI for managed frontmatter changes; prose remains directly editable. Do not interpret ordinary links as graph policy. Generated docgraph instructions may extend this file inside their marked block; they do not replace these implementation instructions.
 
 <!-- docgraph:agent-instructions:v1:begin -->
 This repository uses docgraph.

@@ -10,47 +10,47 @@ pub const PORTABLE_SKILL_CONTRACT_VERSION: i64 = 1;
 const MANAGED_FILES: &[(&str, &str)] = &[
     (
         "SKILL.md",
-        include_str!("../../../skills/docgraph/SKILL.md"),
+        include_str!("../../../.agents/skills/docgraph/SKILL.md"),
     ),
     (
         "commands.md",
-        include_str!("../../../skills/docgraph/commands.md"),
+        include_str!("../../../.agents/skills/docgraph/commands.md"),
     ),
     (
         "config-authorship.md",
-        include_str!("../../../skills/docgraph/config-authorship.md"),
+        include_str!("../../../.agents/skills/docgraph/config-authorship.md"),
     ),
     (
         "document-authoring.md",
-        include_str!("../../../skills/docgraph/document-authoring.md"),
+        include_str!("../../../.agents/skills/docgraph/document-authoring.md"),
     ),
     (
         "mutations.md",
-        include_str!("../../../skills/docgraph/mutations.md"),
+        include_str!("../../../.agents/skills/docgraph/mutations.md"),
     ),
     (
         "querying.md",
-        include_str!("../../../skills/docgraph/querying.md"),
+        include_str!("../../../.agents/skills/docgraph/querying.md"),
     ),
     (
         "relationships.md",
-        include_str!("../../../skills/docgraph/relationships.md"),
+        include_str!("../../../.agents/skills/docgraph/relationships.md"),
     ),
     (
         "repository-maintenance.md",
-        include_str!("../../../skills/docgraph/repository-maintenance.md"),
+        include_str!("../../../.agents/skills/docgraph/repository-maintenance.md"),
     ),
     (
         "skill.toml",
-        include_str!("../../../skills/docgraph/skill.toml"),
+        include_str!("../../../.agents/skills/docgraph/skill.toml"),
     ),
     (
         "troubleshooting.md",
-        include_str!("../../../skills/docgraph/troubleshooting.md"),
+        include_str!("../../../.agents/skills/docgraph/troubleshooting.md"),
     ),
     (
         "workflows.md",
-        include_str!("../../../skills/docgraph/workflows.md"),
+        include_str!("../../../.agents/skills/docgraph/workflows.md"),
     ),
 ];
 

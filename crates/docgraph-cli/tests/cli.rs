@@ -42,7 +42,7 @@ impl Fixture {
         copy_directory(&source, &target);
         let portable_skill = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
-            .join("skills/docgraph");
+            .join(".agents/skills/docgraph");
         copy_directory(&portable_skill, &target.join("skills/docgraph"));
         Self(target)
     }

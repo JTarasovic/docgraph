@@ -117,7 +117,7 @@ docgraph validate
 ```
 
 Add properties, relations, and workflows the same way; see
-[config authorship](skills/docgraph/config-authorship.md) and the
+[config authorship](.agents/skills/docgraph/config-authorship.md) and the
 [configuration reference](docs/reference/v0-config-reference-grammar.md). Add
 `--json` to any command when a script or agent needs structured output.
 

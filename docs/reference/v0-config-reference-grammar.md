@@ -1386,7 +1386,7 @@ Diagnostics should include config file and source span.
 ## 25. Agent Skill Structure
 
 ```text
-skills/docgraph/
+.agents/skills/docgraph/
   SKILL.md
   config-authorship.md
   commands.md
