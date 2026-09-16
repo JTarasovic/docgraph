@@ -53,7 +53,10 @@ not complete by itself. Before merging such a pull request:
 
 Renovate pull requests use the normal pull-request workflow and receive no CI or
 merge bypass. The Linux `rust` job runs the complete shared contract, including Cargo
-policy and unused-dependency checks. The path-filtered `windows-e2e` workflow runs the
-locked test suite for changes that can affect Windows behavior. Because GitHub leaves
-path-filtered required checks pending when their workflow does not run, require `rust`
-globally but do not make `windows-e2e` an unconditional branch-protection check.
+policy and unused-dependency checks. The `quality-gate` job runs on every pull request
+and consolidates the fast merge gates — the Conventional Commit title check and the
+validation-action failure-propagation checks — into one billed job. The path-filtered
+`windows-e2e` workflow runs the locked test suite for changes that can affect Windows
+behavior. Because GitHub leaves path-filtered required checks pending when their
+workflow does not run, require `rust` and `quality-gate` globally but do not make
+`windows-e2e` an unconditional branch-protection check.
