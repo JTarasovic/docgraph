@@ -60,6 +60,11 @@ predicate = "implements"
 target = "reference:design#s-Y4QFB1ZND8"
 
 [[docgraph_generated.incoming]]
+source = "plan:overhaul-onboarding-readme"
+predicate = "implements"
+target = "reference:design#s-YNPWHT3H8T"
+
+[[docgraph_generated.incoming]]
 source = "plan:project-aware-commands"
 predicate = "implements"
 target = "reference:design#s-DAR1R6WHJE"
@@ -103,6 +108,16 @@ target = "reference:design#s-7BBMBXC9RK"
 source = "task:index-searchable-markdown-content"
 predicate = "implements"
 target = "reference:design#s-FDMHXV5Q4Q"
+
+[[docgraph_generated.incoming]]
+source = "task:rewrite-project-overview"
+predicate = "implements"
+target = "reference:design#s-FEFSK4BQTV"
+
+[[docgraph_generated.incoming]]
+source = "task:rewrite-project-overview"
+predicate = "implements"
+target = "reference:design#s-YNPWHT3H8T"
 
 [[docgraph_generated.incoming]]
 source = "task:version-portable-agent-skill"
@@ -185,6 +200,11 @@ type = "implemented_by"
 target = "task:index-searchable-markdown-content"
 
 [[docgraph_generated.inverses]]
+source = "reference:design#s-FEFSK4BQTV"
+type = "implemented_by"
+target = "task:rewrite-project-overview"
+
+[[docgraph_generated.inverses]]
 source = "reference:design#s-Q30QTKRZQ6"
 type = "implemented_by"
 target = "plan:make-agent-guidance-portable"
@@ -208,6 +228,16 @@ target = "task:define-external-entity-source-contract"
 source = "reference:design#s-Y4QFB1ZND8"
 type = "implemented_by"
 target = "plan:make-agent-guidance-portable"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-YNPWHT3H8T"
+type = "implemented_by"
+target = "plan:overhaul-onboarding-readme"
+
+[[docgraph_generated.inverses]]
+source = "reference:design#s-YNPWHT3H8T"
+type = "implemented_by"
+target = "task:rewrite-project-overview"
 
 [[docgraph_generated.backlinks]]
 source = "reference:config-grammar#s-P73QA8YDQB"

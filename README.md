@@ -1,173 +1,203 @@
 # docgraph
 
-docgraph is a repository-native document graph for Markdown documentation. It
-keeps document identity, typed metadata, workflows, and explicit semantic
-relationships in Git alongside the prose, then provides search, traversal,
-validation, and safe mutation commands for people and software agents.
+[![CI](https://github.com/JTarasovic/docgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/JTarasovic/docgraph/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/JTarasovic/docgraph?sort=semver)](https://github.com/JTarasovic/docgraph/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+docgraph makes an arbitrary ontology enforceable in an ordinary Git repository.
+
+- **What it is.** A repository-native engine for codifying an *ontology* — entity
+  types, typed properties, relationships, and workflow states — over Markdown
+  documentation, then querying, validating, and safely mutating that structure.
+  The mechanism lives in the tool; the ontology and policy are defined by the
+  repository.
+- **The problem it solves.** Structured document semantics drift. Humans, and
+  especially agents, don't reliably keep entity state, cross-references, and
+  relationships consistent — even with explicit instructions — and end up
+  reconstructing meaning with repo-wide grep and inconsistent hand-edits. Any
+  state that lives only in an agent's context gets compacted, cleared, or ignored,
+  and can't be edited, configured, or queried.
+- **What docgraph does about it.** It makes the codified semantics canonical in
+  Git alongside the prose — durable, user-editable, configurable, and queryable —
+  and answers impact through the tool instead of grep. This works for any ontology
+  the repository declares; issue/task/plan workflow tracking is one example of what
+  you can model, not the definition of the tool.
+- **How it works.** Markdown and frontmatter in Git are canonical; the graph,
+  index, and derived state are disposable and rebuildable. Humans and agents edit
+  prose freely but change managed state through docgraph commands that validate
+  impact before writing. See [`docs/reference/design.md`](docs/reference/design.md)
+  for the full model, and the [Quickstart](#quickstart) for hands-on.
+
+## Table of contents
+
+- [Status and support](#status-and-support)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [GitHub Actions validation](#github-actions-validation)
+- [Safe editing boundary](#safe-editing-boundary)
+- [Security and attestations](#security-and-attestations)
+- [License](#license)
+- [Changelog](#changelog)
+- [Contributing](#contributing)
+- [Getting help](#getting-help)
 
 ## Status and support
 
 Interfaces and configuration are still evolving before 1.0, so treat
-compatibility as best effort and pin the release used by
-automation. Initial release artifacts target x86-64 Windows and x86-64 Linux;
-macOS and ARM artifacts are not provided yet.
-
-Contributors can rehearse and publish releases with the
-[release runbook](docs/reference/release-workflow.md).
+compatibility as best effort and pin the release used by automation. Release
+artifacts target **x86-64 Windows and x86-64 Linux only**; macOS and ARM artifacts
+are not provided yet.
 
 ## Installation
 
-Release binaries are published through the repository's
+Prebuilt archives for `x86_64-pc-windows-msvc` and `x86_64-unknown-linux-gnu` are
+published on the
 [latest GitHub release](https://github.com/JTarasovic/docgraph/releases/latest).
-Choose the archive for `x86_64-pc-windows-msvc` or
-`x86_64-unknown-linux-gnu`, unpack it, and keep
-the `docgraph` executable beside the adjacent `docgraph-logic-runtime` and
-license files included in that archive. The matching portable agent skill is
-included under `skills/docgraph` and is also embedded in the CLI for verified
-repository installation. Put the unpacked directory on `PATH`,
-or invoke the executable by its full path. Each archive has an adjacent
-`.sha256` checksum file. docgraph is distributed under the MIT license; the
-bundled logic runtime retains its own notices under `THIRD_PARTY_LICENSES`.
+Each archive bundles the `docgraph` executable, its `docgraph-logic-runtime`
+sidecar, the portable agent skill under `skills/docgraph`, and the license files.
 
-Check an installation with:
+### With mise (recommended)
 
-```text
+```toml
+# mise.toml — installs docgraph + its logic-runtime sidecar and verifies the
+# release's GitHub attestation and SLSA provenance by default; lockfile = true
+# records the verified provenance so it is pinned and auditable.
+[settings]
+lockfile = true
+
+[tools]
+"github:JTarasovic/docgraph" = "<release-tag>"
+```
+
+```sh
+mise install       # verifies attestation, writes provenance_verified to mise.lock
 docgraph --version
-docgraph --help
 ```
 
-## GitHub Actions validation
+### Manual install
 
-The validation action installs a verified release and its matching runtime by default.
-The public actions use `gh`
-and standard runner tools; consumers need no Rust, mise, or docgraph source checkout.
-Pin the actions to reviewed full commit SHAs. Omit `version` to install the latest
-stable docgraph release, or select an exact release explicitly:
-
-```yaml
-permissions:
-  contents: read
-  attestations: read
-
-steps:
-  - uses: actions/checkout@<full-commit-sha>
-  - uses: JTarasovic/docgraph@<full-commit-sha>
-    with:
-      version: <exact-release-tag>
+```sh
+# gh is required for attestation verification anyway, so use it to fetch the release
+gh release download <release-tag> --repo JTarasovic/docgraph --pattern '*'
+gh attestation verify <archive> --repo JTarasovic/docgraph   # before unpacking
+# then unpack, keeping docgraph beside docgraph-logic-runtime, and put it on PATH
 ```
-
-Set `install: false` to validate with tools already installed; `version` is then
-unused. Release lookup still runs using `token` (the workflow token by default).
-`JTarasovic/docgraph/install@<full-commit-sha>` installs the
-CLI and matching runtime with checksum and attestation verification, but does not
-run `docgraph validate` against your repository's documents.
-`JTarasovic/docgraph/install-runtime@<full-commit-sha>` also installs the pinned
-sidecar independently, for example when testing a source build. Both installers
-require valid producer attestations and SHA-256 checksums.
-
-See [the validation action contract](docs/reference/validation-action.md) for
-working-directory, change-aware validation, supported runners, and outputs.
 
 ## Quickstart
 
-docgraph operates on the configured Markdown corpus in the current Git repository.
-From the repository root, preview and create the minimal configuration, compatible
-portable skill, agent guidance, and default `docs` directory:
+`docgraph init` scaffolds the configuration but an **empty ontology** — you declare
+the entity types docgraph should enforce. From a Git repository root:
 
-```text
-docgraph init --dry-run
+```sh
 docgraph init
-```
 
-The default project name is the Git worktree directory name. Use `--name`,
-`--documents`, or repeated `--instruction-target` options to override new-project
-defaults. Existing valid configuration is adopted without rewriting it; conflicting
-options or ambiguous `.docgraph` state are refused.
+# Declare a minimal ontology: one entity type with a required title.
+cat > .docgraph/entities.toml <<'EOF'
+[entity.note]
+description = "A short note."
 
-Inspect the model and validate the complete corpus first:
+[entity.note.property.title]
+type = "string"
+required = true
+EOF
 
-```text
-docgraph describe
+docgraph describe                 # confirm the "note" type is registered
+docgraph document create docs/notes/first.md --id note:first --type note --title "First note"
 docgraph validate
 ```
 
-To bring an existing Markdown file under management, use `adopt`. The command
-adds the managed identity while preserving authored prose and unrelated
-frontmatter. Preview a change before applying it:
+Add properties, relations, and workflows the same way; see
+[config authorship](skills/docgraph/config-authorship.md) and the
+[configuration reference](docs/reference/v0-config-reference-grammar.md). Add
+`--json` to any command when a script or agent needs structured output.
 
-```text
-docgraph adopt <path-to-existing-markdown> --id <entity-id> --type <configured-type> --dry-run
-docgraph adopt <path-to-existing-markdown> --id <entity-id> --type <configured-type>
-docgraph frontmatter sync
-docgraph validate
+## GitHub Actions validation
+
+The action installs a checksum- and attestation-verified release and its matching
+runtime, then runs `docgraph validate` against your corpus. Consumers need no Rust,
+mise, or docgraph source checkout. Pin every `uses:` to a reviewed full commit SHA
+(shown below as `<sha>`).
+
+The jobs below each show one supported mode:
+
+```yaml
+# .github/workflows/docgraph.yml
+name: docgraph
+on: [push, pull_request]
+
+permissions:
+  contents: read
+  attestations: read   # required for producer-attestation verification on install
+
+jobs:
+  # Default: install a verified release + runtime, then run `docgraph validate`.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - uses: JTarasovic/docgraph@<sha>
+        with:
+          version: <exact-release-tag>   # optional; omit to use the latest stable release
+
+  # Validate with docgraph already on the runner. `version` is unused, but release
+  # lookup still runs using `token` (the workflow token by default).
+  validate-preinstalled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - uses: JTarasovic/docgraph@<sha>
+        with:
+          install: "false"
+
+  # Install only, without validating: the CLI + runtime (checksum + attestation
+  # verified), and separately just the runtime sidecar (e.g. testing a source build).
+  install-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: JTarasovic/docgraph/install@<sha>
+        with:
+          version: <exact-release-tag>
+      - uses: JTarasovic/docgraph/install-runtime@<sha>
+        with:
+          version: <exact-release-tag>
 ```
 
-The entity type and properties must be declared in the repository's
-`.docgraph/entities.toml`. For a new managed document, use the configured type
-and its required title property:
-
-```text
-docgraph document create docs/tasks/next.md --id task:next --type task --title "Next task" --dry-run
-```
-
-After authoring Markdown, normalize headings and validate again:
-
-```text
-docgraph normalize --dry-run
-docgraph normalize
-docgraph frontmatter sync
-docgraph validate
-```
-
-Use `docgraph search "term"`, `docgraph get <entity>`, `docgraph neighbors
-<entity>`, and `docgraph context <entity>` to inspect the indexed corpus. Use
-`--json` on commands when a script or agent needs structured output. For the
-full command and configuration reference, see
-[`docs/reference/v0-config-reference-grammar.md`](docs/reference/v0-config-reference-grammar.md).
-
-Configured external entity sources can enrich canonical forge identities without
-copying remote content into Markdown. For GitHub, add an `external_entities` source
-to `.docgraph/project.toml`; public reads need no token, while authenticated or
-higher-rate-limit reads use the environment variable named by `token_env` (for
-example `GITHUB_TOKEN`). Private repositories may instead configure an explicit
-credential helper such as `token_command = ["gh", "auth", "token"]`; the returned
-token is held in memory only. `get` refreshes one requested identity and project queries or
-search refresh the configured repository with one bounded request after the cache
-TTL. Warm cache entries remain available offline and are labeled stale when refresh
-fails; an empty cache still preserves the canonical external identity. Delete the
-per-worktree docgraph state at any time to rebuild derived data without losing
-authored semantics.
+Both installers require valid producer attestations and SHA-256 checksums. See
+[the validation action contract](docs/reference/validation-action.md) for
+working-directory, change-aware validation, supported runners, and outputs.
 
 ## Safe editing boundary
 
-Markdown prose is directly editable. Managed identity, properties, workflow
-state, and semantic relationships should be changed with docgraph commands;
-generated frontmatter is a read model and should be refreshed with
-`docgraph frontmatter sync`. Preview substantial mutations with `--dry-run`,
-then run `docgraph validate`.
+Markdown prose is directly editable. Managed identity, properties, workflow state,
+and semantic relationships should be changed with docgraph commands; generated
+frontmatter is a read model and should be refreshed with
+`docgraph frontmatter sync`. Preview substantial mutations with `--dry-run`, then
+run `docgraph validate`.
 
-## Building from source
+## Security and attestations
 
-The repository pins its toolchain and task commands with mise. With Rust and
-mise installed, run:
+Every release archive ships with a SHA-256 checksum and a producer attestation, so
+consumers can verify that an artifact was built from this repository before running
+it. Installing [with mise](#with-mise-recommended) verifies the attestation by
+default; a [manual install](#manual-install) verifies it with `gh attestation
+verify`; and the [validation action](#github-actions-validation) installers verify
+it in CI. To report a vulnerability, follow [`SECURITY.md`](SECURITY.md).
 
-```text
-mise run check-local
-```
+## License
 
-This prepares the pinned native logic runtime for the current Linux or Windows host,
-then runs the shared `mise run check` contract: formatting, lint, tests, managed-change
-validation, dependency policy, and unused-dependency detection. All Cargo build and
-test commands use `Cargo.lock`.
+docgraph is distributed under the [MIT license](LICENSE). The bundled logic runtime
+retains its own notices under `THIRD_PARTY_LICENSES`.
 
-Linux CI installs a checksum-verified packaged runtime, then runs the complete
-`mise run check` contract. Set `DOCGRAPH_CHANGE_BASE` to review managed changes
-against a ref other than the local default, `HEAD`.
+## Changelog
 
-A separate path-filtered Windows workflow starts in parallel for changes to Rust,
-fixtures, the validation action, or native-runtime infrastructure. It uses a shallow
-checkout, installs only Rust and nextest, verifies the packaged Windows runtime, and
-runs the shared test suite through the named `windows-e2e` overlay. Documentation-only
-changes do not allocate a Windows runner. A single developer host cannot reproduce
-the other operating system's runtime installation, path behavior, or end-to-end
-execution; CI owns that cross-platform coverage.
+Notable changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
+
+## Contributing
+
+Building from source, the local check workflow, CI notes, and the release runbook
+live in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Getting help
+
+File bugs and feature requests, and ask questions, in the
+[issue tracker](https://github.com/JTarasovic/docgraph/issues).
