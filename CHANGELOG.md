@@ -7,6 +7,20 @@ All notable changes to docgraph are documented here. The format follows
 ## [Unreleased]
 
 <!-- git-cliff: end of header -->
+## [0.5.0] - 2026-09-16
+
+### Added
+
+- Published a signed `packslip.sigstore.json` manifest beside each release so docgraph
+  installs through mise's packslip backend
+  (`mise use packslip:github.com/JTarasovic/docgraph`), with SHA-256 checksum and GitHub
+  attestation parity to the existing cargo-dist archives (#44).
+
+### Changed
+
+- Overhauled the README and split contributor and release documentation into dedicated
+  guides (#43).
+
 ## [0.4.1] - 2026-09-14
 
 ### Changed
@@ -77,7 +91,8 @@ All notable changes to docgraph are documented here. The format follows
 - Published the first docgraph CLI with graph validation, querying, managed mutations,
   and native Windows and Linux release bundles.
 
-[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v0.4.1..HEAD
+[Unreleased]: https://github.com/JTarasovic/docgraph/compare/v0.5.0..HEAD
+[0.5.0]: https://github.com/JTarasovic/docgraph/compare/v0.4.1..v0.5.0
 [0.4.1]: https://github.com/JTarasovic/docgraph/compare/v0.4.0..v0.4.1
 [0.4.0]: https://github.com/JTarasovic/docgraph/compare/v0.3.0..v0.4.0
 [0.3.0]: https://github.com/JTarasovic/docgraph/compare/v0.2.0..v0.3.0
